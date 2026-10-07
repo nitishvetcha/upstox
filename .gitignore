@@ -14,7 +14,7 @@ web/dist/
 
 # Embedded repos / submodules
 snscrape/
-web/
+
 
 # OS / IDE
 .DS_Store
