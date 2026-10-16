@@ -203,7 +203,7 @@ test("J10. score unchanged in snapshot", () => {
 
 test("J11. TRADE: initial outcome is MONITORING", () => {
   const rec = tradeRec();
-  const o = computeOutcome(rec, rec.execution!.entry, new Date(), null);
+  const o = computeOutcome(rec, rec.execution!.entry, T, null);
   assert.equal(o.status, "MONITORING");
   assert.equal(o.exitPrice, null);
   assert.equal(o.pnl, null);
@@ -214,7 +214,7 @@ test("J11. TRADE: initial outcome is MONITORING", () => {
 test("J12. price above target1 → TARGET_1_HIT", () => {
   const rec = tradeRec();
   if (!rec.execution || rec.direction !== "BULLISH") return;
-  const o = computeOutcome(rec, rec.execution.target1 + 1, new Date(), null);
+  const o = computeOutcome(rec, rec.execution.target1 + 1, T, null);
   assert.equal(o.status, "TARGET_1_HIT");
   assert.ok(o.target1HitAt !== null);
 });
@@ -224,7 +224,7 @@ test("J12. price above target1 → TARGET_1_HIT", () => {
 test("J13. price above target2 → TARGET_2_HIT, exitPrice set", () => {
   const rec = tradeRec();
   if (!rec.execution || rec.direction !== "BULLISH") return;
-  const o = computeOutcome(rec, rec.execution.target2 + 1, new Date(), null);
+  const o = computeOutcome(rec, rec.execution.target2 + 1, T, null);
   assert.equal(o.status, "TARGET_2_HIT");
   assert.ok(o.exitPrice !== null);
   assert.equal(o.exitReason, "TARGET_2");
@@ -235,7 +235,7 @@ test("J13. price above target2 → TARGET_2_HIT, exitPrice set", () => {
 test("J14. price below stopLoss → STOPPED_OUT for bullish", () => {
   const rec = tradeRec();
   if (!rec.execution || rec.direction !== "BULLISH") return;
-  const o = computeOutcome(rec, rec.execution.stopLoss - 1, new Date(), null);
+  const o = computeOutcome(rec, rec.execution.stopLoss - 1, T, null);
   assert.equal(o.status, "STOPPED_OUT");
   assert.equal(o.exitReason, "STOP_LOSS");
   assert.ok(o.pnl !== null && o.pnl < 0);

@@ -150,6 +150,10 @@ export interface StrategyEvidenceReport {
   // Live evidence
   liveObservations: number;
   liveTrades: number;
+  liveWaitCount: number;
+  liveNoTradeCount: number;
+  /** Observations discarded from evidence because data was MOCK, END_OF_DAY, or STALE */
+  liveNonExecutableCount: number;
   liveCompletedTrades: number;
   liveEvidenceStatus: "NONE" | "INSUFFICIENT" | "PRELIMINARY" | "MEANINGFUL";
   sampleAdequacy: string;
@@ -480,8 +484,17 @@ export function computeStrategyEvidence(
   const maxDD = stored.reduce((m, b) => Math.max(m, b.maxDrawdownPct), 0);
   const maxConsecLosses = walkForwardRuns[0]?.streaks?.maxConsecutiveLosses ?? null;
 
-  // Live evidence
-  const liveTrades = journalEntries.filter((e) => e.snapshot.decision === "TRADE").length;
+  // Live evidence — non-executable means the DATA SOURCE was not live; decision-based WAIT/NO_TRADE
+  // with a LIVE source ARE genuine live observations and must not be conflated with source failures.
+  const isNonExecutable = (e: (typeof journalEntries)[0]) =>
+    e.snapshot.source === "MOCK" ||
+    e.snapshot.source === "END_OF_DAY" ||
+    e.snapshot.source === "STALE" ||
+    e.snapshot.source === "UNAVAILABLE";
+  const liveTrades = journalEntries.filter((e) => e.snapshot.decision === "TRADE" && !isNonExecutable(e)).length;
+  const liveWaitCount = journalEntries.filter((e) => e.snapshot.decision === "WAIT" && !isNonExecutable(e)).length;
+  const liveNoTradeCount = journalEntries.filter((e) => e.snapshot.decision === "NO_TRADE" && !isNonExecutable(e)).length;
+  const liveNonExecutableCount = journalEntries.filter(isNonExecutable).length;
   const liveCompleted = journalEntries.filter((e) => ["STOPPED_OUT","TARGET_1_HIT","TARGET_2_HIT","EXPIRED"].includes(e.status) && e.outcome?.pnl !== null).length;
   const liveStatus: StrategyEvidenceReport["liveEvidenceStatus"] =
     liveCompleted === 0 ? "NONE" :
@@ -545,6 +558,9 @@ export function computeStrategyEvidence(
     historicalOptionFidelityWarning: OPTION_FIDELITY_WARNING,
     liveObservations: journalEntries.length,
     liveTrades,
+    liveWaitCount,
+    liveNoTradeCount,
+    liveNonExecutableCount,
     liveCompletedTrades: liveCompleted,
     liveEvidenceStatus: liveStatus,
     sampleAdequacy: classifySampleAdequacy(liveCompleted),

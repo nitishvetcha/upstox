@@ -11,7 +11,8 @@ import { STRATEGY_VERSION } from "@/lib/journalTypes";
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const index: IndexId = body.index === "banknifty" ? "banknifty" : "nifty";
+    const rawUnderlying = (body.underlying ?? body.index ?? "").toString().toLowerCase();
+    const index: IndexId = rawUnderlying === "banknifty" ? "banknifty" : "nifty";
     const snapshot = await getSnapshot(index);
     const analysis = analyze(snapshot);
     const rec = buildRecommendationResponse(analysis);

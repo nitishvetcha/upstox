@@ -41,5 +41,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Upstox access token (server-side store)
+# Upstox access token (server-side store) & test data stores
 /.data
+/.test-data

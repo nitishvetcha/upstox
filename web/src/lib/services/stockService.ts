@@ -118,7 +118,8 @@ export function normalizeStockQuote(raw: unknown, inst: StockInstrument, now: Da
     change,
     changePercent: change !== undefined && prev ? Math.round((change / prev) * 10_000) / 100 : undefined,
     volume: n(entry?.volume) || undefined, // indices report 0 = no volume
-    freshness: ms !== "OPEN" ? "END_OF_DAY" : ageMs !== null && ageMs > 120_000 ? "STALE" : "LIVE",
+    // OPEN + no LTT → STALE (unverified freshness); OPEN + LTT → age-based; closed → END_OF_DAY
+    freshness: ms !== "OPEN" ? "END_OF_DAY" : ageMs === null ? "STALE" : ageMs > 120_000 ? "STALE" : "LIVE",
     source: "UPSTOX",
     unavailableReason: null,
   };

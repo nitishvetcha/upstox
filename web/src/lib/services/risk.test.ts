@@ -286,3 +286,21 @@ test("16. wide bid-ask spread (> 5%) rejection", () => {
   assert.equal(assessment.status, "REJECTED");
   assert.ok(assessment.reasons.includes("WIDE_BID_ASK"));
 });
+
+// Regression: P1 fix — chain source="STALE" must block approval even when fetchedAt is recent.
+// Previously, isChainStale only checked freshnessOf(fetchedAt) which is always fresh for a
+// recently-fetched chain that happens to have no last_trade_time (liveQuoteSource returns "STALE").
+test("17. chain source=STALE (recent fetchedAt) → STALE_PRICE rejection (P1 regression)", () => {
+  const snapshot = mockSnapshot("nifty");
+  // Simulate what happens when Upstox /v2/option/chain has no last_trade_time:
+  // normalizeChain sets lastTradeTime=null → liveQuoteSource returns "STALE" during OPEN.
+  snapshot.sources.optionChain = {
+    source: "STALE",
+    provider: "UPSTOX",
+    fetchedAt: new Date().toISOString(), // recent fetch — was the bug: this made freshnessOf pass
+  };
+  const plan = makePlan();
+  const assessment = evaluateTradeRisk(plan, snapshot, undefined, { accountCapital: 500_000 }, new Date());
+  assert.equal(assessment.status, "REJECTED", "STALE chain source must reject even with recent fetchedAt");
+  assert.ok(assessment.reasons.includes("STALE_PRICE"), `Expected STALE_PRICE, got: ${JSON.stringify(assessment.reasons)}`);
+});

@@ -11,6 +11,10 @@
     "dev:upstox": "node scripts/dev-upstox.mjs",
     "upstox:login": "node scripts/upstox-login.mjs",
     "upstox:status": "node scripts/upstox-status.mjs",
+    "paper:collect": "node scripts/paper-collect.mjs",
+    "paper:evaluate": "node scripts/paper-evaluate.mjs",
+    "paper:cycle": "node scripts/paper-cycle.mjs",
+    "paper:live": "node scripts/paper-live.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { RecommendationCard } from "@/components/RecommendationCard";
 import { MarketCard } from "@/components/MarketCard";
 import { DataStatus } from "@/components/DataStatus";
@@ -15,7 +16,17 @@ export default async function Dashboard() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4">
-      <DataStatus snaps={analyses.map((a) => a.snapshot)} refreshedAt={generatedAt} />
+      <div className="flex items-center justify-between">
+        <DataStatus snaps={analyses.map((a) => a.snapshot)} refreshedAt={generatedAt} />
+        <div className="flex gap-2 text-sm">
+          <Link href="/opportunities" className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+            Opportunity Engine →
+          </Link>
+          <Link href="/opportunity-journal" className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            Journal →
+          </Link>
+        </div>
+      </div>
       <RecommendationCard a={today} />
       <div className="grid gap-4 lg:grid-cols-2">
         <RiskPanel v={toDashboardView(today, getRiskConfig(), generatedAt)} />

@@ -18,7 +18,7 @@ const BANK_EXP = "2026-10-27";
 // --- Upstox-shaped fixtures ---
 const side = (ltp: number, oi: number, prevOi: number, iv: number, delta: number) => ({
   instrument_key: "NSE_FO|1",
-  market_data: { ltp, volume: oi * 2, oi, close_price: ltp, bid_price: ltp - 0.5, bid_qty: 75, ask_price: ltp + 0.5, ask_qty: 75, prev_oi: prevOi },
+  market_data: { ltp, volume: oi * 2, oi, close_price: ltp, bid_price: ltp - 0.5, bid_qty: 75, ask_price: ltp + 0.5, ask_qty: 75, prev_oi: prevOi, last_trade_time: NOW.getTime() - 5_000 },
   option_greeks: { vega: 8.3, theta: -12.4, gamma: 0.002, delta, iv, pop: 50 },
 });
 function chainRows(spot: number, step: number, expiry: string, key: string) {
@@ -52,7 +52,12 @@ function stubUpstox(override: (path: string, q: URLSearchParams) => Response | n
     const key = url.searchParams.get("instrument_key")!;
     const nifty = key === "NSE_INDEX|Nifty 50";
     const ok = (data: unknown) => Response.json({ status: "success", data });
-    if (url.pathname.endsWith("/market-quote/quotes")) return ok(nifty ? quoteData(key, 25137, 84.2) : quoteData(key, 56240, -170));
+    if (url.pathname.endsWith("/market-quote/quotes")) {
+      const base = nifty ? quoteData(key, 25137, 84.2) : quoteData(key, 56240, -170);
+      const entry = Object.values(base)[0] as Record<string, unknown>;
+      entry.last_trade_time = NOW.getTime() - 5_000; // 5 s old → LIVE
+      return ok(base);
+    }
     if (url.pathname.endsWith("/option/contract"))
       return ok((nifty ? ["2026-09-29", NIFTY_EXP, "2026-10-13"] : ["2026-09-29", BANK_EXP]).map((expiry) => ({ expiry, strike_price: 1, instrument_type: "CE", lot_size: 75 })));
     if (url.pathname.endsWith("/option/chain"))

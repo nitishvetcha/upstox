@@ -155,7 +155,7 @@ export function evaluateTradeRisk(
   const mSrc = snapshot.sources.market;
   const oSrc = snapshot.sources.optionChain;
   const isMarketStale = mSrc.source === "UNAVAILABLE" || mSrc.source === "END_OF_DAY" || freshnessOf(mSrc.fetchedAt, now, 1).freshness === "STALE";
-  const isChainStale = oSrc.source === "UNAVAILABLE" || oSrc.source === "END_OF_DAY" || freshnessOf(oSrc.fetchedAt, now, 1).freshness === "STALE";
+  const isChainStale = oSrc.source === "UNAVAILABLE" || oSrc.source === "END_OF_DAY" || oSrc.source === "STALE" || freshnessOf(oSrc.fetchedAt, now, 1).freshness === "STALE";
 
   if (isMarketStale || isChainStale) {
     reasons.push("STALE_PRICE");

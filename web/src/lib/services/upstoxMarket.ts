@@ -185,7 +185,9 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     if (lastTradeTime) {
       src = tradeFreshnessOf(lastTradeTime, current).source;
     } else {
-      src = marketStatus(current) === "CLOSED" ? "END_OF_DAY" : "LIVE";
+      // No trade timestamp in response — cannot verify freshness.
+      // Conservative: CLOSED → END_OF_DAY; OPEN/PRE-OPEN → STALE (not LIVE — LTT absent means unverified).
+      src = marketStatus(current) === "CLOSED" ? "END_OF_DAY" : "STALE";
     }
     return {
       source: src,

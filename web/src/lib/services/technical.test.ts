@@ -191,7 +191,7 @@ function stub(over: (path: string) => Response | null = () => null) {
     const key = url.searchParams.get("instrument_key") ?? "";
     const n = key.includes("Nifty 50");
     const spot = n ? 22412 : 54612;
-    if (path.endsWith("/market-quote/quotes")) return ok({ [key.replace("|", ":")]: { instrument_token: key, last_price: spot, net_change: 10 } });
+    if (path.endsWith("/market-quote/quotes")) return ok({ [key.replace("|", ":")]: { instrument_token: key, last_price: spot, net_change: 10, last_trade_time: NOW.getTime() - 5_000 } });
     if (path.endsWith("/option/contract")) return ok([{ expiry: n ? "2026-10-06" : "2026-10-27" }]);
     if (path.endsWith("/option/chain")) {
       const step = n ? 50 : 100;
