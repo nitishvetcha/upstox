@@ -1,5 +1,6 @@
 // Server-only entry point for market data. The UI and API routes call these functions and never
 // touch a provider directly. MARKET_DATA_PROVIDER=upstox uses live data when logged in, else mock.
+import { logEvent } from "../ops/structuredLog.ts";
 import { cache } from "react";
 import type { FallbackReason, IndexId, MarketDataProvider, News, Snapshot, SourceInfo } from "../types.ts";
 import { getIndexNews } from "./newsProvider.ts";
@@ -54,7 +55,7 @@ export async function withFallback<T>(
   } catch (e) {
     if (e instanceof InvalidRequestError) throw e;
     const reason: FallbackReason = e instanceof UpstoxError ? e.reason : "UPSTOX_API_ERROR";
-    console.warn(JSON.stringify({ evt: "upstox_fallback", reason, message: (e as Error).message }));
+    logEvent("warn", "upstox_fallback", { reason, message: (e as Error).message });
     if (reason === "UPSTOX_AUTH_EXPIRED") await deps.onAuthExpired(); // stop retrying a dead token
     return { data: await mock(), fallbackReason: reason };
   }
