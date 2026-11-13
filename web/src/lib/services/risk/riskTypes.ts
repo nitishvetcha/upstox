@@ -38,6 +38,14 @@ export interface RiskAssessment {
   targetPrice: number; // Combined target 1 per unit
   riskPerUnit: number; // Risk per unit (incl slippage)
   riskPerLot: number; // Risk per lot
+  netRiskPerLot?: number; // Worst-case risk per lot incl. entry/exit slippage, stop gap and per-lot charges (sizing basis)
+  fixedCostsInr?: number; // Brokerage per trade (entry and exit orders) incl. GST; does not scale with lots
+  variableCostsPerLot?: number; // Percentage charges per lot (STT, exchange, SEBI, stamp duty, GST on them)
+  entryFill?: number; // Entry price per unit after adverse slippage
+  worstStopFill?: number; // Stop exit per unit after exit slippage and gap allowance
+  targetFill?: number; // Target exit per unit after exit slippage
+  netRewardRatio?: number | null; // Reward to target 1 after slippage and charges, divided by net risk
+  assumptions?: string[]; // Stated assumptions behind the cost and slippage figures
   quantity: number; // Total quantity (lots * lotSize)
   lots: number; // Number of lots allocated
   maxLotsAllowed: number;

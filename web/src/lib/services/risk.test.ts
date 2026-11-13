@@ -41,10 +41,10 @@ test("1. configuration: defaults and overrides", () => {
 
 test("2. Long Call risk calculation & position sizing with Math.floor", () => {
   const snapshot = mockSnapshot("nifty");
-  const plan = makePlan(); // Entry = 100, SL = 80 -> Raw risk = 20/unit. Slippage 1% -> 20.2/unit
-  // Risk per lot = 20.2 * 65 = 1313
-  // With 0.5% max risk on 100,000 = ₹500 max risk
-  // Lots = floor(500 / 1313) = 0 lots -> REJECTED (ZERO_LOTS)
+  const plan = makePlan(); // Entry = 100, SL = 80. Net basis: entry fill 101 (+1%), worst stop fill 77.6 (−1% exit, −2% gap)
+  // Worst risk per unit = 101 − 77.6 = 23.4; per lot = 23.4 × 65 = 1521, plus variable percentage charges (0.15% STT, 0.03553% NSE).
+  // Fixed brokerage for the trade (entry and exit orders, with GST) under Plus research fallback = 70.80 (or 47.20 under Basic).
+  // With 0.5% max risk on 100,000 = ₹500 max risk: (500 − 70.80) / 1533.64 → 0 lots -> REJECTED (ZERO_LOTS)
 
   const assessment = evaluateTradeRisk(plan, snapshot, undefined, { accountCapital: 100_000, riskPerTradePercent: 0.5 });
   assert.equal(assessment.lots, 0);
@@ -53,14 +53,16 @@ test("2. Long Call risk calculation & position sizing with Math.floor", () => {
   assert.ok(assessment.reasons.includes("ZERO_LOTS"));
 
   // Approved trade with sufficient capital / risk % (1.0% of 200,000 = ₹2,000 max risk)
-  // Lots = floor(2000 / 1313) = 1 lot (65 qty)
+  // Lots = floor((2000 − 70.80) / 1533.64) = 1 lot (65 qty)
   const assessment2 = evaluateTradeRisk(plan, snapshot, undefined, { accountCapital: 200_000, riskPerTradePercent: 1.0 });
   assert.equal(assessment2.lots, 1);
   assert.equal(assessment2.quantity, 65);
   assert.equal(assessment2.status, "APPROVED");
   assert.equal(assessment2.allowed, true);
-  assert.equal(assessment2.totalRisk, 1313);
-  assert.equal(assessment2.capitalRequired, 6500); // 100 * 65
+  assert.equal(assessment2.fixedCostsInr, 70.8, "brokerage and GST for entry and exit orders (Plus fallback)");
+  assert.ok(Math.abs((assessment2.netRiskPerLot ?? 0) - 1533.64) < 0.1, `net risk per lot ${assessment2.netRiskPerLot}`);
+  assert.equal(assessment2.totalRisk, 1604, "fixed 70.80 + 1 lot × 1533.64 (net worst case), rounded");
+  assert.equal(assessment2.capitalRequired, 6565, "capital is sized on the adverse entry fill: 101 × 65");
 });
 
 test("3. Long Put risk calculation & position sizing", () => {
@@ -124,7 +126,7 @@ test("5. Straddle combined premium risk calculation (no single-leg bug)", () => 
     entry: 210,
     stop: 147,
     target1: 300,
-    rr: 1.48,
+    rr: 1.43, // (300 − 210) / (210 − 147) = 90 / 63
     maxLoss: 210,
     maxProfit: null, // Unlimited
     breakevens: [24890, 25310],
@@ -135,7 +137,8 @@ test("5. Straddle combined premium risk calculation (no single-leg bug)", () => 
   assert.equal(assessment.entryPrice, 210);
   assert.equal(assessment.stopPrice, 147);
   assert.equal(assessment.maxProfit, null); // Unlimited upside
-  assert.equal(assessment.capitalRequired, 210 * 65 * assessment.lots);
+  // Capital is sized on the adverse entry fill (210 × 1.01), not on the plan's 210.
+  assert.equal(assessment.capitalRequired, Math.round(212.1 * 65 * assessment.lots));
   assert.ok(assessment.riskPerUnit > 60, "Risk must be based on combined premium (63)");
 });
 

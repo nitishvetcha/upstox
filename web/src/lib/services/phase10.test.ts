@@ -3,13 +3,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { expectedBarsPerSession, fetchHistoricalRange, mergeAndValidate, planChunks, tradingDays } from "./historicalCandles.ts";
 import { datasetHash, HistoricalInputs, lookAheadViolations, newsVisibleAt, type HistoricalContext } from "./historicalContext.ts";
-import { costsFor, DEFAULT_TRANSACTION_COSTS, type TransactionCostConfig } from "./transactionCosts.ts";
+import { costsFor, LEGACY_2024_10_TRANSACTION_COSTS, type TransactionCostConfig } from "./transactionCosts.ts";
 import { aggregateDaily, BacktestEngine, slippageAwareSizing, validationStatus, MIN_TRADES_FOR_VALIDATION } from "../backtestEngine.ts";
 import { BACKTEST_IV, buildHistoricalOptionChain, buildHistoricalSnapshot, NEUTRAL_UNAVAILABLE_NEWS, priceOption } from "../backtestSnapshot.ts";
 import { compareRuns, COMPARISON_NOTE } from "./backtestScenarios.ts";
 import { analyze } from "../engine/strategy.ts";
 import { analyzeMarket } from "../engine/analysis.ts";
-import { mockSnapshot, MOCK_NEWS, nextTuesday, lastTuesday } from "./mock.ts";
+import { MOCK_NEWS, nextTuesday, lastTuesday } from "./mock.ts";
+import { mockSnapshotTradeInputs as mockSnapshot } from "../testFixtures/mockSnapshotTradeInputs.ts";
 import { INDEX_CONSTITUENTS } from "./breadthConfig.ts";
 import { isRegularSession, isTradingDay, marketStatus, NSE_HOLIDAYS, NSE_SPECIAL_SESSIONS } from "../time.ts";
 import type { Candle } from "../types.ts";
@@ -342,7 +343,7 @@ test("OI2. OI quality: NOT_AVAILABLE in Phase 10; SYNTHETIC (with warning) in th
 });
 
 // --- transaction costs -----------------------------------------------------------------------------------------
-const CFG: TransactionCostConfig = { ...DEFAULT_TRANSACTION_COSTS };
+const CFG: TransactionCostConfig = { ...LEGACY_2024_10_TRANSACTION_COSTS };
 const roundTrip = costsFor([{ side: "BUY", price: 100, quantity: 65 }, { side: "SELL", price: 120, quantity: 65 }], CFG);
 test("TC1. brokerage = ₹20 per executed order", () => assert.equal(roundTrip.brokerage, 40));
 test("TC2. STT = 0.1% of SELL premium only", () => assert.equal(roundTrip.stt, Math.round(120 * 65 * 0.001 * 100) / 100));
@@ -376,10 +377,11 @@ test("TC10. cost config is configurable and recorded in run metadata", () => {
 
 // --- risk ---------------------------------------------------------------------------------------------------------
 const sizeArgs = { plannedRiskPerUnit: 50, legs: [{ mid: 200, fill: 202 }], slip: 0.01, netMid: 200, stop: 150, lotSize: 65, maxLots: 10, budget: 10_000, openRiskRoom: 50_000 };
-test("R1. sizing includes entry + exit slippage: 50 + 2 + 2 = 54 per unit", () => {
+test("R1. sizing includes entry + exit slippage and one exit tick: 50 + 2 + 2 + 0.05 = 54.05 per unit", () => {
+  // The exit tick allowance (adverse tick rounding of the exit fill) was added with tick-aligned executable prices.
   const z = slippageAwareSizing(sizeArgs);
-  assert.equal(z.riskPerUnit, 54);
-  assert.equal(z.lots, Math.floor(10_000 / (54 * 65)));
+  assert.equal(z.riskPerUnit, 54.05);
+  assert.equal(z.lots, Math.floor(10_000 / (54.05 * 65)));
 });
 test("R2. slippage-aware risk never exceeds the per-trade budget (1%)", () => {
   for (const budget of [3_000, 10_000, 25_000]) {
