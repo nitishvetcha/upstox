@@ -1,7 +1,10 @@
+import { requireOperator } from "../../../../../lib/operatorSession.ts";
 import { NextResponse } from "next/server";
 import { getPaperTradingEngine } from "@/lib/services/paperStore";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const refused = requireOperator(request);
+  if (refused) return refused;
   const { id } = await params;
   const engine = getPaperTradingEngine();
   const trade = engine.getTrade(id);

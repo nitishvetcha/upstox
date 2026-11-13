@@ -1,3 +1,4 @@
+import { requireOperator } from "../../../../../lib/operatorSession.ts";
 export const dynamic = "force-dynamic";
 
 import { getPaperOpportunity } from "@/lib/services/paperOpportunityStore";
@@ -7,6 +8,8 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const refused = requireOperator(req);
+  if (refused) return refused;
   try {
     const { id } = await params;
     const opp = getPaperOpportunity(id);

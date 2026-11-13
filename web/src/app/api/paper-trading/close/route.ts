@@ -1,9 +1,12 @@
+import { requireOperator } from "../../../../lib/operatorSession.ts";
 import { NextResponse } from "next/server";
 import { getPaperTradingEngine } from "@/lib/services/paperStore";
 import { getSnapshot } from "@/lib/services/market";
 import type { IndexId } from "@/lib/types";
 
 export async function POST(request: Request) {
+  const refused = requireOperator(request);
+  if (refused) return refused;
   try {
     const body = await request.json().catch(() => ({}));
     const { tradeId, index } = body;

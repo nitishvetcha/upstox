@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 // Preserves: instrumentKey, entry, stop, targets, quantity, lots, strategy from the snapshot.
 // NO Upstox order placement. Purely paper.
 
+import { requireOperator } from "../../../../../lib/operatorSession.ts";
 import { getJournalEntry, updateJournalEntry } from "@/lib/services/recommendationStore";
 import { getPaperTradingEngine } from "@/lib/services/paperStore";
 import { getSnapshot } from "@/lib/services/market";
@@ -10,6 +11,8 @@ import { analyze } from "@/lib/engine/strategy";
 import type { IndexId } from "@/lib/types";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const refused = requireOperator(_req);
+  if (refused) return refused;
   try {
     const { id } = await params;
     const entry = getJournalEntry(id);
