@@ -1,6 +1,9 @@
+import { OpsPanel } from "./OpsPanel";
+import { OpsDetails } from "./OpsDetails";
 import Link from "next/link";
 import type { IndexId } from "@/lib/types";
-import { getAnalysis, getDashboard, providerMode } from "@/lib/services/market";
+import { getAnalysis, getDashboard, providerMode, withFallback } from "@/lib/services/market";
+import { OptionContractPicker } from "./OptionContractPicker";
 import { getRiskConfig } from "@/lib/services/risk/riskConfig";
 import { DEFAULT_TRANSACTION_COSTS, COSTS_NOT_MODELED } from "@/lib/services/transactionCosts";
 import { getAllBacktestRuns } from "@/lib/services/backtestStore";
@@ -12,12 +15,18 @@ import { RecommendationCard } from "./RecommendationCard";
 import { RecommendationDiagnosticPanel } from "./RecommendationDiagnosticPanel";
 import { diagnose } from "@/lib/recommendationDiagnostic";
 import { NewsPanel } from "./NewsPanel";
-import { Badge, Card, num } from "./ui";
+import { Badge, Card, SectionTitle, num } from "./ui";
 import { DataQualityPanel, IndexSwitch, LevelsPanel, MarketPanel, OptionsPanel, RecommendationSummary, RiskPanel, TechnicalsPanel } from "./AnalysisPanels";
 
 async function viewFor(index: IndexId) {
   const a = await getAnalysis(index);
   return { a, v: toDashboardView(a, getRiskConfig(), new Date().toISOString()) };
+}
+
+// Moneyness label for an option-chain strike relative to spot. CE is in-the-money below spot; PE is in-the-money above it.
+function moneyness(strike: number, spot: number, atm: boolean): string {
+  if (atm) return "ATM";
+  return strike < spot ? "CE ITM · PE OTM" : "CE OTM · PE ITM";
 }
 
 export async function RecommendationView({ index }: { index: IndexId }) {
@@ -54,7 +63,8 @@ export async function MarketOverview() {
 export async function OptionChainView({ index }: { index: IndexId }) {
   const { a, v } = await viewFor(index);
   const s = a.snapshot;
-  const n = (x: number | null, d = 2) => (x === null ? "N/A" : num(x, d));
+  const expiryResult = await withFallback((p) => p.getExpiries(index)).catch(() => null);
+  const expiryList: string[] = expiryResult?.data.expiries ?? [];
   return (
     <div className="space-y-4">
       <IndexSwitch index={index} base="/option-chain" />
@@ -65,20 +75,27 @@ export async function OptionChainView({ index }: { index: IndexId }) {
           <Badge tone={v.dataQuality.optionChain === "LIVE" ? "neutral" : "warn"}>{v.dataQuality.optionChain}</Badge>
           <span>fetched {s.sources.optionChain.fetchedAt ? `${fmtIst(s.sources.optionChain.fetchedAt)} IST` : "N/A"}</span>
         </div>
-        <table className="w-full min-w-[720px] text-right font-mono text-[11px]">
-          <thead className="text-zinc-500">
-            <tr><th>CE OI</th><th>CE ΔOI</th><th>CE IV</th><th>CE LTP</th><th className="text-center">Strike</th><th>PE LTP</th><th>PE IV</th><th>PE ΔOI</th><th>PE OI</th></tr>
-          </thead>
-          <tbody>
-            {s.chain.map((r) => (
-              <tr key={r.strike} className={`border-t border-zinc-800/60 ${r.strike === v.options.atmStrike ? "bg-zinc-800/50 text-zinc-100" : "text-zinc-300"}`}>
-                <td>{n(r.call.oi, 0)}</td><td>{n(r.call.chgOi, 0)}</td><td>{n(r.call.iv, 1)}</td><td>{n(r.call.ltp)}</td>
-                <td className="text-center font-semibold">{num(r.strike, 0)}</td>
-                <td>{n(r.put.ltp)}</td><td>{n(r.put.iv, 1)}</td><td>{n(r.put.chgOi, 0)}</td><td>{n(r.put.oi, 0)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <OptionContractPicker
+          key={index}
+          indexId={index}
+          expiries={expiryList}
+          initial={{
+            index: s.name,
+            expiry: s.expiry,
+            spot: s.spot,
+            atmStrike: v.options.atmStrike,
+            source: s.sources.optionChain.source ?? null,
+            fallbackMessage: null,
+            lotSize: s.lotSize ?? null,
+            rows: s.chain.map((r) => ({
+              strike: r.strike,
+              isAtm: r.strike === v.options.atmStrike,
+              moneyness: moneyness(r.strike, s.spot, r.strike === v.options.atmStrike),
+              call: { ltp: r.call.ltp, oi: r.call.oi, chgOi: r.call.chgOi, iv: r.call.iv, instrumentKey: r.call.instrumentKey ?? null },
+              put: { ltp: r.put.ltp, oi: r.put.oi, chgOi: r.put.chgOi, iv: r.put.iv, instrumentKey: r.put.instrumentKey ?? null },
+            })),
+          }}
+        />
       </Card>
     </div>
   );
@@ -121,7 +138,10 @@ export async function NewsView() {
 export async function SystemHealthView() {
   const { analyses, generatedAt } = await getDashboard();
   return (
+    <div className="space-y-4">
+    <OpsPanel now={Date.parse(generatedAt)} />
     <Card className="overflow-x-auto p-4">
+      <SectionTitle>Market data sources</SectionTitle>
       <p className="mb-3 text-xs text-zinc-400">Provider mode: <span className="font-mono text-zinc-200">{providerMode()}</span> · generated {fmtIst(generatedAt)} IST · read-only toward Upstox (no order endpoints)</p>
       <table className="w-full min-w-[560px] text-left text-xs">
         <thead className="text-zinc-500"><tr><th>Index</th><th>Subsystem</th><th>Source</th><th>Provider</th><th>Fetched (IST)</th><th>Last trade (IST)</th></tr></thead>
@@ -139,6 +159,8 @@ export async function SystemHealthView() {
       </table>
       {analyses.some((a) => a.snapshot.fallbackReason) && <p className="mt-2 text-xs text-amber-400">Fallback: {analyses.map((a) => a.snapshot.fallbackReason).filter(Boolean).join(", ")}</p>}
     </Card>
+    <OpsDetails />
+    </div>
   );
 }
 
@@ -177,7 +199,7 @@ export function BacktestRunsView() {
         No backtest runs stored yet. Run one from <Link href="/performance" className="text-zinc-200 underline">Performance</Link> (real Upstox history; no mock candles).
       </Card>
     );
-  const label = (r: (typeof runs)[number]) => `${r.config.index === "nifty" ? "NIFTY" : "BANK NIFTY"} · ${r.execution.model === "CLOSE_ONLY" ? "close-only" : "intrabar"} · ${r.metadata?.dataModel ?? "PHASE9_LEGACY"}`;
+  const label = (r: (typeof runs)[number]) => `${(r.config.index ?? "nifty").toUpperCase()} · ${r.execution.model === "CLOSE_ONLY" ? "close-only" : "intrabar"} · ${r.metadata?.dataModel ?? "PHASE9_LEGACY"}`;
   const { rows, note } = compareRuns(runs.map((r) => ({ label: label(r), result: r })));
   const m = (x: { value: number | null } | number | null | string) => (x === null ? "N/A" : typeof x === "object" ? (x.value === null ? "N/A" : num(x.value)) : typeof x === "number" ? num(x) : x);
   return (

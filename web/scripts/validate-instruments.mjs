@@ -1,3 +1,6 @@
+import { assertCollectionAuthorized } from "./lib/collectionGuard.mjs";
+assertCollectionAuthorized("validate-instruments.mjs", "external");
+
 // READ-ONLY validation: configured breadth constituents + derivative lot sizes vs the Upstox NSE instrument master.
 // Run: node scripts/validate-instruments.mjs   (no token needed; instrument master is public)
 import { gunzipSync } from "node:zlib";

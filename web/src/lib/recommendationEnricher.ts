@@ -4,6 +4,10 @@ import type { Analysis, Quote, Snapshot, TradePlan } from "./types.ts";
 import type { RiskAssessment } from "./services/risk/riskTypes.ts";
 import { calculateEntryFill } from "./paperEngine.ts";
 import { getRiskConfig } from "./services/risk/riskConfig.ts";
+import { aggregateRequiredSource } from "./dataQuality.ts";
+import { checkPlanLegs, type LegGuardResult } from "./services/optionLegGuard.ts";
+import { hasMockInput } from "./services/mockInputs.ts";
+import { INSTRUMENTS } from "./services/instrumentRegistry.ts";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -105,8 +109,16 @@ export interface RecommendationResponse {
   blockedCandidate: { strategy: string; strike: number | null; type: string | null; blocker: string } | null;
   /** true when the contract.instrumentKey came directly from the live chain (not constructed) */
   instrumentKeyAvailable: boolean;
+  /** Per-leg verification (B3/B7): every leg must be inside the verified window and individually LIVE. */
+  legVerification?: LegGuardResult; // always set by buildRecommendationResponse; optional for older fixtures
+  /** Fetch time of the market quote (when the request completed). Unchanged meaning. */
   marketSnapshotTimestamp: string | null;
+  /** Fetch time of the option chain (when the chain request completed). Unchanged meaning. */
   optionChainTimestamp: string | null;
+  /** F3: exchange last-trade time of the market quote (not a fetch time). Absent in records written before F3; null when the exchange did not provide one. */
+  marketLastTradeTime?: string | null;
+  /** F3: newest exchange last-trade time among the option-chain contracts (not a fetch time). Absent in older records; null when not provided. */
+  optionChainLastTradeTime?: string | null;
 }
 
 // Primary (BUY) leg of a plan — the leg whose strike/type we display as "the option".
@@ -230,7 +242,7 @@ export function buildRecommendationResponse(a: Analysis, now = new Date()): Reco
   const risk: RiskAssessment | undefined = plan?.risk;
   const cfg = getRiskConfig();
 
-  const source = s.sources.market.source as RecommendationResponse["source"];
+  const source = aggregateRequiredSource(Object.values(s.sources)) as RecommendationResponse["source"];
 
   // Contract details — use the real chain key; fail-close if absent at execution time.
   const contract = plan ? contractDetails(s, plan) : null;
@@ -241,8 +253,28 @@ export function buildRecommendationResponse(a: Analysis, now = new Date()): Reco
     ? "OPTION_INSTRUMENT_ID_UNAVAILABLE: canonical Upstox contract identity not returned by the option chain"
     : null;
 
-  const effectiveDecision: Decision = missingKeyBlocker ? "WAIT" : (a.status === "TRADE" ? "TRADE" : a.status === "WAIT" ? "WAIT" : "NO_TRADE");
-  const effectiveBlockers = missingKeyBlocker ? [...a.blockers, missingKeyBlocker] : a.blockers;
+  // Per-leg guard (B3/B7): a TRADE plan is blocked if any leg is outside the verified window or not individually LIVE.
+  // Multi-leg plans (spreads, condors) are checked leg by leg; the enricher's contract detail only covers the first BUY leg.
+  const legVerification = a.status === "TRADE" && plan
+    ? checkPlanLegs(s, plan.legs)
+    : { applicable: false, atmStrike: null, maxStrikesAtm: 7, windowStrikes: [], verdicts: [], blockers: [] };
+  const legBlockers = legVerification.blockers;
+
+  // Simulated inputs are never executable, whatever the engine says (fail-closed; the diagnostic applies the same rule).
+  const mockBlocker = hasMockInput(s)
+    ? "MOCK_DATA: simulated market, option-chain, technical, news or breadth input; never executable"
+    : null;
+  // F1: a market quote whose exchange last trade is old (source STALE) is never executable, even if its fetchedAt is recent.
+  // The strategy engine is frozen (Strategy 11.4), so the gate sits here, where the decision is made for the user.
+  const staleMarketBlocker = s.sources.market.source === "STALE"
+    ? "STALE_MARKET: market quote's exchange last trade is older than the freshness limit; not executable, whenever it was fetched"
+    : null;
+  const effectiveDecision: Decision = mockBlocker ? "NO_TRADE"
+    : staleMarketBlocker ? "NO_TRADE"
+    : missingKeyBlocker ? "WAIT"
+    : legBlockers.length ? "NO_TRADE"
+    : (a.status === "TRADE" ? "TRADE" : a.status === "WAIT" ? "WAIT" : "NO_TRADE");
+  const effectiveBlockers = [...a.blockers, ...(mockBlocker ? [mockBlocker] : []), ...(staleMarketBlocker ? [staleMarketBlocker] : []), ...(missingKeyBlocker ? [missingKeyBlocker] : []), ...legBlockers];
 
   let execution: RecommendationResponse["execution"] = null;
   if (plan && risk && effectiveDecision === "TRADE") {
@@ -286,13 +318,15 @@ export function buildRecommendationResponse(a: Analysis, now = new Date()): Reco
     recommendationId: `rec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     generatedAt: now.toISOString(),
     source,
-    underlying: s.index === "nifty" ? "NIFTY" : "BANKNIFTY",
+    underlying: INSTRUMENTS[s.index].symbol,
     decision: effectiveDecision,
     direction,
     strategy: plan?.strategy ?? "NONE",
     confidence: plan?.score ?? a.total,
-    contract,
-    entryDetail: plan ? entryDetail(s, plan, cfg.optionSlippagePercent) : null,
+    // F-R2: entry levels and live option premiums are actionable only for TRADE. For WAIT / NO TRADE the contract
+    // identity is kept for diagnostics, with its premium fields removed.
+    contract: contract && effectiveDecision === "TRADE" ? contract : contract ? { ...contract, ltp: null, bid: null, ask: null } : null,
+    entryDetail: plan && effectiveDecision === "TRADE" ? entryDetail(s, plan, cfg.optionSlippagePercent) : null,
     execution,
     market: {
       spot: s.spot,
@@ -311,10 +345,18 @@ export function buildRecommendationResponse(a: Analysis, now = new Date()): Reco
     blockers: effectiveBlockers,
     oiAnalysis: buildOiAnalysis(s, a),
     whyReasons: buildWhyReasons(a),
-    dataQuality: Object.fromEntries(Object.entries(s.sources).map(([k, v]) => [k, v.source])),
+    dataQuality: {
+      ...Object.fromEntries(Object.entries(s.sources).map(([k, v]) => [k, v.source])),
+      contractPrice: s.optionPriceVerification?.state ?? "CONTRACT_PRICE_UNAVAILABLE",
+      chainAnalytics: s.optionPriceVerification?.chainAnalytics ?? "CHAIN_ANALYTICS_UNVERIFIED",
+    },
     blockedCandidate,
     instrumentKeyAvailable,
+    legVerification,
     marketSnapshotTimestamp: s.sources.market.fetchedAt,
     optionChainTimestamp: s.sources.optionChain.fetchedAt,
+    // F3: exchange times are copied as-is; a missing value stays null and is never replaced by a fetch time.
+    marketLastTradeTime: s.sources.market.lastTradeTime ?? null,
+    optionChainLastTradeTime: s.sources.optionChain.lastTradeTime ?? null,
   };
 }

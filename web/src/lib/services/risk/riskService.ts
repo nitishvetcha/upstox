@@ -2,7 +2,7 @@ import type { Snapshot, TradePlan } from "../../types.ts";
 import { freshnessOf } from "../../time.ts";
 import { costsFor } from "../transactionCosts.ts";
 import type { RiskConfig } from "./riskConfig.ts";
-import { getRiskConfig } from "./riskConfig.ts";
+import { getRiskConfig, DEFAULT_RISK_CONFIG } from "./riskConfig.ts";
 import type { RiskAssessment, RiskInputs, RiskRejectionReason, RiskStatus } from "./riskTypes.ts";
 
 const r2 = (n: number | null) => (n === null ? null : Math.round(n * 100) / 100);
@@ -15,7 +15,15 @@ export function evaluateTradeRisk(
   now: Date = new Date(),
 ): RiskAssessment {
   const config = getRiskConfig(overrideConfig);
-  const capital = inputs?.overrideCapital ?? config.accountCapital;
+  // Recommendation pipeline never assumes a default capital (Requirement 1).
+  // Capital is ONLY active if explicitly provided by the caller via inputs.overrideCapital,
+  // overrideConfig.accountCapital, or process.env.ACCOUNT_CAPITAL.
+  const explicitCapital = inputs?.overrideCapital ?? overrideConfig?.accountCapital ??
+    (process.env.ACCOUNT_CAPITAL && process.env.ACCOUNT_CAPITAL.trim() !== "" ? Number(process.env.ACCOUNT_CAPITAL) : undefined);
+  const capital = explicitCapital !== undefined && Number.isFinite(explicitCapital) && explicitCapital > 0
+    ? explicitCapital
+    : 0;
+
   const existingOpenRisk = inputs?.existingOpenRisk ?? 0;
   const realizedDailyLoss = inputs?.realizedDailyLoss ?? 0;
   const currentOpenPositions = inputs?.currentOpenPositions ?? 0;
@@ -24,6 +32,8 @@ export function evaluateTradeRisk(
   const lotSize = snapshot.lotSize ?? null;
 
   const reasons: RiskRejectionReason[] = [];
+  const portfolioReasons: RiskRejectionReason[] = [];
+  const portfolioWarnings: string[] = [];
   const warnings: string[] = [];
   const humanReasons: string[] = [];
 
@@ -39,7 +49,7 @@ export function evaluateTradeRisk(
   const target = plan.target1;
   const isCredit = plan.credit;
 
-  // 1. Basic strategy price validation
+  // 1. Basic strategy price validation (market-intrinsic)
   if (entry <= 0) {
     reasons.push("INVALID_ENTRY");
     humanReasons.push("Invalid entry price (<= 0)");
@@ -112,23 +122,6 @@ export function evaluateTradeRisk(
   ).totalCosts;
   const netRiskPerLot = r2(worstRiskPerUnit * effectiveLotSize + variableCostsPerLot) ?? 0;
 
-  // 4. Position sizing on the net worst-case risk (fixed charges come off the budget first).
-  const maxAllowedTradeRisk = capital * (config.riskPerTradePercent / 100);
-  const maxPositionCapital = capital * (config.maxPositionValuePercent / 100);
-
-  const riskBudget = maxAllowedTradeRisk - fixedCosts;
-  const lotsByRisk = netRiskPerLot > 0 && riskBudget > 0 ? Math.floor(riskBudget / netRiskPerLot) : 0;
-  const capitalPerUnit = isCredit ? capitalRequiredPerUnit : entryFill;
-  const capitalPerLot = capitalPerUnit * effectiveLotSize;
-  const lotsByCapital = capitalPerLot > 0 ? Math.floor(maxPositionCapital / capitalPerLot) : 0;
-
-  const maxLotsAllowed = Math.max(0, Math.min(lotsByRisk, lotsByCapital, config.maxLotsPerTrade));
-  const lots = maxLotsAllowed;
-  const quantity = lots * effectiveLotSize;
-
-  const totalRisk = lots > 0 ? Math.round(fixedCosts + netRiskPerLot * lots) : 0;
-  const capitalRequired = Math.round(capitalPerLot * lots);
-
   // Net reward to target 1, after the same charges. Used for the net reward-to-risk check.
   const rewardPerUnit = isCredit ? entryFill - targetFill : targetFill - entryFill;
   const variableTargetCostsPerLot = costsFor(
@@ -138,69 +131,21 @@ export function evaluateTradeRisk(
   const netRewardPerLot = r2(rewardPerUnit * effectiveLotSize - variableTargetCostsPerLot) ?? 0;
   const netRewardRatio = netRiskPerLot > 0 ? r2(netRewardPerLot / netRiskPerLot) : null;
 
-  const maxTheoreticalLoss =
-    quantity > 0 && maxLossPerUnit !== null ? Math.round(maxLossPerUnit * quantity) : null;
+  // Requirement 5 & Approved Policy Decision:
+  // Preserve Strategy 11.4 frozen requirements: gross R:R threshold 1.2 for debit, 0.4 for credit.
+  // Net R:R is computed and reported as an economic diagnostic metric, but does not independently reject recommendation eligibility.
+  const minRR = isCredit
+    ? (overrideConfig?.minRiskRewardCredit ?? config.minRiskRewardCredit ?? DEFAULT_RISK_CONFIG.minRiskRewardCredit ?? 0.4)
+    : (overrideConfig?.minRiskReward ?? config.minRiskReward);
 
-  const maxProfitPerUnit = plan.maxProfit;
-  const maxProfit =
-    quantity > 0 && maxProfitPerUnit !== null ? Math.round(maxProfitPerUnit * quantity) : null;
-
-  const riskPercent = capital > 0 ? r2((totalRisk / capital) * 100) ?? 0 : 0;
-
-  // 4. Validation Rules
-  if (lots === 0) {
-    reasons.push("ZERO_LOTS");
-    humanReasons.push(
-      `Position size rounds to 0 lots within max trade risk limit (₹${Math.round(maxAllowedTradeRisk).toLocaleString("en-IN")})`,
-    );
-  }
-
-  if (totalRisk > maxAllowedTradeRisk) {
-    reasons.push("RISK_LIMIT_EXCEEDED");
-    humanReasons.push(
-      `Trade risk ₹${totalRisk.toLocaleString("en-IN")} exceeds max allowed risk ₹${Math.round(maxAllowedTradeRisk).toLocaleString("en-IN")}`,
-    );
-  }
-
-  const maxOpenRiskAllowed = capital * (config.maxOpenRiskPercent / 100);
-  if (existingOpenRisk + totalRisk > maxOpenRiskAllowed) {
-    reasons.push("OPEN_RISK_LIMIT");
-    humanReasons.push(
-      `Combined open risk ₹${(existingOpenRisk + totalRisk).toLocaleString("en-IN")} exceeds portfolio open risk limit ₹${Math.round(maxOpenRiskAllowed).toLocaleString("en-IN")}`,
-    );
-  }
-
-  const maxDailyLossAllowed = capital * (config.maxDailyLossPercent / 100);
-  if (realizedDailyLoss >= maxDailyLossAllowed) {
-    reasons.push("DAILY_LOSS_LIMIT");
-    humanReasons.push(
-      `Realized daily loss ₹${realizedDailyLoss.toLocaleString("en-IN")} has reached max daily loss limit ₹${Math.round(maxDailyLossAllowed).toLocaleString("en-IN")}`,
-    );
-  }
-
-  if (currentOpenPositions >= config.maxConcurrentPositions) {
-    reasons.push("MAX_CONCURRENT_POSITIONS");
-    humanReasons.push(
-      `Active open positions count (${currentOpenPositions}) has reached or exceeded max concurrent limit (${config.maxConcurrentPositions})`,
-    );
-  }
-
-  if (capitalRequired > capital) {
-    reasons.push("INSUFFICIENT_CAPITAL");
-    humanReasons.push(
-      `Capital required ₹${capitalRequired.toLocaleString("en-IN")} exceeds available capital ₹${capital.toLocaleString("en-IN")}`,
-    );
-  }
-
-  // A non-finite rr is already rejected above; only a finite, low rr is reported here.
-  if (Number.isFinite(plan.rr) && plan.rr < config.minRiskReward) {
+  // A non-finite rr is already rejected above; only a finite, low gross rr is reported here.
+  if (Number.isFinite(plan.rr) && plan.rr < minRR) {
     reasons.push("INSUFFICIENT_RR");
-    humanReasons.push(`Risk/reward 1:${plan.rr} is below minimum 1:${config.minRiskReward}`);
+    humanReasons.push(`Risk/reward 1:${plan.rr} is below minimum 1:${minRR} for ${isCredit ? "credit" : "debit"} strategy`);
   }
-  // The gross ratio above ignores costs and slippage. The net ratio, after both, is what the trade actually earns.
-  if (netRewardRatio !== null && netRewardRatio < config.minRiskReward && !reasons.includes("INSUFFICIENT_RR")) {
-    reasons.push("INSUFFICIENT_RR");
-    humanReasons.push(`Net risk/reward after slippage and charges is 1:${netRewardRatio}, below minimum 1:${config.minRiskReward}`);
+  // Diagnostic metric: net ratio after slippage and charges is recorded in diagnostics, not as a rejection.
+  if (netRewardRatio !== null && netRewardRatio < minRR) {
+    warnings.push(`Economic diagnostic: Net risk/reward after slippage and charges is 1:${netRewardRatio} (below gross threshold 1:${minRR})`);
   }
 
   // Check event risk (structured level EXTREME only)
@@ -210,20 +155,26 @@ export function evaluateTradeRisk(
     humanReasons.push("EXTREME event risk active: new trades blocked");
   }
 
-  // Check data freshness via structured freshnessOf
+  // Check data freshness and session state via structured freshnessOf
   const mSrc = snapshot.sources.market;
   const oSrc = snapshot.sources.optionChain;
-  // A STALE label means the exchange last trade is old. A recent fetchedAt does not override it.
-  const isMarketStale = mSrc.source === "UNAVAILABLE" || mSrc.source === "END_OF_DAY" || mSrc.source === "STALE" || freshnessOf(mSrc.fetchedAt, now, 1).freshness === "STALE";
-  const isChainStale = oSrc.source === "UNAVAILABLE" || oSrc.source === "END_OF_DAY" || oSrc.source === "STALE" || freshnessOf(oSrc.fetchedAt, now, 1).freshness === "STALE";
+
+  // Distinct rejection for closed-session / END_OF_DAY market quotes (different from STALE)
+  const isMarketEod = mSrc.source === "END_OF_DAY";
+  const isChainEod = oSrc.source === "END_OF_DAY";
+
+  if (isMarketEod || isChainEod) {
+    reasons.push("END_OF_DAY_DATA");
+    humanReasons.push("Quotes are end-of-day (END_OF_DAY); cannot execute live trade after market close");
+  }
+
+  // A STALE label means the exchange last trade is old or data is unavailable. A recent fetchedAt does not override it.
+  const isMarketStale = mSrc.source === "UNAVAILABLE" || mSrc.source === "STALE" || freshnessOf(mSrc.fetchedAt, now, 1).freshness === "STALE";
+  const isChainStale = oSrc.source === "UNAVAILABLE" || oSrc.source === "STALE" || freshnessOf(oSrc.fetchedAt, now, 1).freshness === "STALE";
 
   if (isMarketStale || isChainStale) {
     reasons.push("STALE_PRICE");
-    humanReasons.push(
-      mSrc.source === "END_OF_DAY" || oSrc.source === "END_OF_DAY"
-        ? "Quotes are end-of-day (END_OF_DAY); cannot execute live trade after market close"
-        : "Market or option chain data is unavailable or stale",
-    );
+    humanReasons.push("Market or option chain data is unavailable or stale");
   }
 
   // Check leg bid-ask spreads
@@ -253,6 +204,93 @@ export function evaluateTradeRisk(
     humanReasons.push(plan.rejected);
   }
 
+  // 4. Optional Position Sizing & Account Portfolio Checks (Isolated from recommendation eligibility)
+  const maxAllowedTradeRisk = capital > 0 ? capital * (config.riskPerTradePercent / 100) : 0;
+  const maxPositionCapital = capital > 0 ? capital * (config.maxPositionValuePercent / 100) : 0;
+
+  const riskBudget = maxAllowedTradeRisk - fixedCosts;
+  const lotsByRisk = netRiskPerLot > 0 && riskBudget > 0 ? Math.floor(riskBudget / netRiskPerLot) : 0;
+  const capitalPerUnit = isCredit ? capitalRequiredPerUnit : entryFill;
+  const capitalPerLot = capitalPerUnit * effectiveLotSize;
+  const lotsByCapital = capitalPerLot > 0 && maxPositionCapital > 0 ? Math.floor(maxPositionCapital / capitalPerLot) : 0;
+
+  const maxLotsAllowed = Math.max(0, Math.min(lotsByRisk, lotsByCapital, config.maxLotsPerTrade));
+  const lots = maxLotsAllowed;
+  const quantity = lots * effectiveLotSize;
+
+  const totalRisk = lots > 0 ? Math.round(fixedCosts + netRiskPerLot * lots) : 0;
+  const capitalRequired = Math.round(capitalPerLot * lots);
+
+  // Maximum theoretical loss and max profit:
+  // Decoupled from account capital (Requirement 2):
+  // When sized (lots > 0), reflect allocated quantity; when unallocated/unconfigured, reflect 1 standard contract lot.
+  const maxTheoreticalLoss = maxLossPerUnit !== null
+    ? Math.round(maxLossPerUnit * (quantity > 0 ? quantity : effectiveLotSize))
+    : null;
+
+  const maxProfitPerUnit = plan.maxProfit;
+  const maxProfit = maxProfitPerUnit !== null
+    ? Math.round(maxProfitPerUnit * (quantity > 0 ? quantity : effectiveLotSize))
+    : null;
+
+  const riskPercent = capital > 0 && totalRisk > 0 ? r2((totalRisk / capital) * 100) ?? 0 : 0;
+
+  // Operational risk limits (strictly isolated from recommendation eligibility per Requirement 2)
+  if (inputs?.realizedDailyLoss !== undefined && inputs.realizedDailyLoss > 0 && capital > 0) {
+    const maxDailyLossAllowed = capital * (config.maxDailyLossPercent / 100);
+    if (realizedDailyLoss >= maxDailyLossAllowed) {
+      portfolioReasons.push("DAILY_LOSS_LIMIT");
+      portfolioWarnings.push(
+        `Portfolio restriction: Realized daily loss ₹${realizedDailyLoss.toLocaleString("en-IN")} has reached max daily loss limit ₹${Math.round(maxDailyLossAllowed).toLocaleString("en-IN")}`,
+      );
+    }
+  }
+
+  if (inputs?.existingOpenRisk !== undefined && inputs.existingOpenRisk > 0 && capital > 0) {
+    const maxOpenRiskAllowed = capital * (config.maxOpenRiskPercent / 100);
+    if (existingOpenRisk + totalRisk > maxOpenRiskAllowed) {
+      portfolioReasons.push("OPEN_RISK_LIMIT");
+      portfolioWarnings.push(
+        `Combined open risk ₹${(existingOpenRisk + totalRisk).toLocaleString("en-IN")} exceeds portfolio open risk limit ₹${Math.round(maxOpenRiskAllowed).toLocaleString("en-IN")}`,
+      );
+    }
+  }
+
+  if (inputs?.currentOpenPositions !== undefined && inputs.currentOpenPositions > 0) {
+    if (currentOpenPositions >= config.maxConcurrentPositions) {
+      portfolioReasons.push("MAX_CONCURRENT_POSITIONS");
+      portfolioWarnings.push(
+        `Active open positions count (${currentOpenPositions}) has reached or exceeded max concurrent positions limit (${config.maxConcurrentPositions})`,
+      );
+    }
+  }
+
+  // Portfolio sizing diagnostics (separate from recommendation eligibility per Requirements 1 & 4):
+  let sizingStatus: "UNCONFIGURED" | "SIZED" | "ZERO_LOTS" | "PORTFOLIO_CONSTRAINED" = "UNCONFIGURED";
+  if (capital > 0) {
+    if (lots > 0) {
+      sizingStatus = "SIZED";
+    } else {
+      sizingStatus = "ZERO_LOTS";
+      portfolioReasons.push("ZERO_LOTS");
+      warnings.push(
+        `Position sizing: 0 lots within configured risk limit (₹${Math.round(maxAllowedTradeRisk).toLocaleString("en-IN")}); trade recommendation remains valid independently of capital.`,
+      );
+    }
+    if (capitalRequired > capital) {
+      portfolioReasons.push("INSUFFICIENT_CAPITAL");
+    }
+    if (totalRisk > maxAllowedTradeRisk) {
+      portfolioReasons.push("RISK_LIMIT_EXCEEDED");
+    }
+  } else {
+    warnings.push("Account capital not configured; recommendation generated independently of account sizing.");
+  }
+
+  if (portfolioWarnings.length > 0) {
+    warnings.push(...portfolioWarnings);
+  }
+
   // Assumptions are stated, never hidden. They are configuration, not validated market facts.
   const assumptions = [
     `Entry slippage ${config.entrySlippagePercent}% and exit slippage ${config.exitSlippagePercent}% (adverse, configured assumption)`,
@@ -269,12 +307,22 @@ export function evaluateTradeRisk(
     warnings.push("No trade ledger connected (configured default daily loss: ₹0)");
   }
 
-  const allowed = reasons.length === 0 && lots > 0;
+  // Recommendation Eligibility:
+  // Purely depends on plan structural validity, data freshness, spreads, and market conditions.
+  // Never blocked by ZERO_LOTS, unconfigured account capital, or portfolio-level restrictions (Requirement 1 & 2)!
+  const strategyAllowed = reasons.length === 0;
+  const portfolioAllowed = strategyAllowed && portfolioReasons.length === 0;
+  const allowed = strategyAllowed;
   const status: RiskStatus = allowed ? "APPROVED" : "REJECTED";
 
   return {
     status,
     allowed,
+    strategyAllowed,
+    portfolioAllowed,
+    portfolioReasons,
+    portfolioHumanReasons: portfolioWarnings,
+    sizingStatus,
     index,
     lotSize: effectiveLotSize,
     entryPrice: entry,

@@ -1,6 +1,8 @@
 import type { Analysis } from "@/lib/types";
 import { fmtDate } from "@/lib/time";
+import { INSTRUMENTS } from "@/lib/services/instrumentRegistry";
 import { Badge, Card, Stat, num, signed } from "./ui";
+import { breadthBadge } from "@/lib/provenanceDisplay";
 
 const emaText = (e: NonNullable<NonNullable<Analysis["snapshot"]["technical"]>["emaStructure"]>) =>
   ({ STRONG_BULLISH: "9 > 21 > 50", BULLISH: "9 > 21", RANGE: "flat", BEARISH: "9 < 21", STRONG_BEARISH: "9 < 21 < 50" })[e];
@@ -16,10 +18,11 @@ export function MarketCard({ a }: { a: Analysis }) {
   const ind = s.indicators;
   const techSrc = s.sources.technical.source;
   const fv = t?.futuresVwap ?? null;
-  const futName = s.index === "nifty" ? "NIFTY" : "BANK NIFTY";
+  const futName = INSTRUMENTS[s.index].symbol;
   // Real-candle trend when available; otherwise the engine's EMA factor (mock), else N/A.
-  const trendLabel = t ? t.trend.state.replace("_", " ") : !trendF.available ? na : trendDir > 0.25 ? "Uptrend" : trendDir < -0.25 ? "Downtrend" : "Mixed";
-  const trendDirection = t ? t.trend.direction : trendF.available ? trendDir : 0;
+  // A null trend (mock analysis carries none) falls back to the engine factor, as before.
+  const trendLabel = t?.trend ? t.trend.state.replace("_", " ") : !trendF.available ? na : trendDir > 0.25 ? "Uptrend" : trendDir < -0.25 ? "Downtrend" : "Mixed";
+  const trendDirection = t?.trend ? t.trend.direction : trendF.available ? trendDir : 0;
   const trendTone = trendDirection >= 0.2 ? "bull" : trendDirection <= -0.2 ? "bear" : undefined;
   const marketSrc = s.sources.market.source;
 
@@ -74,12 +77,14 @@ export function MarketCard({ a }: { a: Analysis }) {
         <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-wider text-zinc-500">
           <div className="flex items-center gap-2">
             Market Breadth
-            <Badge tone={s.breadth?.status === "LIVE" ? "neutral" : s.breadth?.status === "PARTIAL" ? "neutral" : "warn"}>
-              {s.breadth?.status ?? "UNAVAILABLE"}
+            {/* G1: a MOCK or unavailable breadth source never shows LIVE. */}
+            <Badge tone={breadthBadge(s.sources.breadth, s.breadth?.status).tone}>
+              {breadthBadge(s.sources.breadth, s.breadth?.status).text}
             </Badge>
           </div>
           <span className="normal-case text-zinc-400">
-            Prices: {s.sources.breadth?.provider ?? s.sources.market.provider ?? "UPSTOX"} ({s.sources.breadth?.source ?? "LIVE"}) · Universe: CONFIGURED
+            {/* G4: no default to UPSTOX or LIVE when the metadata is missing. */}
+            Prices: {s.sources.breadth?.provider ?? s.sources.market.provider ?? "UNKNOWN"} ({s.sources.breadth?.source ?? "UNKNOWN"}) · Universe: CONFIGURED
           </span>
         </div>
         {s.breadth && s.breadth.status !== "UNAVAILABLE" ? (
@@ -125,7 +130,7 @@ export function MarketCard({ a }: { a: Analysis }) {
               />
             </>
           ) : (
-            <Stat label="VWAP" value={ind?.vwap == null ? (ind ? "N/A (no volume)" : na) : num(ind.vwap, 0)} tone={ind?.vwap == null ? undefined : s.spot > ind.vwap ? "bull" : "bear"} />
+            <Stat label="Spot VWAP" value={t?.vwap != null ? num(t.vwap, 0) : "N/A (index has no volume)"} tone={t?.vwap != null ? (s.spot > t.vwap ? "bull" : "bear") : undefined} />
           )}
           <Stat label="MACD" value={t?.macdState ? `${t.macdState.toLowerCase()} (${signed(t.macdHistogram!, 1)})` : na} />
           <Stat label={`ATR ${t ? t.timeframe : ""} / daily`} value={t?.atr != null && ind ? `${num(t.atr, 1)} / ${num(ind.atr, 0)}` : ind ? num(ind.atr, 0) : na} />

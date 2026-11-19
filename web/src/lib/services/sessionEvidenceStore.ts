@@ -4,15 +4,32 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { PaperOpportunity } from "./paperOpportunityStore.ts";
-import { listPaperOpportunities, TERMINAL_STATES, sampleSizeLabel, type SampleSizeLabel } from "./paperOpportunityStore.ts";
+import { listPaperOpportunities, isFixture, TERMINAL_STATES, sampleSizeLabel, type SampleSizeLabel } from "./paperOpportunityStore.ts";
 import type { CollectionResult } from "./liveOpportunityCollector.ts";
 import type { PaperMonitorRun } from "./paperTradeMonitorRunner.ts";
 
-function getDir() {
+export function isTestExecution(): boolean {
   return (
-    process.env.SESSION_EVIDENCE_DIR ??
-    path.join(process.cwd(), ".data", "paper-sessions")
+    process.env.NODE_ENV === "test" ||
+    process.env.VITEST === "true" ||
+    process.execArgv.some((a) => a.includes("--test") || a.includes("test")) ||
+    process.argv.some((a) => a.includes("--test") || a.includes(".test.") || a.includes("/test/")) ||
+    typeof Reflect.get(globalThis, "describe") === "function" ||
+    typeof Reflect.get(globalThis, "it") === "function" ||
+    typeof Reflect.get(globalThis, "test") === "function"
   );
+}
+
+export function getDir(): string {
+  if (process.env.SESSION_EVIDENCE_DIR) {
+    return process.env.SESSION_EVIDENCE_DIR;
+  }
+  if (isTestExecution()) {
+    throw new Error(
+      "SESSION_EVIDENCE_DIR must be explicitly set in test environments to prevent production evidence contamination."
+    );
+  }
+  return path.join(process.cwd(), ".data", "paper-sessions");
 }
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // UTC+05:30
@@ -69,15 +86,16 @@ export function getSessionRecord(date: string): MarketSessionRecord | null {
 
 export function listSessionRecords(): MarketSessionRecord[] {
   try {
+    // turbopackIgnore: the session-evidence directory is a runtime data path (environment override or .data), not bundled.
     const dir = getDir();
-    if (!fs.existsSync(dir)) return [];
+    if (!fs.existsSync(/* turbopackIgnore: true */ dir)) return [];
     return fs
-      .readdirSync(dir)
+      .readdirSync(/* turbopackIgnore: true */ dir)
       .filter((f) => f.startsWith("session_") && f.endsWith(".json"))
       .map((f) => {
         try {
           return JSON.parse(
-            fs.readFileSync(path.join(dir, f), "utf8"),
+            fs.readFileSync(path.join(/* turbopackIgnore: true */ dir, f), "utf8"),
           ) as MarketSessionRecord;
         } catch {
           return null;
@@ -223,7 +241,7 @@ export function buildMultiSessionSummary(
   oppsInput?: PaperOpportunity[],
 ): MultiSessionSummary {
   const sessions = sessionInput ?? listSessionRecords();
-  const opps = oppsInput ?? listPaperOpportunities();
+  const opps = (oppsInput ?? listPaperOpportunities()).filter((o) => !isFixture(o)); // statistics use genuine trades only
 
   const sortedSessions = [...sessions].sort((a, b) => a.sessionDate.localeCompare(b.sessionDate));
 
@@ -251,11 +269,9 @@ export function buildMultiSessionSummary(
   const stopHits = opps.filter((o) => o.status === "STOP_HIT").length;
   const expirations = opps.filter((o) => o.status === "EXPIRED").length;
   const invalidations = opps.filter((o) => o.status === "INVALIDATED").length;
-  const eodExits = opps.filter((o) => o.status === "EOD_EXIT");
-  const eodWins = eodExits.filter((o) => (o.realizedR ?? 0) > 0).length;
-
-  const wins = target1Hits + target2Hits + eodWins;
-  const losses = stopHits + expirations + invalidations + (eodExits.length - eodWins);
+  // Win/loss by realized outcome, not by exit status: an EXPIRED trade can still make money.
+  const wins = completedOpps.filter((o) => (o.realizedR ?? 0) > 0).length;
+  const losses = completedOpps.filter((o) => (o.realizedR ?? 0) < 0).length;
 
   const label = sampleSizeLabel(completedTrades);
 
@@ -263,10 +279,10 @@ export function buildMultiSessionSummary(
   const avgR = rs.length > 0 ? rs.reduce((a, b) => a + b, 0) / rs.length : null;
   const expectancy = avgR;
 
-  const winRs = completedOpps.filter((o) => (o.realizedR ?? 0) > 0).map((o) => o.realizedR!);
-  const lossRs = completedOpps.filter((o) => (o.realizedR ?? 0) <= 0).map((o) => Math.abs(o.realizedR!));
-  const grossProfit = winRs.reduce((a, b) => a + b, 0);
-  const grossLoss = lossRs.reduce((a, b) => a + b, 0);
+  // Profit factor in R (risk-normalised): per-unit ₹ P&L can't be summed across options and stocks.
+  // Same population as avgR. No losses (or no trades) → null, never Infinity or a fake number.
+  const grossProfit = rs.filter((r) => r > 0).reduce((a, b) => a + b, 0);
+  const grossLoss = rs.filter((r) => r < 0).reduce((a, b) => a - b, 0);
   const pf = grossLoss > 0 ? grossProfit / grossLoss : null;
 
   // Max drawdown calculation (cumulative sequential R)

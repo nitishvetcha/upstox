@@ -3,15 +3,17 @@
 import { useEffect, useState } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "./ui";
+import { INDICES as INDEX_IDS, INSTRUMENTS } from "@/lib/services/instrumentRegistry";
+import { CHART_TIMEFRAMES } from "@/lib/uiConfig";
+import { hasAnyIndicator, indicatorGroups, statusBadge, type TechnicalPayload } from "@/lib/technicalDisplay";
 
 type Point = { t: string; close: number; ema9: number | null; ema21: number | null; vwap: number | null };
-type Resp = { series: Point[]; status: string; unavailableReason: string | null; source: string; fetchedAt: string | null; error?: string };
+type Resp = TechnicalPayload & { series: Point[]; error?: string };
+const BADGE_TONE = { ok: "text-emerald-400 border-emerald-800", warn: "text-amber-400 border-amber-800", bad: "text-red-400 border-red-800" } as const;
 
-const INDICES = [
-  ["nifty", "NIFTY 50"],
-  ["banknifty", "BANK NIFTY"],
-] as const;
-const TFS = ["5m", "15m", "30m", "1h"] as const;
+// Index list comes from the instrument registry (single source of truth), not typed here.
+const INDICES = INDEX_IDS.map((id) => [id, INSTRUMENTS[id].name] as const);
+const TFS = CHART_TIMEFRAMES;
 // Validated (dark surface): categorical slots blue / orange / violet; price stays neutral ink.
 const COLORS = { close: "#d4d4d8", ema9: "#3987e5", ema21: "#d95926", vwap: "#9085e9" };
 
@@ -26,13 +28,13 @@ const ist = (iso: string, withDate = false) =>
 
 function Toggle<T extends string>({ value, options, onChange }: { value: T; options: readonly (readonly [T, string])[]; onChange: (v: T) => void }) {
   return (
-    <div className="flex rounded border border-zinc-700 p-0.5 text-xs">
+    <div className="flex flex-wrap max-w-full rounded border border-zinc-700 p-0.5 text-xs">
       {options.map(([v, label]) => (
         <button
           key={v}
           onClick={() => onChange(v)}
           aria-pressed={v === value}
-          className={`rounded px-2 py-0.5 ${v === value ? "bg-zinc-700 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
+          className={`min-h-[24px] min-w-[24px] rounded px-2 py-1 ${v === value ? "bg-zinc-700 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"}`}
         >
           {label}
         </button>
@@ -50,7 +52,12 @@ export function PriceChart() {
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/technical/${index}?timeframe=${tf}`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        const d = await r.json().catch(() => null);
+        // An error body has no series: reject it so the chart shows "Request failed", not a crash.
+        if (!r.ok || !d || !Array.isArray(d.series)) throw new Error("technical series unavailable");
+        return d as Resp;
+      })
       .then((d: Resp) => !cancelled && setData(d))
       .catch(() => !cancelled && setData({ series: [], status: "UNAVAILABLE", unavailableReason: "Request failed", source: "UNAVAILABLE", fetchedAt: null }));
     return () => {
@@ -61,6 +68,9 @@ export function PriceChart() {
   const series = data?.series ?? [];
   const hasVwap = series.some((p) => p.vwap !== null);
   const loading = data === null;
+  const badge = data ? statusBadge(data.status, data.source) : null;
+  const groups = data ? indicatorGroups(data) : [];
+  const anyIndicator = data ? hasAnyIndicator(data) : false;
 
   return (
     <Card className="p-4">
@@ -69,6 +79,14 @@ export function PriceChart() {
         <Toggle value={index} options={INDICES} onChange={(v) => (setIndex(v), setData(null))} />
         <Toggle value={tf} options={TFS.map((t) => [t, t.toUpperCase()] as const)} onChange={(v) => (setTf(v), setData(null))} />
       </div>
+
+      {data && badge && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+          <span className="font-semibold text-zinc-200">{INSTRUMENTS[index]?.name ?? data.index ?? index.toUpperCase()}</span>
+          <span>· {data.timeframe ?? tf} candles</span>
+          <span className={`rounded border px-1.5 py-0.5 font-semibold ${BADGE_TONE[badge.tone]}`}>{badge.label}</span>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex h-72 items-center justify-center text-sm text-zinc-500">Loading candles…</div>
@@ -100,12 +118,40 @@ export function PriceChart() {
             </ResponsiveContainer>
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 text-[11px] text-zinc-500">
-            <span>Source {data.source === "LIVE" ? "UPSTOX (LIVE)" : data.source}</span>
+            <span>Source {data.source ?? "N/A"}</span>
+            {(data.lastCandleCloseAt || data.lastCandleAt) && <span>Last candle {ist(String(data.lastCandleCloseAt || data.lastCandleAt), true)} IST</span>}
             {data.fetchedAt && <span>Fetched {ist(data.fetchedAt)} IST</span>}
             <span>Last {series.length} candles · times IST</span>
-            {!hasVwap && <span>Spot VWAP N/A (index candles carry no volume); futures VWAP is on the market card</span>}
+            {!hasVwap && <span>Spot VWAP N/A (index candles carry no volume)</span>}
           </div>
         </>
+      )}
+
+      {data && !loading && (
+        <div className="mt-4 border-t border-zinc-800 pt-3" aria-label="Technical indicators">
+          {!anyIndicator ? (
+            <p className="text-sm text-zinc-500">No indicator values in this response{data.unavailableReason ? ` (${data.unavailableReason})` : ""}. Nothing is estimated.</p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {groups.map((g) => (
+                <div key={g.title}>
+                  <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">{g.title}</h3>
+                  <dl className="divide-y divide-zinc-800/60 text-xs">
+                    {g.rows.map((row) => (
+                      <div key={row.label} className="flex items-baseline justify-between gap-3 py-1">
+                        <dt className="text-zinc-400">
+                          {row.label}
+                          {row.note && <span className="block text-[10px] text-zinc-600">{row.note}</span>}
+                        </dt>
+                        <dd className={`font-mono ${row.missing ? "text-zinc-600" : "text-zinc-100"}`}>{row.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </Card>
   );

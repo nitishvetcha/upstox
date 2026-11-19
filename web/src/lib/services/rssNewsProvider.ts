@@ -6,6 +6,7 @@ import type { RawArticle } from "./news.ts";
 import { FRESHNESS, RSS, rssFeeds } from "./newsConfig.ts";
 import { cached } from "./cache.ts";
 import { NewsError } from "./errors.ts";
+import { assertNewsAllowed } from "./newsNetworkGate.ts";
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
 const decode = (s: string) =>
@@ -84,6 +85,7 @@ async function fetchFeed(feed: { name: string; publisher: string; url: string },
       const t0 = Date.now();
       let status: number | null = null;
       try {
+        assertNewsAllowed(`rss/${feed.name}`); // fail-closed: no external news in mock mode
         const res = await fetch(feed.url, {
           headers: { "User-Agent": "OptionsAnalyzer/1.0 (RSS reader)", Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" },
           signal: AbortSignal.timeout(RSS.timeoutMs),

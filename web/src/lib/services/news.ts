@@ -179,7 +179,8 @@ export function analyzeNews(pool: RawArticle[], index: IndexId, now: Date, fetch
 
   const newest = relevant.reduce<string | null>((m, a) => (!m || a.publishedAt > m ? a.publishedAt : m), null);
   const ageH = newest ? (now.getTime() - Date.parse(newest)) / 3_600_000 : Infinity;
-  const status: NewsSentiment["status"] = ageH <= FRESHNESS.liveHours ? "LIVE" : ageH <= FRESHNESS.agingHours ? "AGING" : "STALE";
+  // No relevant article is not the same as stale news: UNAVAILABLE. Both statuses fail the same freshness checks.
+  const status: NewsSentiment["status"] = !relevant.length ? "UNAVAILABLE" : ageH <= FRESHNESS.liveHours ? "LIVE" : ageH <= FRESHNESS.agingHours ? "AGING" : "STALE";
 
   // Weighted aggregate. Direction weight = relevance × freshness × confidence; class shares use relevance × freshness.
   let sw = 0, ss = 0, sabs = 0, cw = 0;
@@ -203,7 +204,7 @@ export function analyzeNews(pool: RawArticle[], index: IndexId, now: Date, fetch
   return {
     index,
     status,
-    reason: !relevant.length ? "No relevant articles" : status === "STALE" ? `Newest relevant article is ${Math.round(ageH)} h old` : null,
+    reason: !relevant.length ? "No relevant articles in the fetched feeds (absence of news, not stale news)" : status === "STALE" ? `Newest relevant article is ${Math.round(ageH)} h old` : null,
     score: Math.round(score * 100) / 100,
     overall: score > 0.15 ? "BULLISH" : score < -0.15 ? "BEARISH" : "NEUTRAL",
     bullishPct: pct(share.BULLISH),
@@ -220,6 +221,39 @@ export function analyzeNews(pool: RawArticle[], index: IndexId, now: Date, fetch
     fetchedAt,
     eventRisk,
     articles: relevant.slice(0, 25),
+  };
+}
+
+// Mock mode: three fixed, labelled headlines. Timestamps are relative to `now`; nothing is random, so the output is
+// deterministic for a given clock. Status is MOCK, never LIVE.
+const MOCK_HEADLINES: { title: string; sentiment: Article["sentiment"]; sentimentScore: number; minutesAgo: number }[] = [
+  { title: "MOCK: Index futures open higher on steady global cues", sentiment: "BULLISH", sentimentScore: 0.5, minutesAgo: 20 },
+  { title: "MOCK: Banking stocks trade mixed ahead of a policy review", sentiment: "NEUTRAL", sentimentScore: 0, minutesAgo: 45 },
+  { title: "MOCK: Analysts flag profit-booking risk after the rally", sentiment: "BEARISH", sentimentScore: -0.4, minutesAgo: 80 },
+];
+
+export function mockNewsSentiment(index: IndexId, now: Date): NewsSentiment {
+  const articles: Article[] = MOCK_HEADLINES.map((h, k) => ({
+    id: `mock-${index}-${k}`,
+    title: h.title,
+    description: "Simulated headline for mock mode. It is not a real news item.",
+    source: "MOCK",
+    url: "",
+    publishedAt: new Date(now.getTime() - h.minutesAgo * 60_000).toISOString(),
+    category: "MARKET",
+    relevance: 0.6,
+    relevanceLabel: "MEDIUM",
+    sentiment: h.sentiment,
+    sentimentScore: h.sentimentScore,
+    confidence: 0.5,
+    events: [],
+  }));
+  return {
+    index, status: "MOCK", reason: "Simulated news (mock mode). Not live.", score: 0.033, overall: "NEUTRAL",
+    bullishPct: 33, bearishPct: 33, neutralPct: 33,
+    articleCount: articles.length, bullishCount: 1, bearishCount: 1, fetchedCount: articles.length, uniqueCount: articles.length,
+    confidence: 0.5, sectorScore: null, newestAt: articles[0].publishedAt, fetchedAt: now.toISOString(),
+    eventRisk: { level: "NONE", status: "NONE", reason: null, events: [] }, articles,
   };
 }
 

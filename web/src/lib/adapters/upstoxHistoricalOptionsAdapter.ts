@@ -7,6 +7,8 @@
  *
  * SAFETY: read-only. 0 order endpoints.
  */
+import { UPSTOX_API_BASE } from "../services/upstoxEndpoints.ts";
+import { assertUpstoxNetworkAllowed, UpstoxNetworkBlockedError } from "../services/upstoxNetworkGate.ts";
 import type {
   HistoricalOptionsProvider,
   HistoricalContract,
@@ -15,11 +17,10 @@ import type {
   HistoricalOptionQuery,
   ContractQuery,
   ProviderCapabilityReport,
-  CapabilityStatus,
 } from "../historicalOptionsProvider.ts";
 import { getAccessToken } from "../services/upstoxAuth.ts";
 
-const HOST = "https://api.upstox.com";
+const HOST = UPSTOX_API_BASE;
 const TIMEOUT_MS = 10_000;
 
 // Error code returned when Upstox Plus plan is required for expired-instrument history.
@@ -36,12 +37,15 @@ async function get(token: string, endpoint: string, params: Record<string, strin
   const qs = new URLSearchParams(params).toString();
   let res: Response;
   try {
+    assertUpstoxNetworkAllowed(endpoint); // gate: refuses unless MARKET_DATA_PROVIDER=upstox
     res = await fetch(`${HOST}${endpoint}${qs ? `?${qs}` : ""}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: "no-store",
     });
   } catch (e) {
+    // A gate refusal is reported as a structured result, not thrown, so the probe page renders instead of failing.
+    if (e instanceof UpstoxNetworkBlockedError) return { ok: false, status: 0, body: null, errorCode: "PROVIDER_NOT_LIVE", errorMessage: "Upstox not enabled: MARKET_DATA_PROVIDER is not upstox" };
     return { ok: false, status: 0, body: null, errorCode: "NETWORK_ERROR", errorMessage: String(e) };
   }
   const body = await res.json().catch(() => null);
@@ -111,15 +115,21 @@ export class UpstoxHistoricalOptionsAdapter implements HistoricalOptionsProvider
         apiVersion: "v2",
         checkedAt,
         accessStatus: "PROVIDER_BLOCKED",
-        blockerCode: probe.code ?? UDAPI1149,
-        blockerMessage: probe.message ?? "Upstox historical option access requires Plus plan.",
-        capabilities: blockedCapabilities("PLAN_REQUIRED"),
+        // Only UDAPI1149 is known to mean "Plus plan required". Any other code, or no code, is reported as itself and
+        // the plan requirement is NOT inferred from it.
+        blockerCode: probe.code ?? "NO_PROVIDER_CODE",
+        blockerMessage: probe.message ?? "Upstox refused historical option access without a provider error code.",
+        capabilities: blockedCapabilities(probe.code === UDAPI1149 ? "PLAN_REQUIRED" : "ERROR"),
         notes: [
-          `Error code: ${probe.code ?? UDAPI1149}`,
-          "Historical option OHLC for expired contracts requires an Upstox Plus subscription.",
-          "Current account does NOT have access to: option OHLC, OI, volume, bid/ask for expired contracts.",
-          "Underlying historical candles remain available (used for existing backtests).",
-          "To unlock: upgrade to Upstox Plus and re-run Phase 12 audit.",
+          `Error code: ${probe.code ?? "none"}`,
+          ...(probe.code === UDAPI1149
+            ? [
+                "Historical option OHLC for expired contracts requires an Upstox Plus subscription.",
+                "Current account does NOT have access to: option OHLC, OI, volume, bid/ask for expired contracts.",
+                "Underlying historical candles remain available (used for existing backtests).",
+                "To unlock: upgrade to Upstox Plus and re-run Phase 12 audit.",
+              ]
+            : ["This code is not the known Plus-plan code (UDAPI1149); the cause is not identified. Read the provider's message on the Option History page."]),
         ],
       };
     }
@@ -166,7 +176,7 @@ export class UpstoxHistoricalOptionsAdapter implements HistoricalOptionsProvider
 
 // ── Helper: all capabilities blocked ─────────────────────────────────────────
 
-function blockedCapabilities(status: "PLAN_REQUIRED" | "UNKNOWN") {
+function blockedCapabilities(status: "PLAN_REQUIRED" | "UNKNOWN" | "ERROR") {
   return {
     underlyingHistoricalCandles: "AVAILABLE" as const, // underlying candles work without Plus
     optionHistoricalCandles: status,

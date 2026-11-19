@@ -43,11 +43,12 @@ test("RK-1. sizing on net worst-case risk: 2.02 legacy per unit, 176.96 net per 
   assert.deepEqual(r.reasons, []);
 });
 
-test("RK-2. a position that rounds to zero lots is rejected (ZERO_LOTS)", () => {
-  const r = risk(plan({ entry: 100, stop: 60, maxLoss: 100, rr: 2 }));
+test("RK-2. a position that rounds to zero lots within capital does not reject the valid recommendation", () => {
+  const r = risk(plan({ entry: 100, stop: 60, target1: 180, maxLoss: 100, rr: 2 }));
   assert.equal(r.lots, 0);
-  assert.ok(r.reasons.includes("ZERO_LOTS"));
-  assert.equal(r.allowed, false);
+  assert.equal(r.allowed, true, "valid market trade plan is approved independently of account capital");
+  assert.ok(!r.reasons.includes("ZERO_LOTS"), "ZERO_LOTS does not block recommendation eligibility");
+  assert.ok(r.portfolioReasons?.includes("ZERO_LOTS"));
 });
 
 test("RK-3. NaN entry, stop, target and reward-to-risk are each rejected (NaN passes ordinary comparisons)", () => {
@@ -84,20 +85,31 @@ test("RK-6. unknown lot size is rejected, never assumed to be 1", () => {
   assert.equal(r.allowed, false);
 });
 
-test("RK-7. daily loss at the 2% limit blocks the trade", () => {
+test("RK-7. daily loss at the 2% limit does not reject market recommendation", () => {
   const r = risk(plan(), snapshot(), { realizedDailyLoss: 2000 });
-  assert.ok(r.reasons.includes("DAILY_LOSS_LIMIT"));
-  assert.equal(r.allowed, false);
+  assert.equal(r.allowed, true, "market recommendation remains eligible");
+  assert.equal(r.status, "APPROVED");
+  assert.ok(!r.reasons.includes("DAILY_LOSS_LIMIT"));
+  assert.ok(r.portfolioReasons?.includes("DAILY_LOSS_LIMIT"));
+  assert.equal(r.portfolioAllowed, false);
 });
 
-test("RK-8. combined open risk above 3% of capital blocks the trade", () => {
+test("RK-8. combined open risk above 3% of capital does not reject market recommendation", () => {
   const r = risk(plan(), snapshot(), { existingOpenRisk: 2900 });
-  assert.ok(r.reasons.includes("OPEN_RISK_LIMIT"), "2900 + 758 > 3000");
+  assert.equal(r.allowed, true, "market recommendation remains eligible");
+  assert.equal(r.status, "APPROVED");
+  assert.ok(!r.reasons.includes("OPEN_RISK_LIMIT"));
+  assert.ok(r.portfolioReasons?.includes("OPEN_RISK_LIMIT"));
+  assert.equal(r.portfolioAllowed, false);
 });
 
-test("RK-9. the concurrent-position limit (3) blocks a fourth position", () => {
+test("RK-9. the concurrent-position limit (3) does not reject market recommendation", () => {
   const r = risk(plan(), snapshot(), { currentOpenPositions: 3 });
-  assert.ok(r.reasons.includes("MAX_CONCURRENT_POSITIONS"));
+  assert.equal(r.allowed, true, "market recommendation remains eligible");
+  assert.equal(r.status, "APPROVED");
+  assert.ok(!r.reasons.includes("MAX_CONCURRENT_POSITIONS"));
+  assert.ok(r.portfolioReasons?.includes("MAX_CONCURRENT_POSITIONS"));
+  assert.equal(r.portfolioAllowed, false);
 });
 
 test("RK-10. EXTREME event risk blocks new trades", () => {
@@ -105,9 +117,10 @@ test("RK-10. EXTREME event risk blocks new trades", () => {
   assert.ok(r.reasons.includes("EXTREME_EVENT_RISK"));
 });
 
-test("RK-11. end-of-day market data is never a live execution (STALE_PRICE)", () => {
+test("RK-11. end-of-day market data is never a live execution (END_OF_DAY_DATA)", () => {
   const r = risk(plan(), snapshot((s) => { s.sources.market = { ...s.sources.market, source: "END_OF_DAY" }; }));
-  assert.ok(r.reasons.includes("STALE_PRICE"));
+  assert.ok(r.reasons.includes("END_OF_DAY_DATA"));
+  assert.ok(!r.reasons.includes("STALE_PRICE"), "END_OF_DAY must not produce STALE_PRICE");
   assert.equal(r.allowed, false);
 });
 

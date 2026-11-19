@@ -12,7 +12,7 @@ import * as path from "node:path";
 describe("PG29 — Opportunities page no HTTP self-fetch", () => {
   const pageFile = path.join(
     process.cwd(),
-    "src/app/opportunities/page.tsx",
+    "src/app/(dashboard)/opportunities/page.tsx",
   );
 
   it("PG29-01 page file exists", () => {
@@ -64,7 +64,7 @@ describe("PG29 — Opportunities page no HTTP self-fetch", () => {
 // ── NA29: Navigation from dashboard ──────────────────────────────────────────
 
 describe("NA29 — Dashboard navigation to opportunities", () => {
-  const dashFile = path.join(process.cwd(), "src/app/page.tsx");
+  const dashFile = path.join(process.cwd(), "src/app/(dashboard)/page.tsx");
 
   it("NA29-01 dashboard links to /opportunities", () => {
     const src = fs.readFileSync(dashFile, "utf8");
@@ -80,7 +80,7 @@ describe("NA29 — Dashboard navigation to opportunities", () => {
 // ── DQ29: Decision funnel diagnostic counts ───────────────────────────────────
 
 describe("DQ29 — Decision funnel in page", () => {
-  const pageFile = path.join(process.cwd(), "src/app/opportunities/page.tsx");
+  const pageFile = path.join(process.cwd(), "src/app/(dashboard)/opportunities/page.tsx");
 
   it("DQ29-01 shows contractsEvaluated and contractsRejected", () => {
     const src = fs.readFileSync(pageFile, "utf8");

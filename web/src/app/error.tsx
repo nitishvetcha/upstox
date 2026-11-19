@@ -6,6 +6,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
     <div className="mx-auto max-w-3xl rounded border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">
       <div className="font-semibold">This section could not be loaded.</div>
       <p className="mt-1 text-zinc-300">{error.message || "Unexpected error"}</p>
+      {error.digest && <p className="mt-1 font-mono text-xs text-zinc-500">digest: {error.digest}</p>}
       <button onClick={reset} className="mt-3 rounded border border-zinc-600 px-3 py-1 text-xs text-zinc-100 hover:bg-zinc-800">Retry</button>
     </div>
   );

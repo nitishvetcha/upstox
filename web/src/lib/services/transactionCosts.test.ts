@@ -21,7 +21,7 @@ import {
 
 test("TC-NSE-1. NSE transaction charges and IPFT inclusion (NSE Circular NSE/FA/73061)", () => {
   // Rate: 0.0003553 represents ₹3,553.00 per crore of traded value.
-  // Breakdown: ₹3,552.99 exchange fee + ₹0.01 IPFT per crore.
+  // Breakdown: ₹3,552.99 exchange fee (0.0355299%, multiplier: 0.000355299) + ₹0.01 IPFT (0.0000001%, multiplier: 0.000000001) per crore.
   // IPFT is included in the combined rate and must NEVER be added separately.
   assert.equal(DEFAULT_TRANSACTION_COSTS.exchangeTxnRate, 0.0003553);
   
@@ -91,18 +91,20 @@ test("TC-AUTOSQUARE-1. Auto-square-off penalty separation and non-guaranteed not
   assert.equal(unknownAsq.guaranteed, false);
 });
 
-test("TC-GST-1. GST base includes Brokerage + combined Exchange/IPFT, excludes SEBI and stamp duty", () => {
+test("TC-GST-1. GST base includes Brokerage + combined Exchange/IPFT + SEBI charges per Upstox published calculator", () => {
   const fills: Fill[] = [
     { side: "BUY", price: 100, quantity: 100 },
     { side: "SELL", price: 100, quantity: 100 },
   ];
   const c = costsFor(fills, BASIC_PLAN_COSTS);
-  // Brokerage: 40. Exchange: 20,000 * 0.0003553 = 7.106 -> r2 = 7.11.
-  // GST base: 40 + 7.106 = 47.106. GST: 47.106 * 0.18 = 8.479 -> r2 = 8.48.
-  // SEBI: 20,000 * 0.000001 = 0.02. If SEBI were in GST base, (40 + 7.106 + 0.02)*0.18 = 8.4827 -> 8.48.
-  // Let's verify formula:
-  const expectedGst = r2((40 + 20000 * 0.0003553) * 0.18);
+  // Brokerage: 40. Exchange: 20,000 * 0.0003553 = 7.106.
+  // SEBI turnover charge: 20,000 * 0.000001 = 0.02.
+  // Upstox published calculator GST base: 40 + 7.106 + 0.02 = 47.126.
+  // GST: 47.126 * 0.18 = 8.48268 -> r2 = 8.48.
+  // Stamp duty (0.60) and STT (30.00) are sovereign taxes and strictly excluded from the GST base.
+  const expectedGst = r2((40 + 20000 * 0.0003553 + 20000 * 0.000001) * 0.18);
   assert.equal(c.gst, expectedGst);
+  assert.equal(c.gst, 8.48);
 });
 
 test("TC-ROUNDING-1. Deterministic two-decimal half-up monetary rounding and paise boundaries", () => {
@@ -156,3 +158,48 @@ test("TC-REF-EXAMPLE-1. Recalculate reference example: Basic ₹3,427.68 and Plu
   // Difference is exactly the brokerage delta plus GST delta: (20 + 3.60 = ₹23.60)
   assert.equal(r2(plusNetRiskPerLot - basicNetRiskPerLot), 23.60);
 });
+
+test("TC-PARTIAL-FILLS-1. Brokerage is charged per executed order, not per partial fill", () => {
+  // Scenario: 1 BUY order of 75 units fills in 3 partial fills (25 + 25 + 25)
+  // 1 SELL order of 75 units fills in 2 partial fills (40 + 35)
+  // Total fills = 5.
+  // Distinct executed orders = 2 ("order-buy-1", "order-sell-1").
+  const partialFills: Fill[] = [
+    { side: "BUY", price: 100, quantity: 25, orderId: "order-buy-1" },
+    { side: "BUY", price: 100, quantity: 25, orderId: "order-buy-1" },
+    { side: "BUY", price: 100, quantity: 25, orderId: "order-buy-1" },
+    { side: "SELL", price: 120, quantity: 40, orderId: "order-sell-1" },
+    { side: "SELL", price: 120, quantity: 35, orderId: "order-sell-1" },
+  ];
+
+  // Under Basic Plan (₹20/order):
+  const basic = costsFor(partialFills, BASIC_PLAN_COSTS);
+  assert.equal(basic.brokerage, 40.00, "2 executed orders * ₹20 = ₹40 (not 5 fills * ₹20 = ₹100)");
+
+  // Under Plus Plan (₹30/order):
+  const plus = costsFor(partialFills, PLUS_PLAN_COSTS);
+  assert.equal(plus.brokerage, 60.00, "2 executed orders * ₹30 = ₹60 (not 5 fills * ₹30 = ₹150)");
+
+  // Compare with identical single-fill representation:
+  const singleFills: Fill[] = [
+    { side: "BUY", price: 100, quantity: 75, orderId: "order-buy-1" },
+    { side: "SELL", price: 120, quantity: 75, orderId: "order-sell-1" },
+  ];
+  const basicSingle = costsFor(singleFills, BASIC_PLAN_COSTS);
+  assert.deepEqual(basic, basicSingle, "All charges match between partial-fill and single-fill executions of the same orders");
+
+  // Separately submitted orders (distinct orderIds):
+  const separateOrders: Fill[] = [
+    { side: "BUY", price: 100, quantity: 25, orderId: "order-1" },
+    { side: "BUY", price: 100, quantity: 25, orderId: "order-2" },
+    { side: "BUY", price: 100, quantity: 25, orderId: "order-3" },
+  ];
+  const basicSeparate = costsFor(separateOrders, BASIC_PLAN_COSTS);
+  assert.equal(basicSeparate.brokerage, 60.00, "3 distinct orders * ₹20 = ₹60");
+
+  // Explicit orderCountOverride:
+  const overridden = costsFor(partialFills, BASIC_PLAN_COSTS, 2);
+  assert.equal(overridden.brokerage, 40.00);
+});
+
+

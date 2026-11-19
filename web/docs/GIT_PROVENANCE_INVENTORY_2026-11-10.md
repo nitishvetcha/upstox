@@ -1,0 +1,411 @@
+# Git provenance inventory (read-only, 2026-11-10)
+
+Read-only: no staging, commit, reset, clean, restore or overwrite. Origin classes: AUDIT = created or edited in this programme (recorded); PRIOR = existed before the 336 snapshot (from earlier recorded session work); UNKNOWN = no record of creation or edit in this programme. Timestamps are filesystem metadata only and do not establish ownership.
+
+Totals: 220 untracked, 124 modified, 9 deleted (total      353).
+
+## Tracked files modified or deleted today (2026-11-09 or 11-10)
+
+```
+ M | web/scripts/dev-upstox.mjs | m=2026-11-09 17:27 | b=2026-10-07 13:45 | +3/-0
+ M | web/scripts/sync-constituents.mjs | m=2026-11-09 17:27 | b=2026-11-04 14:40 | +35/-4
+ M | web/scripts/upstox-login.mjs | m=2026-11-09 17:27 | b=2026-10-07 13:45 | +3/-0
+ M | web/scripts/upstox-status.mjs | m=2026-11-09 17:27 | b=2026-11-04 14:40 | +4/-1
+ M | web/scripts/validate-instruments.mjs | m=2026-11-09 17:27 | b=2026-10-05 16:23 | +3/-0
+ M | web/src/app/api/recommendations/[id]/refresh/route.ts | m=2026-11-09 10:29 | b=2026-11-09 10:29 | +10/-45
+ M | web/src/components/AnalysisPanels.tsx | m=2026-11-09 12:17 | b=2026-11-09 12:17 | +7/-5
+ M | web/src/components/DataStatus.tsx | m=2026-11-09 12:16 | b=2026-11-09 12:16 | +13/-5
+ M | web/src/components/DataTimestamps.tsx | m=2026-11-09 11:12 | b=2026-11-09 11:12 | +6/-2
+ M | web/src/components/MarketCard.tsx | m=2026-11-09 12:16 | b=2026-11-09 12:16 | +8/-4
+ M | web/src/components/NewsPanel.tsx | m=2026-11-09 10:01 | b=2026-11-09 10:01 | +3/-2
+ M | web/src/components/PriceChart.tsx | m=2026-11-09 10:11 | b=2026-11-09 10:11 | +7/-2
+ M | web/src/components/RecommendationCard.tsx | m=2026-11-09 10:13 | b=2026-11-04 14:40 | +13/-6
+ M | web/src/components/RecommendationJournal.tsx | m=2026-11-09 10:13 | b=2026-10-06 17:06 | +1/-1
+ M | web/src/components/Sidebar.tsx | m=2026-11-09 10:20 | b=2026-11-09 10:20 | +80/-23
+ M | web/src/components/TopBar.tsx | m=2026-11-09 10:13 | b=2026-11-09 10:13 | +9/-4
+ M | web/src/components/performance/TradeJournal.tsx | m=2026-11-09 17:58 | b=2026-10-06 11:49 | +2/-2
+ M | web/src/lib/adapters/upstoxHistoricalOptionsAdapter.ts | m=2026-11-09 17:16 | b=2026-11-09 17:16 | +19/-10
+ M | web/src/lib/dashboard.ts | m=2026-11-09 12:16 | b=2026-11-09 12:16 | +3/-0
+ M | web/src/lib/engine/stockOpportunityEngine.ts | m=2026-11-09 13:00 | b=2026-11-09 13:00 | +273/-72
+ M | web/src/lib/phase20.test.ts | m=2026-11-09 13:01 | b=2026-11-04 14:40 | +15/-8
+ M | web/src/lib/phase30_4.test.ts | m=2026-11-09 15:52 | b=2026-10-13 17:42 | +2/-0
+ M | web/src/lib/recommendationEnricher.ts | m=2026-11-09 11:03 | b=2026-11-09 11:03 | +45/-5
+ M | web/src/lib/services/breadth.test.ts | m=2026-11-09 15:52 | b=2026-10-05 15:47 | +2/-0
+ M | web/src/lib/services/futures.test.ts | m=2026-11-09 15:52 | b=2026-11-04 14:40 | +3/-1
+ M | web/src/lib/services/futures.ts | m=2026-11-09 15:46 | b=2026-11-09 15:46 | +11/-6
+ M | web/src/lib/services/liveOpportunityCollector.ts | m=2026-11-09 10:37 | b=2026-11-09 10:37 | +94/-15
+ M | web/src/lib/services/market.ts | m=2026-11-09 11:11 | b=2026-11-09 11:11 | +57/-13
+ M | web/src/lib/services/marketData.test.ts | m=2026-11-09 15:52 | b=2026-11-04 14:40 | +81/-7
+ M | web/src/lib/services/news.test.ts | m=2026-11-09 17:36 | b=2026-10-05 15:13 | +4/-0
+ M | web/src/lib/services/newsProvider.ts | m=2026-11-09 17:27 | b=2026-11-09 17:27 | +5/-1
+ M | web/src/lib/services/opportunityTrackingStore.ts | m=2026-11-09 10:38 | b=2026-11-09 10:38 | +8/-7
+ M | web/src/lib/services/paperOpportunityStore.ts | m=2026-11-09 10:38 | b=2026-11-09 10:38 | +38/-8
+ M | web/src/lib/services/paperTradeMonitorRunner.ts | m=2026-11-09 10:37 | b=2026-11-09 10:37 | +7/-6
+ M | web/src/lib/services/recommendationStore.ts | m=2026-11-09 10:39 | b=2026-11-09 10:39 | +10/-4
+ M | web/src/lib/services/risk/riskService.ts | m=2026-11-09 10:50 | b=2026-11-09 10:50 | +85/-8
+ M | web/src/lib/services/rss.test.ts | m=2026-11-09 17:36 | b=2026-10-05 15:23 | +4/-0
+ M | web/src/lib/services/rssNewsProvider.ts | m=2026-11-09 17:27 | b=2026-11-09 17:27 | +2/-0
+ M | web/src/lib/services/sessionEvidenceStore.ts | m=2026-11-09 10:38 | b=2026-11-09 10:38 | +33/-17
+ M | web/src/lib/services/technical.test.ts | m=2026-11-09 16:00 | b=2026-11-04 14:40 | +32/-5
+ M | web/src/lib/services/upstoxMarket.ts | m=2026-11-09 15:46 | b=2026-11-09 15:46 | +179/-56
+ M | web/tsconfig.json | m=2026-11-09 13:05 | b=2026-11-04 14:40 | +63/-2
+```
+
+## Full inventory (status | path | mtime | birth | diff stat)
+
+```
+# status | path | mtime | birth | diffstat(+/-) | origin-class
+ M | .gitignore | m=2026-11-08 17:46 | b=2026-10-07 13:38 | +3/-0
+ M | web/.env.example | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +130/-8
+ M | web/.gitignore | m=2026-11-08 17:46 | b=2026-11-04 14:40 | +6/-0
+ M | web/AGENTS.md | m=2026-11-08 17:48 | b=2026-10-05 12:42 | +1/-1
+ M | web/eslint.config.mjs | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +10/-0
+ M | web/next.config.ts | m=2026-11-08 17:50 | b=2026-11-04 14:40 | +2/-0
+ M | web/package-lock.json | m=2026-11-06 18:09 | b=2026-11-04 14:40 | +119/-54
+ M | web/package.json | m=2026-11-06 18:02 | b=2026-11-05 17:48 | +8/-3
+ M | web/scripts/dev-upstox.mjs | m=2026-11-09 17:27 | b=2026-10-07 13:45 | +3/-0
+ M | web/scripts/paper-live.mjs | m=2026-11-06 10:48 | b=2026-11-04 14:40 | +75/-7
+ M | web/scripts/run-paper-supervisor.mjs | m=2026-11-06 10:48 | b=2026-11-04 14:40 | +52/-10
+ M | web/scripts/run-paper-supervisor.sh | m=2026-11-06 10:48 | b=2026-10-15 17:12 | +2/-2
+ M | web/scripts/sync-constituents.mjs | m=2026-11-09 17:27 | b=2026-11-04 14:40 | +35/-4
+ M | web/scripts/upstox-login.mjs | m=2026-11-09 17:27 | b=2026-10-07 13:45 | +3/-0
+ M | web/scripts/upstox-status.mjs | m=2026-11-09 17:27 | b=2026-11-04 14:40 | +4/-1
+ M | web/scripts/validate-instruments.mjs | m=2026-11-09 17:27 | b=2026-10-05 16:23 | +3/-0
+ D | web/src/app/[section]/page.tsx | m= | b= | +0/-184
+ M | web/src/app/api/auth/health/route.ts | m=2026-11-06 10:46 | b=2026-10-07 13:44 | +3/-2
+ M | web/src/app/api/auth/status/route.ts | m=2026-11-06 10:50 | b=2026-10-07 13:43 | +13/-11
+ M | web/src/app/api/opportunities/daily-summary/route.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +2/-2
+ M | web/src/app/api/opportunities/options/route.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +4/-2
+ M | web/src/app/api/opportunities/top/route.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +2/-2
+ M | web/src/app/api/paper-opportunities/collect/route.ts | m=2026-11-06 10:50 | b=2026-11-04 14:40 | +146/-4
+ M | web/src/app/api/paper-opportunities/monitor/route.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +11/-17
+ M | web/src/app/api/paper-opportunities/route.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +7/-5
+ M | web/src/app/api/paper-trading/portfolio/route.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +14/-1
+ M | web/src/app/api/recommendations/[id]/refresh/route.ts | m=2026-11-09 10:29 | b=2026-11-09 10:29 | +10/-45
+ M | web/src/app/api/recommendations/diagnostic/route.ts | m=2026-11-04 15:11 | b=2026-11-04 15:11 | +6/-3
+ M | web/src/app/api/recommendations/generate/route.ts | m=2026-11-08 17:26 | b=2026-11-08 17:26 | +20/-11
+ M | web/src/app/api/technical/[index]/route.ts | m=2026-11-06 12:10 | b=2026-10-05 13:31 | +2/-2
+ M | web/src/app/error.tsx | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +1/-0
+ M | web/src/app/globals.css | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +3/-0
+ M | web/src/app/layout.tsx | m=2026-11-05 16:24 | b=2026-11-04 14:54 | +4/-31
+ D | web/src/app/market-history/page.tsx | m= | b= | +0/-185
+ D | web/src/app/opportunities/page.tsx | m= | b= | +0/-438
+ D | web/src/app/opportunity-journal/page.tsx | m= | b= | +0/-304
+ D | web/src/app/option-history/page.tsx | m= | b= | +0/-49
+ D | web/src/app/page.tsx | m= | b= | +0/-46
+ D | web/src/app/performance/page.tsx | m= | b= | +0/-288
+ D | web/src/app/recommendation-debug/page.tsx | m= | b= | +0/-49
+ D | web/src/app/strategy-evidence/page.tsx | m= | b= | +0/-236
+ M | web/src/components/AnalysisPanels.tsx | m=2026-11-09 12:17 | b=2026-11-09 12:17 | +7/-5
+ M | web/src/components/DataStatus.tsx | m=2026-11-09 12:16 | b=2026-11-09 12:16 | +13/-5
+ M | web/src/components/DataTimestamps.tsx | m=2026-11-09 11:12 | b=2026-11-09 11:12 | +6/-2
+ M | web/src/components/MarketCard.tsx | m=2026-11-09 12:16 | b=2026-11-09 12:16 | +8/-4
+ M | web/src/components/NewsPanel.tsx | m=2026-11-09 10:01 | b=2026-11-09 10:01 | +3/-2
+ M | web/src/components/PriceChart.tsx | m=2026-11-09 10:11 | b=2026-11-09 10:11 | +7/-2
+ M | web/src/components/RecommendationCard.tsx | m=2026-11-09 10:13 | b=2026-11-04 14:40 | +13/-6
+ M | web/src/components/RecommendationDiagnosticPanel.tsx | m=2026-11-06 14:50 | b=2026-11-06 14:50 | +30/-5
+ M | web/src/components/RecommendationEvaluation.tsx | m=2026-11-06 17:05 | b=2026-11-06 15:06 | +7/-2
+ M | web/src/components/RecommendationJournal.tsx | m=2026-11-09 10:13 | b=2026-10-06 17:06 | +1/-1
+ M | web/src/components/SectionViews.tsx | m=2026-11-04 14:49 | b=2026-11-04 14:49 | +9/-2
+ M | web/src/components/Sidebar.tsx | m=2026-11-09 10:20 | b=2026-11-09 10:20 | +80/-23
+ M | web/src/components/TopBar.tsx | m=2026-11-09 10:13 | b=2026-11-09 10:13 | +9/-4
+ M | web/src/components/performance/TradeJournal.tsx | m=2026-11-09 17:58 | b=2026-10-06 11:49 | +2/-2
+ M | web/src/components/performance/WhatIfTables.tsx | m=2026-11-05 18:29 | b=2026-10-06 10:25 | +5/-3
+ M | web/src/components/ui.tsx | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +30/-0
+ M | web/src/lib/adapters/upstoxHistoricalOptionsAdapter.ts | m=2026-11-09 17:16 | b=2026-11-09 17:16 | +19/-10
+ M | web/src/lib/backtestEngine.ts | m=2026-11-05 18:28 | b=2026-11-05 17:51 | +204/-47
+ M | web/src/lib/backtestExecution.ts | m=2026-11-05 18:27 | b=2026-10-06 10:21 | +10/-0
+ M | web/src/lib/backtestSnapshot.ts | m=2026-11-05 16:26 | b=2026-10-06 16:39 | +1/-1
+ M | web/src/lib/backtestTypes.ts | m=2026-11-05 18:09 | b=2026-11-05 17:45 | +6/-0
+ M | web/src/lib/dashboard.ts | m=2026-11-09 12:16 | b=2026-11-09 12:16 | +3/-0
+ M | web/src/lib/dataStatus.ts | m=2026-11-06 11:39 | b=2026-11-06 11:39 | +7/-3
+ M | web/src/lib/engine/opportunityEngine.ts | m=2026-11-06 12:32 | b=2026-11-04 16:08 | +257/-34
+ M | web/src/lib/engine/stockOpportunityEngine.ts | m=2026-11-09 13:00 | b=2026-11-09 13:00 | +273/-72
+ M | web/src/lib/fallback.ts | m=2026-11-08 18:28 | b=2026-10-05 13:14 | +2/-0
+ M | web/src/lib/marketHistory.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +2/-1
+ M | web/src/lib/paperEngine.ts | m=2026-11-06 17:03 | b=2026-11-06 13:15 | +783/-125
+ M | web/src/lib/paperStateMachine.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +4/-1
+ M | web/src/lib/paperTypes.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +62/-9
+ M | web/src/lib/phase13.test.ts | m=2026-11-06 11:14 | b=2026-11-06 11:14 | +4/-2
+ M | web/src/lib/phase14.test.ts | m=2026-11-06 10:48 | b=2026-10-07 13:47 | +1/-1
+ M | web/src/lib/phase19.test.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +11/-9
+ M | web/src/lib/phase20.test.ts | m=2026-11-09 13:01 | b=2026-11-04 14:40 | +15/-8
+ M | web/src/lib/phase22.test.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +77/-12
+ M | web/src/lib/phase23.test.ts | m=2026-11-05 16:33 | b=2026-11-04 14:40 | +5/-6
+ M | web/src/lib/phase24.test.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +5/-0
+ M | web/src/lib/phase25.test.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +6/-4
+ M | web/src/lib/phase27.test.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +3/-2
+ M | web/src/lib/phase28.test.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +3/-2
+ M | web/src/lib/phase29.test.ts | m=2026-11-05 16:33 | b=2026-10-13 11:28 | +3/-3
+ M | web/src/lib/phase30_1.test.ts | m=2026-11-05 09:27 | b=2026-10-13 15:54 | +22/-7
+ M | web/src/lib/phase30_4.test.ts | m=2026-11-09 15:52 | b=2026-10-13 17:42 | +2/-0
+ M | web/src/lib/recommendation.test.ts | m=2026-11-06 17:30 | b=2026-10-06 16:41 | +4/-2
+ M | web/src/lib/recommendationDiagnostic.ts | m=2026-11-06 14:40 | b=2026-11-06 11:14 | +78/-8
+ M | web/src/lib/recommendationEnricher.ts | m=2026-11-09 11:03 | b=2026-11-09 11:03 | +45/-5
+ M | web/src/lib/services/backtestScenarios.ts | m=2026-11-05 18:29 | b=2026-10-06 10:23 | +4/-0
+ M | web/src/lib/services/backtestStore.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +2/-1
+ M | web/src/lib/services/breadth.test.ts | m=2026-11-09 15:52 | b=2026-10-05 15:47 | +2/-0
+ M | web/src/lib/services/breadthConfig.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +6/-1
+ M | web/src/lib/services/breadthConstituents.generated.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +545/-3
+ M | web/src/lib/services/breadthService.ts | m=2026-11-06 11:39 | b=2026-11-06 11:39 | +26/-6
+ M | web/src/lib/services/cache.ts | m=2026-11-06 17:51 | b=2026-10-05 14:52 | +24/-2
+ M | web/src/lib/services/futures.test.ts | m=2026-11-09 15:52 | b=2026-11-04 14:40 | +3/-1
+ M | web/src/lib/services/futures.ts | m=2026-11-09 15:46 | b=2026-11-09 15:46 | +11/-6
+ M | web/src/lib/services/instrumentRegistry.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +4/-0
+ M | web/src/lib/services/liveOpportunityCollector.ts | m=2026-11-09 10:37 | b=2026-11-09 10:37 | +94/-15
+ M | web/src/lib/services/market.ts | m=2026-11-09 11:11 | b=2026-11-09 11:11 | +57/-13
+ M | web/src/lib/services/marketData.test.ts | m=2026-11-09 15:52 | b=2026-11-04 14:40 | +81/-7
+ M | web/src/lib/services/mock.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +1/-1
+ M | web/src/lib/services/news.test.ts | m=2026-11-09 17:36 | b=2026-10-05 15:13 | +4/-0
+ M | web/src/lib/services/news.ts | m=2026-11-06 17:03 | b=2026-10-05 15:09 | +36/-2
+ M | web/src/lib/services/newsApi.ts | m=2026-11-06 15:30 | b=2026-10-05 15:11 | +4/-4
+ M | web/src/lib/services/newsConfig.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +21/-0
+ M | web/src/lib/services/newsProvider.ts | m=2026-11-09 17:27 | b=2026-11-09 17:27 | +5/-1
+ M | web/src/lib/services/opportunityTrackingStore.ts | m=2026-11-09 10:38 | b=2026-11-09 10:38 | +8/-7
+ M | web/src/lib/services/optionChainAnalytics.ts | m=2026-11-06 12:59 | b=2026-10-05 13:11 | +8/-1
+ M | web/src/lib/services/optionContractLTT.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +32/-8
+ M | web/src/lib/services/paperOpportunityMonitor.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +20/-7
+ M | web/src/lib/services/paperOpportunityStore.ts | m=2026-11-09 10:38 | b=2026-11-09 10:38 | +38/-8
+ M | web/src/lib/services/paperStore.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +16/-8
+ M | web/src/lib/services/paperTradeMonitorRunner.ts | m=2026-11-09 10:37 | b=2026-11-09 10:37 | +7/-6
+ M | web/src/lib/services/paperTrading.test.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +10/-5
+ M | web/src/lib/services/performance.test.ts | m=2026-11-05 18:07 | b=2026-10-05 18:03 | +10/-5
+ M | web/src/lib/services/phase10.test.ts | m=2026-11-05 18:29 | b=2026-10-06 11:27 | +4/-3
+ M | web/src/lib/services/phase9.test.ts | m=2026-11-05 18:28 | b=2026-10-06 11:24 | +3/-2
+ M | web/src/lib/services/recommendationStore.ts | m=2026-11-09 10:39 | b=2026-11-09 10:39 | +10/-4
+ M | web/src/lib/services/risk.test.ts | m=2026-11-06 14:31 | b=2026-10-05 16:04 | +12/-9
+ M | web/src/lib/services/risk/riskConfig.ts | m=2026-11-06 13:09 | b=2026-10-05 15:59 | +53/-9
+ M | web/src/lib/services/risk/riskService.ts | m=2026-11-09 10:50 | b=2026-11-09 10:50 | +85/-8
+ M | web/src/lib/services/risk/riskTypes.ts | m=2026-11-06 13:09 | b=2026-10-05 15:59 | +8/-0
+ M | web/src/lib/services/rss.test.ts | m=2026-11-09 17:36 | b=2026-10-05 15:23 | +4/-0
+ M | web/src/lib/services/rssNewsProvider.ts | m=2026-11-09 17:27 | b=2026-11-09 17:27 | +2/-0
+ M | web/src/lib/services/sessionEvidenceStore.ts | m=2026-11-09 10:38 | b=2026-11-09 10:38 | +33/-17
+ M | web/src/lib/services/stockService.ts | m=2026-11-08 17:47 | b=2026-11-06 15:22 | +26/-11
+ M | web/src/lib/services/technical.test.ts | m=2026-11-09 16:00 | b=2026-11-04 14:40 | +32/-5
+ M | web/src/lib/services/upstoxAuth.ts | m=2026-11-06 10:46 | b=2026-11-04 14:40 | +58/-6
+ M | web/src/lib/services/upstoxMarket.ts | m=2026-11-09 15:46 | b=2026-11-09 15:46 | +179/-56
+ M | web/src/lib/services/walkForwardStore.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +2/-1
+ M | web/src/lib/time.ts | m=2026-11-04 14:40 | b=2026-11-04 14:40 | +29/-3
+ M | web/src/lib/types.ts | m=2026-11-08 18:28 | b=2026-11-05 12:39 | +31/-4
+ M | web/tsconfig.json | m=2026-11-09 13:05 | b=2026-11-04 14:40 | +63/-2
+?? | docs/ | m=2026-11-08 17:51 | b=2026-11-05 11:45 | -
+?? | web/.nvmrc | m=2026-11-05 16:39 | b=2026-11-05 16:39 | -
+?? | web/docs/F1_STALE_MARKET_CLOSURE_REVIEW_2026-11-09.md | m=2026-11-09 11:00 | b=2026-11-09 11:00 | -
+?? | web/docs/F7_MOCK_LABEL_VERIFICATION_2026-11-09.md | m=2026-11-09 12:08 | b=2026-11-09 12:08 | -
+?? | web/docs/FINAL_STABILISATION_AND_COMPLETION_REPORT.md | m=2026-11-09 10:42 | b=2026-11-08 18:33 | -
+?? | web/docs/GATING_AND_LAUNCHAGENT_2026-11-09.md | m=2026-11-09 17:53 | b=2026-11-09 17:53 | -
+?? | web/docs/INCIDENT_LIVE_UPSTOX_REQUESTS_2026-11-09.md | m=2026-11-09 15:44 | b=2026-11-09 15:44 | -
+?? | web/docs/INCIDENT_REMEDIATION_2026-11-09.md | m=2026-11-09 16:08 | b=2026-11-09 16:08 | -
+?? | web/docs/INDEX_SERIES_FEASIBILITY_2026-11-08.md | m=2026-11-08 18:30 | b=2026-11-08 18:30 | -
+?? | web/docs/ISOLATED_AUDIT_VERIFICATION_2026-11-09.md | m=2026-11-09 17:25 | b=2026-11-09 17:25 | -
+?? | web/docs/NSE_BHAVCOPY_NEWHOST_VERIFICATION_2026-11-08.md | m=2026-11-08 18:20 | b=2026-11-08 18:20 | -
+?? | web/docs/NSE_INVALID_OHLC_DIAGNOSTIC_2026-11-08.md | m=2026-11-08 18:33 | b=2026-11-08 18:33 | -
+?? | web/docs/PROVENANCE_AND_FRONTEND_FINAL_COMPLETION_2026-11-09.md | m=2026-11-09 12:26 | b=2026-11-09 12:26 | -
+?? | web/docs/PROVENANCE_AUDIT_CLOSURE_2026-11-09.md | m=2026-11-09 12:01 | b=2026-11-09 12:01 | -
+?? | web/docs/PROVENANCE_AUDIT_FINAL_2026-11-09.md | m=2026-11-09 10:47 | b=2026-11-09 10:47 | -
+?? | web/docs/STOCK_SCANNER_MOCK_GUARD_2026-11-09.md | m=2026-11-09 13:05 | b=2026-11-09 13:05 | -
+?? | web/docs/UPSTOX_INVALID_INSTRUMENT_INVESTIGATION_2026-11-08.md | m=2026-11-08 18:33 | b=2026-11-08 18:33 | -
+?? | web/docs/disk_crash_recovery_implementation_plan.md | m=2026-11-03 16:18 | b=2026-11-03 16:18 | -
+?? | web/docs/disk_crash_recovery_specification.md | m=2026-11-03 12:33 | b=2026-11-03 12:33 | -
+?? | web/docs/final_recommendation_quality_acceptance_report.md | m=2026-11-03 16:54 | b=2026-11-03 16:54 | -
+?? | web/docs/full_application_audit.md | m=2026-11-03 12:20 | b=2026-11-03 12:20 | -
+?? | web/docs/full_application_completion_tracker.md | m=2026-11-03 16:20 | b=2026-11-03 16:09 | -
+?? | web/docs/full_dashboard_completion_report.md | m=2026-11-03 16:46 | b=2026-11-03 16:46 | -
+?? | web/docs/fundamental_provider_comparison.md | m=2026-11-03 16:19 | b=2026-11-03 15:58 | -
+?? | web/docs/intraday-evaluation-rules.md | m=2026-10-23 17:34 | b=2026-10-23 17:34 | -
+?? | web/docs/intraday-replay-rules.md | m=2026-10-24 15:25 | b=2026-10-24 15:10 | -
+?? | web/docs/inventory/ | m=2026-10-28 14:36 | b=2026-10-28 14:35 | -
+?? | web/docs/master-audit-and-implementation-plan.md | m=2026-10-28 14:37 | b=2026-10-28 14:37 | -
+?? | web/docs/options-audit-1a.md | m=2026-10-26 15:15 | b=2026-10-26 15:15 | -
+?? | web/docs/options-data-audit.md | m=2026-10-24 15:50 | b=2026-10-24 15:50 | -
+?? | web/docs/per_stock_technicals_implementation_plan.md | m=2026-11-03 16:19 | b=2026-11-03 16:19 | -
+?? | web/docs/phase2316_one_session_completion_report.md | m=2026-11-03 10:42 | b=2026-11-03 10:42 | -
+?? | web/docs/phase2316_opus_independent_audit.md | m=2026-10-30 17:07 | b=2026-10-30 17:07 | -
+?? | web/docs/phase2316_stage2_multisession_test_report.md | m=2026-10-30 16:33 | b=2026-10-30 16:33 | -
+?? | web/docs/playwright_e2e_acceptance_report.md | m=2026-11-03 12:44 | b=2026-11-03 12:44 | -
+?? | web/docs/positional-v2-hypothesis.md | m=2026-10-23 17:11 | b=2026-10-23 16:58 | -
+?? | web/docs/round1_final_acceptance_report.md | m=2026-11-03 12:45 | b=2026-11-03 12:45 | -
+?? | web/docs/round1_offline_completion_report.md | m=2026-11-03 12:34 | b=2026-11-03 12:34 | -
+?? | web/docs/round2_correction_report.md | m=2026-11-03 15:25 | b=2026-11-03 15:25 | -
+?? | web/docs/round2_final_consistency_audit.md | m=2026-11-03 16:20 | b=2026-11-03 16:20 | -
+?? | web/docs/round2_final_corrections.md | m=2026-11-03 16:20 | b=2026-11-03 16:20 | -
+?? | web/docs/round2_final_remediation_acceptance_report.md | m=2026-11-03 16:21 | b=2026-11-03 16:21 | -
+?? | web/docs/round2_final_remediation_baseline.md | m=2026-11-03 16:17 | b=2026-11-03 16:17 | -
+?? | web/docs/round2_final_safety_review.md | m=2026-11-03 16:20 | b=2026-11-03 16:20 | -
+?? | web/docs/round2_remaining_gaps_report.md | m=2026-11-03 16:20 | b=2026-11-03 16:20 | -
+?? | web/docs/strategy-research-2026-11-08/ | m=2026-11-08 18:23 | b=2026-11-08 18:22 | -
+?? | web/docs/strategy-research-next-phase-2026-11-09/ | m=2026-11-09 15:27 | b=2026-11-09 13:36 | -
+?? | web/docs/strategy_11_4_baseline_verification.md | m=2026-11-03 12:32 | b=2026-11-03 12:32 | -
+?? | web/e2e/ | m=2026-11-03 16:44 | b=2026-11-03 12:30 | -
+?? | web/ecosystem.config.cjs | m=2026-11-03 12:25 | b=2026-11-03 12:25 | -
+?? | web/playwright.config.ts | m=2026-11-03 16:33 | b=2026-11-03 12:37 | -
+?? | web/scripts/backfill-intraday-bars.mjs | m=2026-11-09 17:27 | b=2026-11-04 16:55 | -
+?? | web/scripts/backtest-positional-v2.ts | m=2026-10-23 17:08 | b=2026-10-23 17:08 | -
+?? | web/scripts/backtest-positional.ts | m=2026-10-23 16:14 | b=2026-10-23 16:14 | -
+?? | web/scripts/check-research-token.ts | m=2026-11-05 16:33 | b=2026-11-05 12:48 | -
+?? | web/scripts/collect-intraday-bars.mjs | m=2026-11-09 17:27 | b=2026-11-05 12:40 | -
+?? | web/scripts/constituents/ | m=2026-11-04 10:05 | b=2026-11-04 10:05 | -
+?? | web/scripts/crosssectional-daily-a2.py | m=2026-11-08 16:40 | b=2026-11-08 16:40 | -
+?? | web/scripts/crosssectional-daily-dev.py | m=2026-11-08 16:33 | b=2026-11-08 16:31 | -
+?? | web/scripts/daily-equity-protocol.ts | m=2026-11-06 18:40 | b=2026-11-06 18:40 | -
+?? | web/scripts/intraday-evaluation.ts | m=2026-10-23 17:53 | b=2026-10-23 17:33 | -
+?? | web/scripts/intraday-hypotheses.ts | m=2026-11-06 18:52 | b=2026-11-06 18:52 | -
+?? | web/scripts/intraday-i1-protocol.ts | m=2026-11-06 18:50 | b=2026-11-06 18:50 | -
+?? | web/scripts/intraday-replay.ts | m=2026-10-24 15:18 | b=2026-10-24 15:18 | -
+?? | web/scripts/lib/ | m=2026-11-09 17:27 | b=2026-11-05 12:40 | -
+?? | web/scripts/nse-bhavcopy-sweep-v2.py | m=2026-11-09 17:27 | b=2026-11-08 17:14 | -
+?? | web/scripts/nse-bhavcopy-sweep.py | m=2026-11-09 17:27 | b=2026-11-08 17:02 | -
+?? | web/scripts/nse-bhavcopy-verify.py | m=2026-11-08 18:01 | b=2026-11-08 18:01 | -
+?? | web/scripts/nse-discovery-collect.ts | m=2026-11-09 17:27 | b=2026-11-06 18:58 | -
+?? | web/scripts/options-audit-research.ts | m=2026-11-09 17:27 | b=2026-10-27 17:55 | -
+?? | web/scripts/options-data-audit.ts | m=2026-10-27 15:23 | b=2026-10-26 15:31 | -
+?? | web/scripts/options-data-quality-diagnostic.ts | m=2026-10-27 16:37 | b=2026-10-27 16:37 | -
+?? | web/scripts/options-research-inventory.ts | m=2026-11-09 17:27 | b=2026-10-24 16:23 | -
+?? | web/scripts/outbound-recorder.cjs | m=2026-11-06 15:36 | b=2026-11-06 15:31 | -
+?? | web/scripts/phase15-options-reconstruction.ts | m=2026-11-04 12:16 | b=2026-11-04 12:16 | -
+?? | web/scripts/predictive-g1-v2.ts | m=2026-11-08 17:26 | b=2026-11-08 17:26 | -
+?? | web/scripts/predictive-g1.ts | m=2026-11-06 19:00 | b=2026-11-06 19:00 | -
+?? | web/scripts/recover-intraday-bars.mjs | m=2026-11-09 17:27 | b=2026-11-04 16:46 | -
+?? | web/scripts/research-audit-experiments.ts | m=2026-10-27 17:01 | b=2026-10-27 17:01 | -
+?? | web/scripts/research-slot-runner.sh | m=2026-11-05 12:48 | b=2026-11-05 12:48 | -
+?? | web/scripts/runner-lib.mjs | m=2026-11-06 10:48 | b=2026-10-23 17:52 | -
+?? | web/scripts/stock-v2-export-trades.ts | m=2026-11-05 16:14 | b=2026-11-05 16:14 | -
+?? | web/scripts/stock-v2-placeholder-comparison.ts | m=2026-11-06 14:46 | b=2026-11-06 14:34 | -
+?? | web/scripts/stock-v2-research.ts | m=2026-11-06 18:16 | b=2026-11-05 16:12 | -
+?? | web/scripts/upstox-collect.ts | m=2026-11-09 17:27 | b=2026-11-06 18:33 | -
+?? | web/scripts/upstox-coverage.ts | m=2026-11-08 17:26 | b=2026-11-08 17:26 | -
+?? | web/scripts/upstox-daily-universe-collect.ts | m=2026-11-09 17:27 | b=2026-11-08 15:33 | -
+?? | web/scripts/upstox-discovery.mjs | m=2026-11-09 17:27 | b=2026-11-06 18:31 | -
+?? | web/scripts/upstox-pilot-collect.ts | m=2026-11-09 17:27 | b=2026-11-08 14:59 | -
+?? | web/scripts/upstox-verify-clean.ts | m=2026-11-08 17:26 | b=2026-11-08 17:26 | -
+?? | web/scripts/verify-mock-news-offline.mjs | m=2026-11-06 15:32 | b=2026-11-06 15:31 | -
+?? | web/src/app/(dashboard)/ | m=2026-11-05 16:26 | b=2026-11-05 16:24 | -
+?? | web/src/app/(research)/ | m=2026-11-05 16:29 | b=2026-11-05 16:24 | -
+?? | web/src/app/api/options-canary/ | m=2026-10-30 12:54 | b=2026-10-30 11:55 | -
+?? | web/src/app/api/recommendations/generate/route.test.ts | m=2026-11-08 17:27 | b=2026-11-08 17:26 | -
+?? | web/src/app/api/research/ | m=2026-11-04 16:54 | b=2026-11-04 16:29 | -
+?? | web/src/app/api/saved-picks/ | m=2026-11-08 17:37 | b=2026-11-08 17:08 | -
+?? | web/src/app/route-isolation.test.ts | m=2026-11-05 16:25 | b=2026-11-05 16:25 | -
+?? | web/src/app/saved-picks/ | m=2026-11-09 17:57 | b=2026-11-08 17:08 | -
+?? | web/src/components/OpsDetails.tsx | m=2026-11-09 09:48 | b=2026-11-09 09:48 | -
+?? | web/src/components/OpsPanel.tsx | m=2026-11-09 11:12 | b=2026-11-09 11:12 | -
+?? | web/src/components/SavePickButton.tsx | m=2026-11-08 17:37 | b=2026-11-08 17:37 | -
+?? | web/src/components/research/ | m=2026-11-05 16:43 | b=2026-11-05 16:43 | -
+?? | web/src/lib/a11yLabels.test.ts | m=2026-11-10 10:11 | b=2026-11-09 17:58 | -
+?? | web/src/lib/analysisSafety.test.ts | m=2026-11-09 12:17 | b=2026-11-09 12:17 | -
+?? | web/src/lib/backfill-intraday-bars.test.ts | m=2026-11-04 16:56 | b=2026-11-04 16:56 | -
+?? | web/src/lib/backtestTiming.ts | m=2026-11-05 18:29 | b=2026-11-05 17:51 | -
+?? | web/src/lib/collect-intraday-bars.test.ts | m=2026-11-05 12:42 | b=2026-11-05 12:41 | -
+?? | web/src/lib/collectionGuard.test.ts | m=2026-11-09 17:27 | b=2026-11-09 17:27 | -
+?? | web/src/lib/dataQuality.ts | m=2026-11-04 11:11 | b=2026-11-04 11:11 | -
+?? | web/src/lib/dataRoot.ts | m=2026-11-08 17:50 | b=2026-11-03 16:33 | -
+?? | web/src/lib/dataStatus.breadth.test.ts | m=2026-11-06 11:40 | b=2026-11-06 11:40 | -
+?? | web/src/lib/e2eOffline.test.ts | m=2026-11-06 14:52 | b=2026-11-06 14:52 | -
+?? | web/src/lib/engine/intradayConfidence.test.ts | m=2026-10-23 15:39 | b=2026-10-23 15:39 | -
+?? | web/src/lib/engine/intradayReplay.test.ts | m=2026-10-24 15:17 | b=2026-10-24 15:14 | -
+?? | web/src/lib/engine/intradayReplay.ts | m=2026-10-24 15:17 | b=2026-10-24 15:13 | -
+?? | web/src/lib/engine/positionalBacktest.test.ts | m=2026-10-23 16:54 | b=2026-10-23 16:14 | -
+?? | web/src/lib/engine/positionalBacktest.ts | m=2026-10-23 17:06 | b=2026-10-23 17:06 | -
+?? | web/src/lib/engine/positionalTrend.test.ts | m=2026-10-23 16:54 | b=2026-10-23 15:27 | -
+?? | web/src/lib/engine/positionalTrend.ts | m=2026-10-23 16:55 | b=2026-10-23 15:27 | -
+?? | web/src/lib/engine/positionalV2.test.ts | m=2026-10-23 17:08 | b=2026-10-23 17:08 | -
+?? | web/src/lib/engine/positionalV2.ts | m=2026-10-23 17:07 | b=2026-10-23 17:07 | -
+?? | web/src/lib/engine/staleMarketGate.test.ts | m=2026-11-09 10:54 | b=2026-11-09 10:54 | -
+?? | web/src/lib/engine/stockScanGuard.test.ts | m=2026-11-09 13:01 | b=2026-11-09 13:01 | -
+?? | web/src/lib/freshnessLabel.ts | m=2026-11-09 11:11 | b=2026-11-09 11:11 | -
+?? | web/src/lib/historicalProbeCodes.test.ts | m=2026-11-09 15:52 | b=2026-11-06 17:32 | -
+?? | web/src/lib/intradayEvaluation.test.ts | m=2026-10-23 17:33 | b=2026-10-23 17:33 | -
+?? | web/src/lib/intradayEvaluation.ts | m=2026-10-23 17:33 | b=2026-10-23 17:32 | -
+?? | web/src/lib/mockLiveSafeguards.test.ts | m=2026-11-06 14:40 | b=2026-11-06 14:40 | -
+?? | web/src/lib/ops/ | m=2026-11-09 09:48 | b=2026-10-24 16:37 | -
+?? | web/src/lib/options/ | m=2026-11-09 11:21 | b=2026-11-05 16:27 | -
+?? | web/src/lib/optionsAudit.test.ts | m=2026-10-27 15:58 | b=2026-10-24 16:25 | -
+?? | web/src/lib/optionsAudit.ts | m=2026-10-27 15:50 | b=2026-10-24 15:29 | -
+?? | web/src/lib/optionsAuditReport.ts | m=2026-11-09 10:36 | b=2026-11-09 10:36 | -
+?? | web/src/lib/optionsDataQualityDiagnostic.test.ts | m=2026-10-27 16:36 | b=2026-10-27 16:27 | -
+?? | web/src/lib/optionsDataQualityDiagnostic.ts | m=2026-10-27 16:27 | b=2026-10-27 16:27 | -
+?? | web/src/lib/paperFillCharges.test.ts | m=2026-11-06 17:05 | b=2026-11-06 17:05 | -
+?? | web/src/lib/paperIntegrity.test.ts | m=2026-10-23 17:32 | b=2026-10-23 17:25 | -
+?? | web/src/lib/paperMath.ts | m=2026-10-28 14:12 | b=2026-10-28 13:02 | -
+?? | web/src/lib/paperReport.ts | m=2026-11-03 10:25 | b=2026-10-28 13:02 | -
+?? | web/src/lib/paperTradingHardening.test.ts | m=2026-11-06 13:21 | b=2026-10-28 13:08 | -
+?? | web/src/lib/phase13OptionsVisibility.test.ts | m=2026-11-05 16:33 | b=2026-11-04 11:49 | -
+?? | web/src/lib/productionReadinessAudit.test.ts | m=2026-11-05 09:30 | b=2026-11-04 10:36 | -
+?? | web/src/lib/provenanceDisplay.test.ts | m=2026-11-09 12:17 | b=2026-11-09 12:17 | -
+?? | web/src/lib/provenanceDisplay.ts | m=2026-11-09 12:16 | b=2026-11-09 12:16 | -
+?? | web/src/lib/provenanceLabels.test.ts | m=2026-11-09 16:00 | b=2026-11-09 11:12 | -
+?? | web/src/lib/recommendationDiagnostic.b5.test.ts | m=2026-11-06 12:15 | b=2026-11-06 12:15 | -
+?? | web/src/lib/recommendationDiagnostic.classification.test.ts | m=2026-11-06 11:14 | b=2026-11-06 11:14 | -
+?? | web/src/lib/recommendationEnricher.indices.test.ts | m=2026-11-08 17:36 | b=2026-11-08 17:36 | -
+?? | web/src/lib/recommendationTimestamps.test.ts | m=2026-11-09 11:06 | b=2026-11-09 11:06 | -
+?? | web/src/lib/research/ | m=2026-11-09 17:48 | b=2026-10-24 16:23 | -
+?? | web/src/lib/runnerLib.test.ts | m=2026-10-27 13:18 | b=2026-10-23 17:53 | -
+?? | web/src/lib/runtimeTrust.test.ts | m=2026-11-09 15:52 | b=2026-11-04 10:37 | -
+?? | web/src/lib/savedPickMapping.test.ts | m=2026-11-08 17:36 | b=2026-11-08 17:36 | -
+?? | web/src/lib/savedPickMapping.ts | m=2026-11-08 17:36 | b=2026-11-08 17:36 | -
+?? | web/src/lib/savedPicks.duplicates.test.ts | m=2026-11-08 17:37 | b=2026-11-08 17:37 | -
+?? | web/src/lib/savedPicks.test.ts | m=2026-11-08 17:37 | b=2026-11-08 17:37 | -
+?? | web/src/lib/savedPicks.ts | m=2026-11-08 17:37 | b=2026-11-08 17:05 | -
+?? | web/src/lib/scoreText.test.ts | m=2026-10-26 10:02 | b=2026-10-26 10:02 | -
+?? | web/src/lib/scoreText.ts | m=2026-10-26 10:02 | b=2026-10-26 10:02 | -
+?? | web/src/lib/services/apiIntegration.test.ts | m=2026-11-06 10:48 | b=2026-11-03 12:33 | -
+?? | web/src/lib/services/breadthSetFreshness.test.ts | m=2026-11-06 11:43 | b=2026-11-06 11:43 | -
+?? | web/src/lib/services/breadthTimestamps.test.ts | m=2026-11-09 15:52 | b=2026-11-06 11:40 | -
+?? | web/src/lib/services/cacheBounds.test.ts | m=2026-11-09 15:52 | b=2026-11-06 17:51 | -
+?? | web/src/lib/services/candleFreshness.ts | m=2026-11-06 12:40 | b=2026-11-06 12:09 | -
+?? | web/src/lib/services/candleFreshnessAttribution.test.ts | m=2026-11-09 15:52 | b=2026-11-06 12:00 | -
+?? | web/src/lib/services/candleFreshnessPolicy.test.ts | m=2026-11-09 15:52 | b=2026-11-06 12:14 | -
+?? | web/src/lib/services/chainFreshness.test.ts | m=2026-11-05 12:39 | b=2026-11-05 12:39 | -
+?? | web/src/lib/services/chainFreshness.ts | m=2026-11-05 12:39 | b=2026-11-05 12:39 | -
+?? | web/src/lib/services/chainNormalization.test.ts | m=2026-11-06 12:50 | b=2026-11-06 12:50 | -
+?? | web/src/lib/services/contractFreshnessReconciliation.test.ts | m=2026-11-09 15:52 | b=2026-10-29 12:07 | -
+?? | web/src/lib/services/contractFreshnessSafeguards.test.ts | m=2026-11-06 13:21 | b=2026-10-28 17:55 | -
+?? | web/src/lib/services/expiryCalendar.test.ts | m=2026-11-06 13:00 | b=2026-11-06 12:59 | -
+?? | web/src/lib/services/expiryCalendarRules.test.ts | m=2026-11-06 15:19 | b=2026-11-06 14:45 | -
+?? | web/src/lib/services/freshnessConsistency.test.ts | m=2026-11-09 11:15 | b=2026-11-06 12:20 | -
+?? | web/src/lib/services/journalRefresh.test.ts | m=2026-11-09 10:16 | b=2026-11-09 10:16 | -
+?? | web/src/lib/services/journalRefresh.ts | m=2026-11-09 10:15 | b=2026-11-09 10:15 | -
+?? | web/src/lib/services/journalRefreshService.test.ts | m=2026-11-09 10:28 | b=2026-11-09 10:28 | -
+?? | web/src/lib/services/journalRefreshService.ts | m=2026-11-09 10:28 | b=2026-11-09 10:28 | -
+?? | web/src/lib/services/manualPaperOpportunityProtection.test.ts | m=2026-10-29 17:41 | b=2026-10-29 17:41 | -
+?? | web/src/lib/services/mockExecutionGuard.test.ts | m=2026-11-06 17:27 | b=2026-11-06 17:27 | -
+?? | web/src/lib/services/mockInputs.ts | m=2026-11-06 17:27 | b=2026-11-06 17:27 | -
+?? | web/src/lib/services/multiSessionPaperEvaluation.test.ts | m=2026-11-09 16:00 | b=2026-11-09 16:00 | -
+?? | web/src/lib/services/newsMockMode.test.ts | m=2026-11-09 17:36 | b=2026-11-06 15:30 | -
+?? | web/src/lib/services/newsNetworkGate.test.ts | m=2026-11-09 17:28 | b=2026-11-09 17:28 | -
+?? | web/src/lib/services/newsNetworkGate.ts | m=2026-11-09 17:27 | b=2026-11-09 17:27 | -
+?? | web/src/lib/services/nextBarExecution.test.ts | m=2026-11-05 18:09 | b=2026-11-05 17:48 | -
+?? | web/src/lib/services/nextBarExecutionRegression.test.ts | m=2026-11-05 18:30 | b=2026-11-05 18:08 | -
+?? | web/src/lib/services/optionCandidateWindow.ts | m=2026-11-06 12:32 | b=2026-11-06 12:32 | -
+?? | web/src/lib/services/optionLegGuard.ts | m=2026-11-06 12:32 | b=2026-11-06 12:32 | -
+?? | web/src/lib/services/optionPriceConsistency.test.ts | m=2026-11-06 12:21 | b=2026-11-06 12:21 | -
+?? | web/src/lib/services/optionPriceVerification.ts | m=2026-11-06 12:32 | b=2026-11-04 11:10 | -
+?? | web/src/lib/services/optionQuoteCanary.ts | m=2026-11-06 10:47 | b=2026-10-30 11:54 | -
+?? | web/src/lib/services/optionWindowLegs.test.ts | m=2026-11-06 12:37 | b=2026-11-06 12:36 | -
+?? | web/src/lib/services/optionsV2IndexChecks.test.ts | m=2026-11-06 14:44 | b=2026-11-06 14:44 | -
+?? | web/src/lib/services/optionsV3Completion.test.ts | m=2026-11-05 16:33 | b=2026-11-04 12:59 | -
+?? | web/src/lib/services/paperLedgerStore.ts | m=2026-10-29 19:19 | b=2026-10-28 13:04 | -
+?? | web/src/lib/services/paperPriceInput.ts | m=2026-10-28 17:52 | b=2026-10-28 13:05 | -
+?? | web/src/lib/services/paperSettlementLifecycle.test.ts | m=2026-10-29 19:44 | b=2026-10-29 19:38 | -
+?? | web/src/lib/services/phase11MarketReliability.test.ts | m=2026-11-09 13:01 | b=2026-11-04 11:14 | -
+?? | web/src/lib/services/phase1Hardening.test.ts | m=2026-11-05 18:33 | b=2026-11-05 18:30 | -
+?? | web/src/lib/services/phase2315Integration.test.ts | m=2026-11-06 10:48 | b=2026-10-30 12:06 | -
+?? | web/src/lib/services/phase2316Hardening.test.ts | m=2026-11-03 10:30 | b=2026-11-03 10:26 | -
+?? | web/src/lib/services/risk/riskCosts.test.ts | m=2026-11-06 13:11 | b=2026-11-06 13:10 | -
+?? | web/src/lib/services/risk/riskService.test.ts | m=2026-11-06 13:10 | b=2026-11-06 12:50 | -
+?? | web/src/lib/services/settlementIngestion.test.ts | m=2026-10-29 18:57 | b=2026-10-29 18:56 | -
+?? | web/src/lib/services/settlementIngestion.ts | m=2026-11-03 11:39 | b=2026-11-03 11:39 | -
+?? | web/src/lib/services/stockMasterMockGuard.test.ts | m=2026-11-06 15:22 | b=2026-11-06 15:22 | -
+?? | web/src/lib/services/technicalFetchGate.test.ts | m=2026-11-09 16:05 | b=2026-11-06 12:40 | -
+?? | web/src/lib/services/technicalMapping.ts | m=2026-11-05 16:26 | b=2026-11-05 16:26 | -
+?? | web/src/lib/services/timestampValidation.test.ts | m=2026-10-28 17:27 | b=2026-10-28 17:15 | -
+?? | web/src/lib/services/upstoxAuthSources.test.ts | m=2026-11-06 10:50 | b=2026-11-06 10:49 | -
+?? | web/src/lib/services/upstoxErrorClassification.test.ts | m=2026-11-08 18:29 | b=2026-11-08 18:29 | -
+?? | web/src/lib/services/upstoxNetworkGate.test.ts | m=2026-11-09 17:19 | b=2026-11-09 15:47 | -
+?? | web/src/lib/services/upstoxNetworkGate.ts | m=2026-11-09 15:46 | b=2026-11-09 15:46 | -
+?? | web/src/lib/stockProvenance.test.ts | m=2026-11-09 13:01 | b=2026-11-08 17:48 | -
+?? | web/src/lib/stockSwingFreshness.test.ts | m=2026-11-09 13:01 | b=2026-11-06 12:16 | -
+?? | web/src/lib/stockV2/ | m=2026-11-06 14:33 | b=2026-11-05 15:55 | -
+?? | web/src/lib/stockV2Dashboard.ts | m=2026-11-09 10:39 | b=2026-11-09 10:39 | -
+?? | web/src/lib/testFixtures/ | m=2026-10-26 14:53 | b=2026-10-26 14:53 | -
+```

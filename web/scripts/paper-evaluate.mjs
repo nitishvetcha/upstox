@@ -1,13 +1,14 @@
 // npm run paper:evaluate — evaluate OPEN paper trades once, then exit.
-import { BASE, serverUp } from "./upstox-cli.mjs";
+import { BASE, serverUp, requireOperatorHeaders } from "./upstox-cli.mjs";
 
+const AUTH = requireOperatorHeaders();
 if (!(await serverUp())) {
   console.log(`Server not running at ${BASE}. Start with: npm run dev:upstox`);
   process.exit(1);
 }
 
 console.log("Evaluating OPEN paper trades...\n");
-const result = await fetch(`${BASE}/api/paper-opportunities/monitor`, { method: "POST" })
+const result = await fetch(`${BASE}/api/paper-opportunities/monitor`, { method: "POST", headers: AUTH })
   .then((r) => r.json())
   .catch((e) => ({ error: e.message }));
 

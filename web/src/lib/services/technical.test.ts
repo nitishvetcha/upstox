@@ -1,3 +1,5 @@
+// Network-gate setup: these tests stub fetch to exercise the live (upstox) code path. Without this the gate refuses.
+process.env.MARKET_DATA_PROVIDER = "upstox";
 // Run: npm test   (deterministic fixtures; no Upstox account needed)
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
@@ -191,12 +193,28 @@ function stub(over: (path: string) => Response | null = () => null) {
     const key = url.searchParams.get("instrument_key") ?? "";
     const n = key.includes("Nifty 50");
     const spot = n ? 22412 : 54612;
-    if (path.endsWith("/market-quote/quotes")) return ok({ [key.replace("|", ":")]: { instrument_token: key, last_price: spot, net_change: 10, last_trade_time: NOW.getTime() - 5_000 } });
-    if (path.endsWith("/option/contract")) return ok([{ expiry: n ? "2026-10-06" : "2026-10-27" }]);
+    if (path.endsWith("/market-quote/quotes")) {
+      if (key.startsWith("NSE_FO|")) {
+        return ok(Object.fromEntries(key.split(",").map((instrumentKey) => [
+          instrumentKey.replace("|", ":"),
+          { instrument_token: instrumentKey, last_price: 100, net_change: 0, last_trade_time: NOW.getTime() - 5_000, timestamp: NOW.toISOString(), oi: 1000, previous_oi: 990, volume: 10, depth: { buy: [{ price: 99 }], sell: [{ price: 101 }] } },
+        ])));
+      }
+      return ok({ [key.replace("|", ":")]: { instrument_token: key, last_price: spot, net_change: 10, last_trade_time: NOW.getTime() - 5_000 } });
+    }
+    if (path.endsWith("/option/contract")) {
+      const expiry = n ? "2026-10-06" : "2026-10-27";
+      const step = n ? 50 : 100;
+      return ok(Array.from({ length: 11 }, (_, k) => Math.round(spot / step) * step + (k - 5) * step).flatMap((strike) => [
+        { expiry, strike_price: strike, instrument_type: "CE", instrument_key: `NSE_FO|${n ? "N" : "B"}|${expiry}|${strike}|CE`, underlying_key: key, lot_size: 75 },
+        { expiry, strike_price: strike, instrument_type: "PE", instrument_key: `NSE_FO|${n ? "N" : "B"}|${expiry}|${strike}|PE`, underlying_key: key, lot_size: 75 },
+      ]));
+    }
     if (path.endsWith("/option/chain")) {
       const step = n ? 50 : 100;
-      const sd = (oi: number) => ({ market_data: { ltp: 100, oi, prev_oi: oi - 10, volume: 10, bid_price: 99, ask_price: 101 }, option_greeks: { iv: 15, delta: 0.5, gamma: 0.001, theta: -10, vega: 5 } });
-      return ok(Array.from({ length: 11 }, (_, k) => ({ strike_price: Math.round(spot / step) * step + (k - 5) * step, underlying_spot_price: spot, call_options: sd(1000), put_options: sd(1200) })));
+      const expiry = n ? "2026-10-06" : "2026-10-27";
+      const sd = (oi: number, instrumentKey: string) => ({ instrument_key: instrumentKey, market_data: { ltp: 100, oi, prev_oi: oi - 10, volume: 10, bid_price: 99, ask_price: 101 }, option_greeks: { iv: 15, delta: 0.5, gamma: 0.001, theta: -10, vega: 5 } });
+      return ok(Array.from({ length: 11 }, (_, k) => { const strike = Math.round(spot / step) * step + (k - 5) * step; return { strike_price: strike, underlying_spot_price: spot, call_options: sd(1000, `NSE_FO|${n ? "N" : "B"}|${expiry}|${strike}|CE`), put_options: sd(1200, `NSE_FO|${n ? "N" : "B"}|${expiry}|${strike}|PE`) }; }));
     }
     return new Response("nf", { status: 404 });
   }) as typeof fetch;
@@ -258,7 +276,9 @@ test("20. missing / malformed candle responses: no fabricated candles", async ()
 
   stub((path) => (path.includes("/v3/") ? Response.json({ status: "success", data: { candles: [] } }) : null));
   const closed = await upstoxProvider(TOKEN, () => NOW).getTechnicals("nifty");
-  assert.equal(closed.unavailableReason, "MARKET CLOSED / NO DATA");
+  // B5: an empty series is reported as NO_CANDLES. "MARKET CLOSED" was misleading when the market may be open.
+  assert.equal(closed.reasonCode, "NO_CANDLES");
+  assert.equal(closed.source.source, "UNAVAILABLE");
 
   clearUpstoxCache();
   stub((path) => (path.includes("/v3/") ? Response.json({ status: "error", errors: [{ message: "Invalid token" }] }, { status: 401 }) : null));
@@ -276,6 +296,10 @@ test("21. mock fallback: no token → mock technicals labelled MOCK, never candl
 });
 
 test("22. live snapshot: real technicals feed the engine; mock news still blocks a trade", async () => {
+  // The live provider runs only in live mode. Set it for this test and restore it afterwards.
+  const savedMode = process.env.MARKET_DATA_PROVIDER;
+  process.env.MARKET_DATA_PROVIDER = "upstox";
+  try {
   stub();
   const s = await getSnapshot("nifty", deps(), NOW);
   assert.equal(s.sources.technical.source, "LIVE");
@@ -288,6 +312,9 @@ test("22. live snapshot: real technicals feed the engine; mock news still blocks
   assert.ok(!a.factors.find((f) => f.key === "news")!.available);
   assert.equal(a.status, "NO TRADE");
   assert.ok(a.blockers.includes("Full confirmation requires live news data"));
+  } finally {
+    if (savedMode === undefined) delete process.env.MARKET_DATA_PROVIDER; else process.env.MARKET_DATA_PROVIDER = savedMode;
+  }
 });
 
 test("23. daily timeframe is evaluated as of today: previous day = last completed daily candle", () => {

@@ -3,6 +3,7 @@
 // and reports the coverage actually returned. Nothing is synthesized: unavailable history stays missing.
 import fs from "node:fs";
 import path from "node:path";
+import { dataRoot } from "./dataRoot.ts";
 import type { Candle } from "./types.ts";
 import { normalizeCandles } from "./services/candles.ts";
 import { ema, vwap as sessionVwap } from "./services/technicalAnalysis.ts";
@@ -88,7 +89,7 @@ export interface HistoryOptions {
   now?: Date;
 }
 
-const DEFAULT_CACHE = path.join(process.cwd(), ".data", "history");
+const DEFAULT_CACHE = path.join(dataRoot(), "history");
 
 function cacheFile(dir: string, key: string, interval: string, c: HistoryChunk) {
   return path.join(dir, `${key.replace(/[^\w]/g, "_")}_${interval}_${c.from}_${c.to}.json`);

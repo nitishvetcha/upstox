@@ -1,4 +1,5 @@
 "use client";
+import { loginUrlFor } from "@/lib/loginRedirect";
 // Phase 11.3 — Recommendation Journal UI: table + filters + analytics + detail modal.
 import React, { useCallback, useEffect, useState } from "react";
 import type { RecommendationJournalEntry } from "@/lib/journalTypes";
@@ -222,19 +223,25 @@ export function RecommendationJournal() {
   const [entries, setEntries] = useState<RecommendationJournalEntry[]>([]);
   const [analytics, setAnalytics] = useState<JournalAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
+  // Set when the list request fails, so a failure is never shown as an empty journal.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<RecommendationJournalEntry | null>(null);
   const [filters, setFilters] = useState<Filters>({ underlying: "all", decision: "all", status: "all", days: 7 });
   const [refreshing, setRefreshing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [entriesRes, analyticsRes] = await Promise.all([
         fetch("/api/recommendations"),
         fetch("/api/recommendations/analytics"),
       ]);
       if (entriesRes.ok) setEntries(await entriesRes.json());
+      else setLoadError("Could not load recommendations. The list shown may be out of date; use Refresh Journal to retry.");
       if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
+    } catch {
+      setLoadError("Could not load recommendations (network or server error). Use Refresh Journal to retry.");
     } finally {
       setLoading(false);
     }
@@ -250,6 +257,10 @@ export function RecommendationJournal() {
     setRefreshing(id);
     try {
       const res = await fetch(`/api/recommendations/${id}/refresh`, { method: "POST" });
+      if (res.status === 401) {
+        window.location.assign(loginUrlFor(window.location.pathname + window.location.search));
+        return;
+      }
       if (res.ok) {
         const updated: RecommendationJournalEntry = await res.json();
         setEntries((prev) => prev.map((e) => e.id === id ? updated : e));
@@ -262,7 +273,7 @@ export function RecommendationJournal() {
   const filtered = applyFilters(entries, filters);
 
   const FilterBtn = ({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) => (
-    <button onClick={onClick} className={`rounded border px-2 py-0.5 text-xs transition ${active ? "border-blue-600 bg-blue-900/30 text-blue-300" : "border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"}`}>{label}</button>
+    <button onClick={onClick} aria-pressed={active} className={`min-h-[24px] min-w-[24px] rounded border px-2 py-1 text-xs transition ${active ? "border-blue-600 bg-blue-900/30 text-blue-300" : "border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"}`}>{label}</button>
   );
 
   return (
@@ -297,7 +308,13 @@ export function RecommendationJournal() {
 
       {analytics && <AnalyticsPanel analytics={analytics} />}
 
-      {filtered.length === 0 && !loading && (
+      {loadError && (
+        <div role="alert" className="rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">{loadError}</div>
+      )}
+      {loading && entries.length === 0 && (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-8 text-center text-sm text-zinc-500">Loading recommendations…</div>
+      )}
+      {filtered.length === 0 && !loading && !loadError && (
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-8 text-center text-sm text-zinc-500">
           No recommendations found. Click &ldquo;Generate Recommendation&rdquo; to create one.
         </div>

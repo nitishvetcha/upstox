@@ -55,6 +55,11 @@ export interface BacktestTrade {
   strategy: StrategyName;
   signalTimestamp: string;
   entryTimestamp: string;
+  // exec-next-bar-open-v1: the bar whose close produced the signal, and the bar whose open filled the entry.
+  // Absent on runs stored before that version (labelled LEGACY_SAME_CANDLE on read).
+  signalBarTimestamp?: string;
+  entryBarTimestamp?: string;
+  exitAtFill?: boolean; // true when the position was booked at its fill open: a level was already passed there
   exitTimestamp: string;
   expiry: string;
   legs: BacktestTradeLeg[];
@@ -241,6 +246,7 @@ export interface BacktestResult {
     flattenOnDailyLossLimit: boolean;
     dailyLossDefinition: "REALIZED_ONLY"; // same as the live/paper risk engine (realizedDailyLoss)
     dailyLossFlattens: number;
+    entryTiming?: "NEXT_BAR_OPEN"; // absent on runs stored before exec-next-bar-open-v1
   };
   capitalFeasibility: CapitalFeasibility;
   metadata?: Record<string, unknown> & { datasetHash: string; dataModel: "PHASE10" | "PHASE9_LEGACY"; resultStatus: BacktestValidation["status"] };

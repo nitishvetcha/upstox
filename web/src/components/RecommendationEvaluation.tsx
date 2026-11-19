@@ -109,10 +109,15 @@ export default function RecommendationEvaluation() {
 
   useEffect(() => {
     fetch("/api/recommendations/evaluation")
-      .then((r) => r.json())
+      .then(async (r) => {
+        const d = await r.json().catch(() => null);
+        if (!r.ok || !d || typeof d !== "object" || "error" in d) {
+          throw new Error(typeof d?.error === "string" ? d.error : `Evaluation unavailable (HTTP ${r.status})`);
+        }
+        return d;
+      })
       .then((d) => { setReport(d as EvaluationReport); setLoading(false); })
       .catch((e: Error) => { setError(e.message); setLoading(false); });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) return <div className="p-4 text-sm text-gray-500">Loading evaluation…</div>;

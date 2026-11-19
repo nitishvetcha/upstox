@@ -1,0 +1,694 @@
+diff --git a/web/src/lib/services/paperOpportunityProvenance.ts b/web/src/lib/services/paperOpportunityProvenance.ts
+new file mode 100644
+index 00000000..9f663e4c
+--- /dev/null
++++ b/web/src/lib/services/paperOpportunityProvenance.ts
+@@ -0,0 +1,38 @@
++// Server-side provenance for paper opportunities. Labels come ONLY from the server's own snapshot sources.
++// Client-supplied labels are never read. Anything that is not verified LIVE is refused, and the reasons are returned.
++export interface SourceLike { source?: string | null; provider?: string | null; fetchedAt?: string | null }
++export interface SnapshotSourcesLike {
++  market?: SourceLike | null;
++  optionChain?: SourceLike | null;
++  technical?: SourceLike | null;
++  breadth?: { status?: string | null; source?: SourceLike | null } | null;
++}
++
++export interface ServerProvenance {
++  ok: boolean;
++  labels: Record<string, string>;
++  reasons: string[];
++  capturedAt: string | null;
++}
++
++const REQUIRED = ["market", "optionChain", "technical"] as const;
++
++export function serverProvenance(sources: SnapshotSourcesLike | null | undefined): ServerProvenance {
++  const reasons: string[] = [];
++  const labels: Record<string, string> = {};
++  const s = sources ?? {};
++  for (const key of REQUIRED) {
++    const src = s[key] as SourceLike | null | undefined;
++    const label = src?.source ?? "UNAVAILABLE";
++    labels[key] = src?.provider === "MOCK" ? "MOCK" : label;
++    if (labels[key] !== "LIVE" || src?.provider === "MOCK") {
++      reasons.push(`${key} is ${labels[key]} (must be verified LIVE)`);
++    }
++  }
++  const breadthStatus = s.breadth?.status ?? "UNAVAILABLE";
++  const breadthSrc = s.breadth?.source ?? null;
++  labels.breadth = breadthSrc?.provider === "MOCK" ? "MOCK" : breadthStatus;
++  if (labels.breadth !== "LIVE") reasons.push(`breadth is ${labels.breadth} (must be verified LIVE)`);
++  const capturedAt = s.market?.fetchedAt ?? null;
++  return { ok: reasons.length === 0, labels, reasons, capturedAt };
++}
+diff --git a/web/src/lib/services/paperOpportunityProvenance.test.ts b/web/src/lib/services/paperOpportunityProvenance.test.ts
+new file mode 100644
+index 00000000..b2dd60cb
+--- /dev/null
++++ b/web/src/lib/services/paperOpportunityProvenance.test.ts
+@@ -0,0 +1,65 @@
++// Server-side provenance for paper opportunities. Client labels are never an input.
++import test from "node:test";
++import assert from "node:assert/strict";
++import { serverProvenance, type SnapshotSourcesLike } from "./paperOpportunityProvenance.ts";
++
++const LIVE = (p = "UPSTOX") => ({ source: "LIVE", provider: p, fetchedAt: "2026-11-13T05:00:00.000Z" as string | null });
++const liveSources = (): SnapshotSourcesLike => ({ market: LIVE(), optionChain: LIVE(), technical: LIVE(), breadth: { status: "LIVE", source: LIVE() } });
++
++test("all required inputs verified LIVE: ok with server labels", () => {
++  const r = serverProvenance(liveSources());
++  assert.equal(r.ok, true);
++  assert.deepEqual(r.reasons, []);
++  assert.equal(r.labels.market, "LIVE");
++  assert.equal(r.capturedAt, "2026-11-13T05:00:00.000Z");
++});
++
++test("mock market data is refused and labelled MOCK, never LIVE", () => {
++  const s = liveSources();
++  s.market = { source: "MOCK", provider: "MOCK", fetchedAt: "2026-11-13T05:00:00.000Z" };
++  const r = serverProvenance(s);
++  assert.equal(r.ok, false);
++  assert.equal(r.labels.market, "MOCK");
++  assert.match(r.reasons.join(" "), /market is MOCK/);
++});
++
++test("a LIVE source tagged with the MOCK provider is still refused", () => {
++  const s = liveSources();
++  s.optionChain = { source: "LIVE", provider: "MOCK", fetchedAt: null };
++  const r = serverProvenance(s);
++  assert.equal(r.ok, false);
++  assert.equal(r.labels.optionChain, "MOCK");
++});
++
++test("stale, end-of-day and unavailable inputs are each refused with their label", () => {
++  for (const label of ["STALE", "END_OF_DAY", "UNAVAILABLE"]) {
++    const s = liveSources();
++    s.technical = { source: label, provider: "UPSTOX", fetchedAt: null };
++    const r = serverProvenance(s);
++    assert.equal(r.ok, false, label);
++    assert.equal(r.labels.technical, label);
++  }
++});
++
++test("breadth must be LIVE; synthetic breadth (MOCK source) is refused", () => {
++  const s = liveSources();
++  s.breadth = { status: "LIVE", source: { source: "MOCK", provider: "MOCK", fetchedAt: null } };
++  const r = serverProvenance(s);
++  assert.equal(r.ok, false);
++  assert.equal(r.labels.breadth, "MOCK");
++});
++
++test("missing snapshot entirely: refused, nothing is treated as LIVE", () => {
++  const r = serverProvenance(null);
++  assert.equal(r.ok, false);
++  assert.equal(r.labels.market, "UNAVAILABLE");
++  assert.equal(r.capturedAt, null);
++});
++
++test("the function has no client input: only the server sources object is read", () => {
++  // A client-style label cannot influence the result. Same server sources give the same answer whatever a request says.
++  const s = liveSources();
++  const a = serverProvenance(s);
++  const b = serverProvenance(s);
++  assert.deepEqual(a, b);
++});
+diff --git a/web/src/lib/services/paperOpportunityOpen.ts b/web/src/lib/services/paperOpportunityOpen.ts
+new file mode 100644
+index 00000000..b304b632
+--- /dev/null
++++ b/web/src/lib/services/paperOpportunityOpen.ts
+@@ -0,0 +1,39 @@
++// Decision rules for opening a stored paper opportunity. Pure: the caller supplies the facts.
++// An opportunity is opened only when every server-side gate passes. Otherwise an explicit reason is returned.
++import type { ServerProvenance } from "./paperOpportunityProvenance.ts";
++
++export type OpenCode =
++  | "NOT_FOUND" | "ALREADY_OPENED" | "NOT_OPEN" | "UNSUPPORTED" | "PROVENANCE"
++  | "NO_PLAN" | "PLAN_REJECTED" | "ENGINE_REJECTED" | "OPENED";
++
++export interface OpenFacts {
++  opp: { status: string; openedPaperTradeId?: string | null; instrumentType: string } | null;
++  provenance: ServerProvenance | null;
++  hasPlan: boolean;
++  planRejected: string | null;
++  engine: { created: boolean; reason: string; tradeId: string | null } | null;
++  detail?: string[]; // explicit no-trade reasons from the fresh analysis (blockers, candidate rejections)
++}
++
++export interface OpenDecision { code: OpenCode; ok: boolean; status: number; reasons: string[] }
++
++// Operator-facing text for an engine refusal. A ledger write failure never exposes the filesystem path or exception text:
++// the full error is written to the redacted server log (paper_ledger_save_failed) instead.
++export function publicEngineReason(reason: string): string {
++  if (reason.startsWith("LEDGER_WRITE_FAILED")) return "LEDGER_WRITE_FAILED: the paper ledger could not be saved; no trade was opened";
++  return reason;
++}
++
++export function decideOpen(f: OpenFacts): OpenDecision {
++  const deny = (code: OpenCode, status: number, reasons: string[]): OpenDecision => ({ code, ok: false, status, reasons });
++  if (!f.opp) return deny("NOT_FOUND", 404, ["opportunity not found"]);
++  if (f.opp.openedPaperTradeId) return deny("ALREADY_OPENED", 409, [`already opened as ${f.opp.openedPaperTradeId}`]);
++  if (f.opp.status !== "OPEN") return deny("NOT_OPEN", 422, [`opportunity status is ${f.opp.status}`]);
++  if (f.opp.instrumentType !== "OPTION") return deny("UNSUPPORTED", 422, ["only index option opportunities can be opened"]);
++  if (!f.provenance || !f.provenance.ok) return deny("PROVENANCE", 422, f.provenance?.reasons ?? ["no server snapshot"]);
++  if (!f.hasPlan) return deny("NO_PLAN", 422, ["fresh analysis produced no trade plan", ...(f.detail ?? [])]);
++  if (f.planRejected) return deny("PLAN_REJECTED", 422, [f.planRejected]);
++  if (!f.engine) return deny("ENGINE_REJECTED", 422, ["paper engine was not consulted"]);
++  if (!f.engine.created || !f.engine.tradeId) return deny("ENGINE_REJECTED", 422, [f.engine.reason || "paper engine refused the trade"]);
++  return { code: "OPENED", ok: true, status: 201, reasons: [] };
++}
+diff --git a/web/src/lib/services/paperOpportunityOpen.test.ts b/web/src/lib/services/paperOpportunityOpen.test.ts
+new file mode 100644
+index 00000000..c1739038
+--- /dev/null
++++ b/web/src/lib/services/paperOpportunityOpen.test.ts
+@@ -0,0 +1,69 @@
++// Opening rules for stored paper opportunities. Pure decision tests.
++import test from "node:test";
++import assert from "node:assert/strict";
++import { decideOpen, type OpenFacts } from "./paperOpportunityOpen.ts";
++
++const OK_PROV = { ok: true, labels: {}, reasons: [], capturedAt: "2026-11-13T05:00:00.000Z" };
++const base = (over: Partial<OpenFacts> = {}): OpenFacts => ({
++  opp: { status: "OPEN", openedPaperTradeId: null, instrumentType: "OPTION" },
++  provenance: OK_PROV, hasPlan: true, planRejected: null,
++  engine: { created: true, reason: "", tradeId: "T1" }, ...over,
++});
++
++test("successful opening when every gate passes", () => {
++  const d = decideOpen(base());
++  assert.equal(d.code, "OPENED");
++  assert.equal(d.ok, true);
++  assert.equal(d.status, 201);
++});
++
++test("missing opportunity is not found", () => {
++  assert.equal(decideOpen(base({ opp: null })).code, "NOT_FOUND");
++});
++
++test("duplicate open is refused with 409 and the existing trade id", () => {
++  const d = decideOpen(base({ opp: { status: "OPEN", openedPaperTradeId: "T0", instrumentType: "OPTION" } }));
++  assert.equal(d.code, "ALREADY_OPENED");
++  assert.equal(d.status, 409);
++  assert.match(d.reasons[0], /T0/);
++});
++
++test("an opportunity that is no longer OPEN cannot be opened", () => {
++  assert.equal(decideOpen(base({ opp: { status: "TARGET1_HIT", instrumentType: "OPTION" } })).code, "NOT_OPEN");
++});
++
++test("stock opportunities cannot be opened from the index snapshot", () => {
++  assert.equal(decideOpen(base({ opp: { status: "OPEN", instrumentType: "STOCK" } })).code, "UNSUPPORTED");
++});
++
++test("mock, stale or unavailable evidence is refused with the provenance reasons", () => {
++  const prov = { ok: false, labels: { market: "MOCK" }, reasons: ["market is MOCK (must be verified LIVE)"], capturedAt: null };
++  const d = decideOpen(base({ provenance: prov }));
++  assert.equal(d.code, "PROVENANCE");
++  assert.match(d.reasons.join(" "), /MOCK/);
++});
++
++test("no server snapshot at all is refused (no spoofed LIVE)", () => {
++  assert.equal(decideOpen(base({ provenance: null })).code, "PROVENANCE");
++});
++
++test("no trade plan from the fresh analysis is refused", () => {
++  assert.equal(decideOpen(base({ hasPlan: false })).code, "NO_PLAN");
++});
++
++test("a plan rejected by the strategy's own checks is refused with its reason", () => {
++  const d = decideOpen(base({ planRejected: "Bid-ask spread too wide on 25000 CE (7.1%)" }));
++  assert.equal(d.code, "PLAN_REJECTED");
++  assert.match(d.reasons[0], /spread/);
++});
++
++test("paper-engine risk or sizing refusal is returned as the engine reason, never as an opened trade", () => {
++  const d = decideOpen(base({ engine: { created: false, reason: "RISK_REJECTED: exceeds 1% limit", tradeId: null } }));
++  assert.equal(d.code, "ENGINE_REJECTED");
++  assert.equal(d.ok, false);
++  assert.match(d.reasons[0], /1% limit/);
++});
++
++test("an engine that was not consulted cannot open a trade", () => {
++  assert.equal(decideOpen(base({ engine: null })).code, "ENGINE_REJECTED");
++});
+diff --git a/web/src/lib/services/paperOpportunityOpenReason.test.ts b/web/src/lib/services/paperOpportunityOpenReason.test.ts
+new file mode 100644
+index 00000000..0cb91283
+--- /dev/null
++++ b/web/src/lib/services/paperOpportunityOpenReason.test.ts
+@@ -0,0 +1,16 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { publicEngineReason } from "./paperOpportunityOpen.ts";
++
++test("ledger write failure is sanitized: code kept, no path or exception text", () => {
++  const raw = "LEDGER_WRITE_FAILED: ENOTDIR: not a directory, mkdir '/Users/someone/secret/trades'";
++  const out = publicEngineReason(raw);
++  assert.equal(out, "LEDGER_WRITE_FAILED: the paper ledger could not be saved; no trade was opened");
++  assert.ok(!out.includes("/Users"));
++  assert.ok(!out.includes("ENOTDIR"));
++});
++
++test("other engine refusals pass through unchanged", () => {
++  assert.equal(publicEngineReason("FRESHNESS_BLOCKED: Market data source is STALE"), "FRESHNESS_BLOCKED: Market data source is STALE");
++  assert.equal(publicEngineReason("PAPER_TRADE_OPENED"), "PAPER_TRADE_OPENED");
++});
+diff --git a/web/src/lib/services/paperOpenDeps.ts b/web/src/lib/services/paperOpenDeps.ts
+new file mode 100644
+index 00000000..4b556597
+--- /dev/null
++++ b/web/src/lib/services/paperOpenDeps.ts
+@@ -0,0 +1,14 @@
++// Injection point for the opening route's server-side snapshot. Production uses the real market service.
++// Only tests replace it, through setOpenSnapshotProviderForTests, which production code never calls.
++import { getSnapshot } from "./market.ts";
++import type { IndexId, Snapshot } from "../types.ts";
++
++export const openDeps: { getSnapshot: (index: IndexId) => Promise<Snapshot>; now: () => Date } = {
++  getSnapshot: (index) => getSnapshot(index),
++  now: () => new Date(),
++};
++
++export function setOpenSnapshotProviderForTests(fn: ((index: IndexId) => Promise<Snapshot>) | null, clock?: () => Date): void {
++  openDeps.getSnapshot = fn ?? ((index) => getSnapshot(index));
++  openDeps.now = clock ?? (() => new Date());
++}
+diff --git a/web/src/lib/services/paperRouteAuth.test.ts b/web/src/lib/services/paperRouteAuth.test.ts
+new file mode 100644
+index 00000000..a10911fe
+--- /dev/null
++++ b/web/src/lib/services/paperRouteAuth.test.ts
+@@ -0,0 +1,28 @@
++// Route-level operator authorization for paper routes (defence in depth; the proxy also protects these paths).
++// Calls the real handlers with no operator session. Each must refuse before touching any state.
++import test from "node:test";
++import assert from "node:assert/strict";
++import { GET, POST } from "../../app/api/paper-opportunities/route.ts";
++import { listPaperOpportunities } from "./paperOpportunityStore.ts";
++
++const isRefused = (r: Response | null | undefined) => !!r && (r.status === 401 || r.status === 403);
++
++test("GET paper-opportunities without an operator session is refused", async () => {
++  const res = await GET(new Request("http://localhost/api/paper-opportunities"));
++  assert.ok(isRefused(res), `expected 401/403, got ${res.status}`);
++});
++
++test("POST paper-opportunities without an operator session is refused and creates no record", async () => {
++  const before = listPaperOpportunities().length;
++  const res = await POST(new Request("http://localhost/api/paper-opportunities", {
++    method: "POST", headers: { "Content-Type": "application/json" },
++    body: JSON.stringify({ instrumentType: "OPTION", underlying: "NIFTY", optionType: "CE", strike: 22000, direction: "BULLISH", entry: 100, stop: 80, target1: 140 }),
++  }));
++  assert.ok(isRefused(res), `expected 401/403, got ${res.status}`);
++  assert.equal(listPaperOpportunities().length, before, "no record written by an unauthorized request");
++});
++
++test("a forged bearer header is not accepted when no OPERATOR_TOKEN is configured", async () => {
++  const res = await GET(new Request("http://localhost/api/paper-opportunities", { headers: { Authorization: "Bearer not-a-real-token" } }));
++  assert.ok(isRefused(res));
++});
+diff --git a/web/src/lib/services/providerFallback.test.ts b/web/src/lib/services/providerFallback.test.ts
+new file mode 100644
+index 00000000..8d4978bf
+--- /dev/null
++++ b/web/src/lib/services/providerFallback.test.ts
+@@ -0,0 +1,60 @@
++// Deterministic provider-failure scenario. No network: the Upstox call is injected to fail locally.
++// Checks: the fallback is logged (redacted), the snapshot is labelled MOCK, and MOCK can never pass as LIVE.
++import test from "node:test";
++import assert from "node:assert/strict";
++import { withFallback, buildSnapshot, type FallbackDeps } from "./market.ts";
++import { UpstoxError } from "./errors.ts";
++import { serverProvenance } from "./paperOpportunityProvenance.ts";
++
++const TOKEN = "fallback-test-token-must-never-log-0123456789";
++const NOW = new Date("2026-10-05T07:00:00Z");
++
++function failingDeps(): FallbackDeps {
++  return {
++    mode: "upstox",
++    getToken: async () => TOKEN,
++    getCredential: async () => ({ token: TOKEN, source: "OAUTH" as const }),
++    onAuthExpired: async () => {},
++    now: () => NOW,
++  } as FallbackDeps;
++}
++
++function captureLogs<T>(fn: () => Promise<T>): Promise<{ result: T; logs: string[] }> {
++  const logs: string[] = [];
++  const original = console.warn;
++  console.warn = (...args: unknown[]) => { logs.push(args.map(String).join(" ")); };
++  return fn().then(
++    (result) => { console.warn = original; return { result, logs }; },
++    (e) => { console.warn = original; throw e; },
++  );
++}
++
++test("upstox failure falls back to MOCK, logs the reason, and the log never holds the token", async () => {
++  const { result, logs } = await captureLogs(() =>
++    withFallback(async (p) => {
++      if (p.name !== "MOCK") throw new UpstoxError("UPSTOX_API_ERROR", "simulated upstream 503", 503);
++      return { marker: "mock-data" };
++    }, failingDeps()),
++  );
++  assert.equal(result.fallbackReason, "UPSTOX_API_ERROR");
++  assert.deepEqual(result.data, { marker: "mock-data" });
++  const line = logs.find((l) => l.includes("upstox_fallback"));
++  assert.ok(line, "fallback is logged");
++  assert.match(line!, /"reason":"UPSTOX_API_ERROR"/);
++  assert.ok(!logs.join("\n").includes(TOKEN), "token never logged");
++});
++
++test("a snapshot built after the fallback is labelled MOCK and is refused as LIVE evidence", async () => {
++  // The Upstox call fails locally; the snapshot is then built from the mock provider. No network is used.
++  const { result } = await captureLogs(() =>
++    withFallback(async (p) => {
++      if (p.name !== "MOCK") throw new UpstoxError("UPSTOX_API_ERROR", "simulated upstream 503", 503);
++      return buildSnapshot(p, "nifty", NOW);
++    }, failingDeps()),
++  );
++  const snap = result.data;
++  assert.equal(snap.sources.market.source, "MOCK", "fallback market data is labelled MOCK");
++  const prov = serverProvenance({ ...snap.sources, breadth: { status: snap.breadth?.status ?? null, source: snap.sources.breadth } } as never);
++  assert.equal(prov.ok, false, "MOCK data must never pass the LIVE gate");
++  assert.equal(prov.labels.market, "MOCK");
++});
+diff --git a/web/src/lib/integration/openRoute.integration.ts b/web/src/lib/integration/openRoute.integration.ts
+new file mode 100644
+index 00000000..71e57388
+--- /dev/null
++++ b/web/src/lib/integration/openRoute.integration.ts
+@@ -0,0 +1,104 @@
++// Integration test: the real POST /api/paper-opportunities/[id]/open route, with isolated storage and test credentials.
++// Run with: npm run test:integration. Market data is the default MOCK provider, so the success path is not reachable here
++// (it needs fresh LIVE data); the success path is covered by the pure decision tests and the paper-engine tests.
++import test from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++
++const root = fs.mkdtempSync(path.join(os.tmpdir(), "open-int-"));
++const TOKEN = "integration-operator-token-0123456789abcdefghij";
++process.env.OPERATOR_TOKEN = TOKEN;
++process.env.PAPER_OPPORTUNITY_DIR = path.join(root, "opps");
++process.env.PAPER_TRADES_DIR = path.join(root, "trades");
++process.env.MARKET_DATA_PROVIDER = "mock";
++
++const { POST } = await import("../../app/api/paper-opportunities/[id]/open/route.ts");
++const { createPaperOpportunity } = await import("../services/paperOpportunityMonitor.ts");
++const { savePaperOpportunity, getPaperOpportunity, listPaperOpportunities } = await import("../services/paperOpportunityStore.ts");
++
++function makeOpp(over: Record<string, unknown> = {}) {
++  const opp = createPaperOpportunity({
++    instrumentType: "OPTION", underlying: "NIFTY", symbol: null, optionType: "CE", strike: 22000,
++    direction: "BULLISH", entry: 100, stop: 80, target1: 140, target2: 180,
++    ...(over as object),
++  } as never);
++  savePaperOpportunity(opp);
++  return opp;
++}
++
++const call = (id: string, auth: boolean) =>
++  POST(new Request(`http://localhost/api/paper-opportunities/${id}/open`, {
++    method: "POST",
++    headers: auth ? { Authorization: `Bearer ${TOKEN}` } : {},
++  }), { params: Promise.resolve({ id }) });
++
++test("unauthenticated open is refused with 401 and changes nothing", async () => {
++  const opp = makeOpp();
++  const before = getPaperOpportunity(opp.id);
++  const res = await call(opp.id, false);
++  assert.equal(res.status, 401);
++  assert.deepEqual(getPaperOpportunity(opp.id), before);
++});
++
++test("unknown opportunity is 404 (authorized)", async () => {
++  const res = await call("does-not-exist", true);
++  assert.equal(res.status, 404);
++});
++
++test("stock opportunity cannot be opened from the index snapshot (422, UNSUPPORTED)", async () => {
++  const opp = makeOpp({ instrumentType: "STOCK", underlying: "RELIANCE", optionType: null, strike: null });
++  const res = await call(opp.id, true);
++  const body = await res.json();
++  assert.equal(res.status, 422);
++  assert.equal(body.code, "UNSUPPORTED");
++});
++
++test("already-opened opportunity is refused with 409 and not opened again", async () => {
++  const opp = makeOpp({});
++  const { updatePaperOpportunity } = await import("../services/paperOpportunityStore.ts");
++  updatePaperOpportunity(opp.id, { openedPaperTradeId: "TRADE-EXISTING" });
++  const res = await call(opp.id, true);
++  const body = await res.json();
++  assert.equal(res.status, 409);
++  assert.equal(body.code, "ALREADY_OPENED");
++  assert.equal(getPaperOpportunity(opp.id)?.openedPaperTradeId, "TRADE-EXISTING");
++});
++
++test("mock market data is refused at opening (422 PROVENANCE, labels MOCK, audit recorded, no trade created)", async () => {
++  const opp = makeOpp({});
++  const res = await call(opp.id, true);
++  const body = await res.json();
++  assert.equal(res.status, 422);
++  assert.equal(body.code, "PROVENANCE");
++  assert.ok(body.reasons.some((r: string) => /MOCK|not verified LIVE|UNAVAILABLE/.test(r)), JSON.stringify(body.reasons));
++  const stored = getPaperOpportunity(opp.id);
++  assert.equal(stored?.openedPaperTradeId ?? null, null, "no trade is linked");
++  assert.equal(stored?.lastOpenAttempt?.code, "PROVENANCE", "rejection is recorded for audit");
++});
++
++test("a client-supplied LIVE label cannot open mock-backed data (body is ignored)", async () => {
++  const opp = makeOpp({});
++  const res = await POST(new Request(`http://localhost/api/paper-opportunities/${opp.id}/open`, {
++    method: "POST",
++    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
++    body: JSON.stringify({ dataQuality: { market: "LIVE", optionChain: "LIVE", technical: "LIVE", breadth: "LIVE" }, source: "LIVE" }),
++  }), { params: Promise.resolve({ id: opp.id }) });
++  assert.equal(res.status, 422);
++  assert.equal(getPaperOpportunity(opp.id)?.openedPaperTradeId ?? null, null);
++});
++
++test("opening attempts never create a ledger trade on mock data", async () => {
++  const tradesFile = path.join(root, "trades");
++  const ledgerExists = fs.existsSync(tradesFile) ? fs.readdirSync(tradesFile).length : 0;
++  const opp = makeOpp({});
++  await call(opp.id, true);
++  const after = fs.existsSync(tradesFile) ? fs.readdirSync(tradesFile).length : 0;
++  assert.equal(after, ledgerExists, "no new ledger file content from a refused open");
++});
++
++test("no opportunity is ever created as OPEN with a trade id by a refused request", async () => {
++  const linked = listPaperOpportunities().filter((o) => o.openedPaperTradeId && o.lastOpenAttempt?.code === "PROVENANCE");
++  assert.equal(linked.length, 0);
++});
+diff --git a/web/src/lib/integration/openRouteSuccess.integration.ts b/web/src/lib/integration/openRouteSuccess.integration.ts
+new file mode 100644
+index 00000000..c5c033c5
+--- /dev/null
++++ b/web/src/lib/integration/openRouteSuccess.integration.ts
+@@ -0,0 +1,126 @@
++// Successful opening through the REAL route handler. Test data only: the snapshot is the existing trade-producing fixture,
++// with its sources relabelled LIVE for this test. The trade-plan generator, sizing, risk engine and paper engine are NOT mocked.
++import test from "node:test";
++import assert from "node:assert/strict";
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++
++const root = fs.mkdtempSync(path.join(os.tmpdir(), "open-ok-"));
++const TOKEN = "integration-operator-token-0123456789abcdefghij";
++process.env.OPERATOR_TOKEN = TOKEN;
++process.env.PAPER_OPPORTUNITY_DIR = path.join(root, "opps");
++process.env.PAPER_TRADES_DIR = path.join(root, "trades");
++process.env.MARKET_DATA_PROVIDER = "mock";
++// Test account capital (the same figure the existing trade-producing fixture tests use). The 1% limit stays 1% of this capital.
++process.env.ACCOUNT_CAPITAL = "388500";
++// Aggregate caps raised for this test only, so that several trades can coexist in one ledger. The per-trade 1% limit is NOT changed.
++process.env.MAX_CONCURRENT_POSITIONS = "10";
++process.env.MAX_OPEN_RISK_PERCENT = "20";
++
++const { POST } = await import("../../app/api/paper-opportunities/[id]/open/route.ts");
++const { createPaperOpportunity } = await import("../services/paperOpportunityMonitor.ts");
++const { savePaperOpportunity, getPaperOpportunity } = await import("../services/paperOpportunityStore.ts");
++const { setOpenSnapshotProviderForTests } = await import("../services/paperOpenDeps.ts");
++const { mockSnapshotTradeInputs } = await import("../testFixtures/mockSnapshotTradeInputs.ts");
++const { getPaperTradingEngine } = await import("../services/paperStore.ts");
++
++// Test data: the trade-producing fixture, sources relabelled LIVE, timestamps set to now.
++const FIXED_NOW = new Date("2026-10-05T07:00:00Z"); // same instant the existing trade-producing fixture tests use
++function liveFixture(index: "nifty" | "banknifty", stale = false) {
++  const now = stale ? new Date(FIXED_NOW.getTime() - 6 * 3600_000) : FIXED_NOW;
++  const s = mockSnapshotTradeInputs(index, now) as unknown as Record<string, unknown>;
++  const live = (p: string) => ({ source: "LIVE", provider: p === "x" ? "UPSTOX" : "UPSTOX", fetchedAt: now.toISOString(), lastTradeTime: now.toISOString() });
++  const sources = s.sources as Record<string, unknown>;
++  for (const k of Object.keys(sources)) sources[k] = live(k);
++  if (s.breadth) (s.breadth as Record<string, unknown>).source = live("breadth");
++  return s as never;
++}
++
++function makeOpp(over: Record<string, unknown> = {}) {
++  const opp = createPaperOpportunity({
++    instrumentType: "OPTION", underlying: "NIFTY", symbol: null, optionType: "CE", strike: 22000,
++    direction: "BULLISH", entry: 100, stop: 80, target1: 140, target2: 180, ...(over as object),
++  } as never);
++  savePaperOpportunity(opp);
++  return opp;
++}
++
++const call = (id: string) => POST(new Request(`http://localhost/api/paper-opportunities/${id}/open`, {
++  method: "POST", headers: { Authorization: `Bearer ${TOKEN}` },
++}), { params: Promise.resolve({ id }) });
++
++test("successful opening: real route, real analysis, sizing, risk engine and ledger; opportunity linked; audit kept", async () => {
++  setOpenSnapshotProviderForTests(async (index) => liveFixture(index as "nifty"), () => FIXED_NOW);
++  const opp = makeOpp();
++  const res = await call(opp.id);
++  const body = await res.json();
++  assert.equal(res.status, 201, JSON.stringify(body));
++  assert.equal(body.code, "OPENED");
++  const tradeId = body.tradeId as string;
++  assert.ok(tradeId, "a trade id is returned");
++  const trade = getPaperTradingEngine().getTrade(tradeId);
++  assert.ok(trade, "the trade exists in the ledger");
++  assert.ok(trade!.riskAmount > 0, "the trade carries a computed risk amount");
++  assert.ok(trade!.riskAmount <= 0.01 * 388_500 + 1e-6, "the 1% risk limit (1% of the configured capital) is not exceeded");
++  const stored = getPaperOpportunity(opp.id);
++  assert.equal(stored?.openedPaperTradeId, tradeId, "opportunity linked to the trade");
++  assert.equal(stored?.lastOpenAttempt?.code, "OPENED", "audit record of the accepted opening");
++
++  // Duplicate opening of the same opportunity: refused before any engine call, no second trade.
++  const tradesBefore = getPaperTradingEngine().getTrades().length;
++  const again = await call(opp.id);
++  assert.equal(again.status, 409);
++  assert.equal(getPaperTradingEngine().getTrades().length, tradesBefore, "no second trade");
++  setOpenSnapshotProviderForTests(null);
++});
++
++test("stale snapshot is refused by the paper engine's freshness gate and nothing is linked", async () => {
++  setOpenSnapshotProviderForTests(async (index) => liveFixture(index as "nifty", true), () => FIXED_NOW);
++  const opp = makeOpp();
++  const res = await call(opp.id);
++  const body = await res.json();
++  assert.equal(res.status, 422);
++  assert.match(String(body.code), /ENGINE_REJECTED|PROVENANCE|NO_PLAN|PLAN_REJECTED/);
++  assert.equal(getPaperOpportunity(opp.id)?.openedPaperTradeId ?? null, null);
++  setOpenSnapshotProviderForTests(null);
++});
++
++// Runs `fn` with the given environment values, restoring the previous values afterwards.
++async function withEnv(vars: Record<string, string>, fn: () => Promise<void>) {
++  const prev: Record<string, string | undefined> = {};
++  for (const k of Object.keys(vars)) { prev[k] = process.env[k]; process.env[k] = vars[k]; }
++  try { await fn(); } finally {
++    for (const k of Object.keys(vars)) { if (prev[k] === undefined) delete process.env[k]; else process.env[k] = prev[k]; }
++  }
++}
++
++test("insufficient capital: at 1 lakh the 1% limit cannot size this trade; refused, no ledger change", async () => {
++  await withEnv({ ACCOUNT_CAPITAL: "100000" }, async () => {
++    setOpenSnapshotProviderForTests(async (index) => liveFixture(index as "nifty"), () => FIXED_NOW);
++    const opp = makeOpp({ strike: 21000 });
++    const before = getPaperTradingEngine().getTrades().length;
++    const res = await call(opp.id);
++    const body = await res.json();
++    assert.equal(res.status, 422);
++    assert.ok(["NO_PLAN", "ENGINE_REJECTED", "PLAN_REJECTED"].includes(body.code), body.code);
++    assert.equal(getPaperTradingEngine().getTrades().length, before, "no ledger change");
++    assert.equal(getPaperOpportunity(opp.id)?.openedPaperTradeId ?? null, null);
++    setOpenSnapshotProviderForTests(null);
++  });
++});
++
++test("risk rejection (aggregate open-risk cap exceeded) is returned with its reason and never mutates the ledger", async () => {
++  await withEnv({ MAX_OPEN_RISK_PERCENT: "0.0001" }, async () => {
++    setOpenSnapshotProviderForTests(async (index) => liveFixture(index as "nifty"), () => FIXED_NOW);
++    const opp = makeOpp({ strike: 21500 });
++    const before = getPaperTradingEngine().getTrades().length;
++    const res = await call(opp.id);
++    const body = await res.json();
++    assert.equal(res.status, 422);
++    assert.ok(["NO_PLAN", "ENGINE_REJECTED", "PLAN_REJECTED"].includes(body.code), body.code);
++    assert.ok(body.reasons.length > 0, "a reason is returned");
++    assert.equal(getPaperTradingEngine().getTrades().length, before, "no ledger mutation on risk rejection");
++    setOpenSnapshotProviderForTests(null);
++  });
++});
+diff --git a/web/src/app/api/paper-opportunities/[id]/open/route.ts b/web/src/app/api/paper-opportunities/[id]/open/route.ts
+new file mode 100644
+index 00000000..a7011fc7
+--- /dev/null
++++ b/web/src/app/api/paper-opportunities/[id]/open/route.ts
+@@ -0,0 +1,69 @@
++export const dynamic = "force-dynamic";
++
++// Opens a stored paper opportunity. Every gate runs on the server, against a FRESH snapshot.
++// The opportunity's stored price is never used as an execution price.
++import { requireOperator } from "../../../../../lib/operatorSession.ts";
++import { getPaperOpportunity, updatePaperOpportunity } from "@/lib/services/paperOpportunityStore";
++import { openDeps } from "@/lib/services/paperOpenDeps";
++import { isIndexId } from "@/lib/services/instrumentRegistry";
++import { serverProvenance } from "@/lib/services/paperOpportunityProvenance";
++import { decideOpen, publicEngineReason, type OpenFacts } from "@/lib/services/paperOpportunityOpen";
++import { getPaperTradingEngine } from "@/lib/services/paperStore";
++import { analyze } from "@/lib/engine/strategy";
++import { logEvent } from "@/lib/ops/structuredLog";
++
++export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
++  const refused = requireOperator(req);
++  if (refused) return refused;
++  const { id } = await params;
++  const opp = getPaperOpportunity(id);
++
++  // Cheap refusals first: no market data is fetched for an opportunity that cannot be opened.
++  const earlyFacts: OpenFacts = { opp, provenance: null, hasPlan: false, planRejected: null, engine: null };
++  const early = decideOpen(earlyFacts);
++  const pre = early.code === "NOT_FOUND" || early.code === "ALREADY_OPENED" || early.code === "NOT_OPEN" || early.code === "UNSUPPORTED";
++  if (pre) return finish(id, early);
++
++  const index = (opp!.underlying ?? "").toLowerCase();
++  if (!isIndexId(index)) return finish(id, decideOpen({ ...earlyFacts, opp: { ...opp!, instrumentType: "UNSUPPORTED" } }));
++
++  // Fresh server-side snapshot, provenance and strategy analysis.
++  const now = openDeps.now();
++  const snapshot = await openDeps.getSnapshot(index);
++  // Breadth status lives on the snapshot, not in its sources map.
++  const provenance = serverProvenance({ ...snapshot.sources, breadth: { status: snapshot.breadth?.status ?? null, source: snapshot.sources.breadth } } as never);
++  if (!provenance.ok) return finish(id, decideOpen({ ...earlyFacts, provenance }));
++
++  const analysis = analyze(snapshot, now);
++  const plan = analysis.plan ?? null;
++  const planRejected = plan?.rejected ?? null;
++  const detail = [...analysis.blockers, ...analysis.candidates.map((c) => c.rejected).filter((x): x is string => !!x)];
++  if (!plan || planRejected) return finish(id, decideOpen({ ...earlyFacts, provenance, hasPlan: !!plan, planRejected, detail }));
++
++  // The paper engine re-checks freshness, position limits, sizing, the 1% risk assessment and fills.
++  const engine = getPaperTradingEngine();
++  const result = engine.processRecommendation(analysis, now);
++  const facts: OpenFacts = {
++    opp,
++    provenance,
++    hasPlan: true,
++    planRejected: null,
++    engine: { created: result.created, reason: publicEngineReason(result.reason), tradeId: result.trade?.id ?? null },
++  };
++  return finish(id, decideOpen(facts), result.trade?.id ?? null);
++}
++
++// Records the attempt on the opportunity (audit) and links the trade only when opening succeeded.
++function finish(id: string, d: ReturnType<typeof decideOpen>, tradeId: string | null = null) {
++  const at = new Date().toISOString();
++  logEvent(d.ok ? "info" : "warn", d.ok ? "paper_open_accepted" : "paper_open_rejected", { opportunityId: id, code: d.code, reasons: d.reasons, tradeId });
++  if (d.ok && tradeId) {
++    updatePaperOpportunity(id, { openedPaperTradeId: tradeId, lastOpenAttempt: { at, code: d.code, reasons: [] } });
++    return Response.json({ status: "success", code: d.code, tradeId }, { status: 201 });
++  }
++  if (d.code !== "NOT_FOUND" && d.code !== "ALREADY_OPENED") {
++    updatePaperOpportunity(id, { lastOpenAttempt: { at, code: d.code, reasons: d.reasons } });
++  }
++  // reference: the audit handle. The matching server log line carries the redacted diagnostics.
++  return Response.json({ status: "rejected", code: d.code, reasons: d.reasons, reference: id }, { status: d.status });
++}

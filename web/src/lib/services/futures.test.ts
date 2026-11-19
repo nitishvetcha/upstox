@@ -1,3 +1,5 @@
+// Network-gate setup: these tests stub fetch to exercise the live (upstox) code path. Without this the gate refuses.
+process.env.MARKET_DATA_PROVIDER = "upstox";
 // Run: npm test   (deterministic fixtures; no Upstox account needed)
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
@@ -185,7 +187,7 @@ test("11. NIFTY and BANK NIFTY futures caches are isolated", async () => {
   assert.equal(b.instrumentKey, "NSE_FO|48699");
   assert.equal(n2.vwap, n.vwap);
   assert.ok(n.vwap! < 30000 && b.vwap! > 50000);
-  assert.equal(calls.filter((c) => c.includes("instruments") || c.includes("NSE.json")).length, 1, "instrument master fetched once");
+  assert.equal(calls.filter((c) => c.includes("NSE.json")).length, 1, "NSE instrument master fetched once");
 });
 
 test("12. futures and spot candles never share a cache entry", async () => {

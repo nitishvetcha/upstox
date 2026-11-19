@@ -12,7 +12,7 @@ import {
   primaryLeg,
 } from "./recommendationEnricher.ts";
 import { analyze } from "./engine/strategy.ts";
-import { mockSnapshot } from "./services/mock.ts";
+import { mockSnapshotTradeInputs as mockSnapshot } from "./testFixtures/mockSnapshotTradeInputs.ts";
 import type { IndexId, Snapshot } from "./types.ts";
 
 console.info = () => {};
@@ -215,17 +215,19 @@ test("REC14. score.factors keys match factor keys from analysis", () => {
   for (const k of expected) assert.ok(actual.has(k), `missing factor: ${k}`);
 });
 
-test("REC15. blockers passthrough verbatim from analysis", () => {
+test("REC15. blockers pass through from analysis; a simulated snapshot adds only the MOCK_DATA blocker", () => {
   const a = analyze(snap(), T);
   const r = buildRecommendationResponse(a);
-  assert.deepEqual(r.blockers, a.blockers);
+  assert.deepEqual(r.blockers.filter((b) => a.blockers.includes(b)), a.blockers, "every analysis blocker is kept, in order");
+  const extra = r.blockers.filter((b) => !a.blockers.includes(b));
+  assert.ok(extra.every((b) => b.startsWith("MOCK_DATA")), `unexpected additions: ${extra.join(" | ")}`);
 });
 
 // ── TRADE scenario ─────────────────────────────────────────────────────────────
 
 test("REC16. TRADE decision: contract non-null, execution non-null, all required fields present", () => {
-  // Find a scenario that produces TRADE by trying live data
-  const a = analyze(liveSnap(), T);
+  // Find a scenario that produces TRADE by trying live data with optional sized capital
+  const a = analyze(liveSnap(), T, { accountCapital: 500_000 });
   if (a.status !== "TRADE") return; // WAIT is acceptable in current conditions
   const r = buildRecommendationResponse(a);
   assert.equal(r.decision, "TRADE");
@@ -337,7 +339,7 @@ test("REC25. execution is null when decision is WAIT — no paper trade possible
 // ── Risk constraints ───────────────────────────────────────────────────────────
 
 test("REC26. TRADE execution: quantity is a valid multiple of lots", () => {
-  const a = analyze(liveSnap(), T);
+  const a = analyze(liveSnap(), T, { accountCapital: 500_000 });
   if (a.status !== "TRADE" || !a.plan?.risk) return;
   const r = buildRecommendationResponse(a);
   const ex = r.execution!;

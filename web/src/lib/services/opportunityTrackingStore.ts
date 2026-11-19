@@ -5,8 +5,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { OpportunityGrade } from "../engine/opportunityEngine.ts";
 
-const DIR = process.env.OPPORTUNITY_TRACK_DIR
-  ?? path.join(process.cwd(), ".data", "opportunity-tracking");
+// Resolved per call so tests can redirect it; never fixed at import time.
+const dir = () => process.env.OPPORTUNITY_TRACK_DIR ?? path.join(process.cwd(), ".data", "opportunity-tracking");
 
 export type OutcomeState = "OPEN" | "TARGET1_HIT" | "TARGET2_HIT" | "STOP_HIT" | "EXPIRED" | "INVALIDATED";
 
@@ -43,16 +43,17 @@ export interface OpportunityRecord {
 }
 
 function filePath(id: string) {
-  return path.join(DIR, `opp_${id.replace(/[^\w-]/g, "")}.json`);
+  return path.join(dir(), `opp_${id.replace(/[^\w-]/g, "")}.json`);
 }
 
 export function listOpportunityRecords(): OpportunityRecord[] {
   try {
-    if (!fs.existsSync(DIR)) return [];
-    return fs.readdirSync(DIR)
+    // turbopackIgnore: the tracking directory is a runtime data path (environment override or .data), not bundled.
+    if (!fs.existsSync(/* turbopackIgnore: true */ dir())) return [];
+    return fs.readdirSync(/* turbopackIgnore: true */ dir())
       .filter((f) => f.startsWith("opp_") && f.endsWith(".json"))
       .map((f) => {
-        try { return JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")) as OpportunityRecord; }
+        try { return JSON.parse(fs.readFileSync(path.join(/* turbopackIgnore: true */ dir(), f), "utf8")) as OpportunityRecord; }
         catch { return null; }
       })
       .filter((r): r is OpportunityRecord => r !== null)
@@ -61,7 +62,7 @@ export function listOpportunityRecords(): OpportunityRecord[] {
 }
 
 export function saveOpportunityRecord(rec: OpportunityRecord): void {
-  fs.mkdirSync(DIR, { recursive: true });
+  fs.mkdirSync(dir(), { recursive: true });
   fs.writeFileSync(filePath(rec.id), JSON.stringify(rec, null, 2));
 }
 

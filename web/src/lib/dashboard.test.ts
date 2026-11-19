@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { toDashboardView } from "./dashboard.ts";
 import { loadSection } from "./sectionLoad.ts";
 import { analyze } from "./engine/strategy.ts";
-import { mockSnapshot } from "./services/mock.ts";
+import { mockSnapshotTradeInputs as mockSnapshot } from "./testFixtures/mockSnapshotTradeInputs.ts";
 import { getRiskConfig } from "./services/risk/riskConfig.ts";
 import { compareRuns } from "./services/backtestScenarios.ts";
 import { journal } from "./services/performance/journal.ts";

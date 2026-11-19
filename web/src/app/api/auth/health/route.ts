@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { getAccessToken, tokenStatus } from "@/lib/services/upstoxAuth";
+import { resolveCredential, tokenStatus } from "@/lib/services/upstoxAuth";
 import { get, normalizeChain, normalizeOptionContracts } from "@/lib/services/upstoxMarket";
 import { validExpiries } from "@/lib/services/optionChainAnalytics";
 import { INSTRUMENTS } from "@/lib/services/instrumentRegistry";
@@ -13,7 +13,8 @@ type Check = { status: "PASS" | "FAIL" | "SKIPPED"; detail: string };
 // Authentication and historical entitlement are reported separately: a valid login does not imply Plus access.
 export async function GET() {
   const { status, expiresAt } = await tokenStatus();
-  const token = status === "VALID" ? await getAccessToken() : null;
+  // Probes run only when a usable credential exists; the probe results themselves are the verification.
+  const token = (await resolveCredential())?.token ?? null;
   const skipped: Check = { status: "SKIPPED", detail: `token ${status}` };
   const out: Record<string, Record<string, Check>> = {};
 

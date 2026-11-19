@@ -1,8 +1,8 @@
 // Normalized response builders shared by the news routes (no provider fields, no keys).
-import type { IndexId, NewsSentiment } from "../types";
-import { INDICES, INSTRUMENTS } from "./instrumentRegistry";
-import { getIndexNews } from "./newsProvider";
-import { freshnessOf } from "../time";
+import type { IndexId, NewsSentiment } from "../types.ts";
+import { INDICES, INSTRUMENTS } from "./instrumentRegistry.ts";
+import { getIndexNews } from "./newsProvider.ts";
+import { freshnessOf } from "../time.ts";
 
 export const allNews = () => Promise.all(INDICES.map((i) => getIndexNews(i)));
 

@@ -44,13 +44,14 @@ test("2. Long Call risk calculation & position sizing with Math.floor", () => {
   const plan = makePlan(); // Entry = 100, SL = 80. Net basis: entry fill 101 (+1%), worst stop fill 77.6 (−1% exit, −2% gap)
   // Worst risk per unit = 101 − 77.6 = 23.4; per lot = 23.4 × 65 = 1521, plus variable percentage charges (0.15% STT, 0.03553% NSE).
   // Fixed brokerage for the trade (entry and exit orders, with GST) under Plus research fallback = 70.80 (or 47.20 under Basic).
-  // With 0.5% max risk on 100,000 = ₹500 max risk: (500 − 70.80) / 1533.64 → 0 lots -> REJECTED (ZERO_LOTS)
-
+  // With 0.5% max risk on 100,000 = ₹500 max risk: (500 − 70.80) / 1533.64 → 0 lots allocated; trade plan remains approved
   const assessment = evaluateTradeRisk(plan, snapshot, undefined, { accountCapital: 100_000, riskPerTradePercent: 0.5 });
   assert.equal(assessment.lots, 0);
   assert.equal(assessment.quantity, 0);
-  assert.equal(assessment.status, "REJECTED");
-  assert.ok(assessment.reasons.includes("ZERO_LOTS"));
+  assert.equal(assessment.status, "APPROVED");
+  assert.equal(assessment.allowed, true);
+  assert.ok(!assessment.reasons.includes("ZERO_LOTS"));
+  assert.ok(assessment.portfolioReasons?.includes("ZERO_LOTS"));
 
   // Approved trade with sufficient capital / risk % (1.0% of 200,000 = ₹2,000 max risk)
   // Lots = floor((2000 − 70.80) / 1533.64) = 1 lot (65 qty)
@@ -156,20 +157,26 @@ test("6. max lots cap & portfolio open risk limits", () => {
   assert.equal(assessment.lots, 5);
   assert.equal(assessment.quantity, 325); // 5 * 65
 
-  // Open risk limit exceeded check: Capital 200,000, max open risk 1% = 2,000. Existing = 1,500, New = 1,313 -> Total 2,813 > 2,000
+  // Open risk limit exceeded check: does not reject market recommendation, records portfolioReason
   const planLarge = makePlan();
   const assessment2 = evaluateTradeRisk(planLarge, snapshot, { existingOpenRisk: 1500 }, { accountCapital: 200_000, maxOpenRiskPercent: 1.0, riskPerTradePercent: 1.0 });
-  assert.equal(assessment2.status, "REJECTED");
-  assert.ok(assessment2.reasons.includes("OPEN_RISK_LIMIT"));
+  assert.equal(assessment2.status, "APPROVED");
+  assert.equal(assessment2.allowed, true);
+  assert.ok(!assessment2.reasons.includes("OPEN_RISK_LIMIT"));
+  assert.ok(assessment2.portfolioReasons?.includes("OPEN_RISK_LIMIT"));
+  assert.equal(assessment2.portfolioAllowed, false);
 });
 
 test("7. daily loss limit enforcement", () => {
   const snapshot = mockSnapshot("nifty");
   const plan = makePlan();
-  // Capital 100,000, max daily loss 2% = 2,000. Realized daily loss = 2,100 -> REJECTED
+  // Capital 100,000, max daily loss 2% = 2,000. Realized daily loss = 2,100 -> does not reject market recommendation
   const assessment = evaluateTradeRisk(plan, snapshot, { realizedDailyLoss: 2100 }, { accountCapital: 100_000, maxDailyLossPercent: 2.0 });
-  assert.equal(assessment.status, "REJECTED");
-  assert.ok(assessment.reasons.includes("DAILY_LOSS_LIMIT"));
+  assert.equal(assessment.status, "APPROVED");
+  assert.equal(assessment.allowed, true);
+  assert.ok(!assessment.reasons.includes("DAILY_LOSS_LIMIT"));
+  assert.ok(assessment.portfolioReasons?.includes("DAILY_LOSS_LIMIT"));
+  assert.equal(assessment.portfolioAllowed, false);
 });
 
 test("8. insufficient R:R rejection", () => {
@@ -228,8 +235,11 @@ test("12. max concurrent positions enforcement", () => {
   const snapshot = mockSnapshot("nifty");
   const plan = makePlan();
   const assessment = evaluateTradeRisk(plan, snapshot, { currentOpenPositions: 3 }, { accountCapital: 500_000, maxConcurrentPositions: 3 });
-  assert.equal(assessment.status, "REJECTED");
-  assert.ok(assessment.reasons.includes("MAX_CONCURRENT_POSITIONS"));
+  assert.equal(assessment.status, "APPROVED");
+  assert.equal(assessment.allowed, true);
+  assert.ok(!assessment.reasons.includes("MAX_CONCURRENT_POSITIONS"));
+  assert.ok(assessment.portfolioReasons?.includes("MAX_CONCURRENT_POSITIONS"));
+  assert.equal(assessment.portfolioAllowed, false);
 });
 
 test("13. EXTREME event risk level rejection (structured level only)", () => {

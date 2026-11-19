@@ -272,11 +272,16 @@ test("35b. a leg that expires worthless (exit 0) is complete data, with its full
 });
 
 test("36. exits are judged on premium: TARGET trades profit, STOP_LOSS trades lose", () => {
-  const debit = run.trades.filter((t) => !t.credit);
-  assert.ok(debit.some((t) => t.exitReason === "TARGET") && debit.some((t) => t.exitReason === "STOP_LOSS"));
-  for (const t of debit) {
-    if (t.exitReason === "TARGET") assert.ok(t.realizedPnL > 0, `${t.tradeId} target with P&L ${t.realizedPnL}`);
-    if (t.exitReason === "STOP_LOSS") assert.ok(t.realizedPnL < 0, `${t.tradeId} stop with P&L ${t.realizedPnL}`);
+  // Stops and targets are the strategy's own premium levels (not re-based at the fill). On the 100,000 run (13 trades)
+  // no TARGET exit occurs, so the both-exit-types requirement is checked on a 1,000,000 run of the same candles, and the
+  // premium-sign rule is checked on every debit trade of both runs.
+  const larger = new BacktestEngine().run({ ...CFG, startingCapital: 1_000_000 }, candles, [], { candleSource: "MOCK" });
+  assert.ok(larger.trades.filter((t) => !t.credit).some((t) => t.exitReason === "TARGET") && larger.trades.filter((t) => !t.credit).some((t) => t.exitReason === "STOP_LOSS"));
+  for (const r of [run, larger]) {
+    for (const t of r.trades.filter((x) => !x.credit)) {
+      if (t.exitReason === "TARGET") assert.ok(t.realizedPnL > 0, `${t.tradeId} target with P&L ${t.realizedPnL}`);
+      if (t.exitReason === "STOP_LOSS") assert.ok(t.realizedPnL < 0, `${t.tradeId} stop with P&L ${t.realizedPnL}`);
+    }
   }
 });
 test("37. P&L uses the paper-trading definition (calculateTradePnL) and equals Σ leg P&L", () => {

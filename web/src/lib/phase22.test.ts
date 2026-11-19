@@ -1,6 +1,12 @@
 // Phase 22 — Trade plan realism, grading, outcome tracking tests.
 import assert from "node:assert/strict";
+import { FIXTURE_DEPS } from "./testFixtures/stockScan.ts";
 import { describe, it } from "node:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+// Tracking-store tests write here, never into the live .data/opportunity-tracking.
+process.env.OPPORTUNITY_TRACK_DIR = mkdtempSync(join(tmpdir(), "opp-track-"));
 
 import {
   OPPORTUNITY_ENGINE_VERSION, WEIGHTS, evaluateOptionsOpportunity,
@@ -9,15 +15,25 @@ import {
 import { STOCK_OPPORTUNITY_VERSION } from "./engine/stockOpportunityEngine.ts";
 import type { Snapshot, OptionRow } from "./types.ts";
 
+// ── Controlled synthetic test clock (NSE open session) ──────────────────────
+const FIXTURE_NOW = new Date("2026-10-30T10:30:00+05:30");
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const si = (src: string) => ({ source: src as "LIVE" | "MOCK", provider: "UPSTOX" as const, fetchedAt: null });
 
-function makeRow(strike: number, callLtp: number, putLtp: number, callOi: number, putOi: number): OptionRow {
+function makeRow(
+  strike: number,
+  callLtp: number,
+  putLtp: number,
+  callOi: number,
+  putOi: number,
+  lastTradeTime: string | null = new Date(FIXTURE_NOW.getTime() - 15_000).toISOString(),
+): OptionRow {
   return {
     strike,
-    call: { ltp: callLtp, bid: callLtp - 2, ask: callLtp + 2, oi: callOi, chgOi: 100, volume: 1000, iv: 15, delta: 0.45, gamma: 0.01, theta: -1, vega: 0.5, instrumentKey: null },
-    put:  { ltp: putLtp,  bid: putLtp - 2,  ask: putLtp + 2,  oi: putOi,  chgOi: 150, volume: 1000, iv: 16, delta: -0.45, gamma: 0.01, theta: -1, vega: 0.5, instrumentKey: null },
+    call: { ltp: callLtp, bid: callLtp - 2, ask: callLtp + 2, oi: callOi, chgOi: 100, volume: 1000, iv: 15, delta: 0.45, gamma: 0.01, theta: -1, vega: 0.5, instrumentKey: null, lastTradeTime },
+    put:  { ltp: putLtp,  bid: putLtp - 2,  ask: putLtp + 2,  oi: putOi,  chgOi: 150, volume: 1000, iv: 16, delta: -0.45, gamma: 0.01, theta: -1, vega: 0.5, instrumentKey: null, lastTradeTime },
   };
 }
 
@@ -31,7 +47,7 @@ function bullishSnapshot(): Snapshot {
   ];
   return {
     index: "nifty" as const, name: "NIFTY 50", spot, prevClose: spot - 120, fallbackReason: null,
-    expiry: "2026-10-13", strikeStep: 100, chain, technical: null,
+    expiry: "2026-11-05", strikeStep: 100, chain, technical: null,
     indicators: { ema9: 21800, ema21: 21600, ema50: 21300, ema200: 20500, vwap: 21900, rsi: 62, macdHist: 4.5, atr: 200, pdh: 22300, pdl: 21700, orHigh: 21950, orLow: 21850, futuresVwap: null },
     breadth: { index: "nifty" as const, status: "LIVE" as const, advances: 40, declines: 10, unchanged: 0, total: 50, expected: 50, coverage: 100, advanceDeclineRatio: 4.0, advancePercent: 80, declinePercent: 20, breadthPercent: 60, signal: 0.8, classification: "STRONGLY BULLISH" as const, priceBreadthState: "BULLISH" as const, fetchedAt: null },
     news: { score: 0.5, bullishPct: 75, neutralPct: 20, bearishPct: 5, eventRisk: null },
@@ -102,7 +118,7 @@ describe("GR — Opportunity grade logic", () => {
 describe("TP22 — Options trade plan market-derived", () => {
   it("TP22-01: CE target is derived from room-to-resistance scaled by delta (not forced R:R)", () => {
     const s = bullishSnapshot();
-    const r = evaluateOptionsOpportunity(s, "NIFTY");
+    const r = evaluateOptionsOpportunity(s, "NIFTY", FIXTURE_NOW);
     for (const c of r.topOpportunities) {
       if (c.optionType !== "CE") continue;
       // target is entry + delta * room * 0.45 — verify it's NOT simply entry + risk * k
@@ -133,7 +149,7 @@ describe("TP22 — Options trade plan market-derived", () => {
       breadth: { ...base.breadth, signal: -0.8, classification: "STRONGLY BEARISH" as const, priceBreadthState: "BEARISH" as const, advances: 5, declines: 44, advancePercent: 10, declinePercent: 88 },
       news: { score: -0.5, bullishPct: 10, neutralPct: 20, bearishPct: 70, eventRisk: null },
     } as unknown as Snapshot;
-    const r = evaluateOptionsOpportunity(s, "NIFTY");
+    const r = evaluateOptionsOpportunity(s, "NIFTY", FIXTURE_NOW);
     // If no PEs (e.g. R:R fails for this market), verify at minimum the direction is bearish
     if (r.topOpportunities.length > 0) {
       for (const c of r.topOpportunities) {
@@ -142,16 +158,17 @@ describe("TP22 — Options trade plan market-derived", () => {
         assert.ok(c.srRoom > 0);
       }
     } else {
+      // Sideways markets must not produce option buys at all.
       assert.ok(
-        ["BEARISH", "STRONG BEARISH"].includes(r.marketDirection),
-        `Direction should be bearish, got: ${r.marketDirection}`,
+        ["BEARISH", "STRONG BEARISH"].includes(r.marketDirection) || /sideways/.test(r.noOpportunityReason ?? ""),
+        `Direction should be bearish or explicitly sideways, got: ${r.marketDirection}`,
       );
     }
   });
 
   it("TP22-03: stop is 50% of premium (standard option risk management)", () => {
     const s = bullishSnapshot();
-    const r = evaluateOptionsOpportunity(s, "NIFTY");
+    const r = evaluateOptionsOpportunity(s, "NIFTY", FIXTURE_NOW);
     for (const c of r.topOpportunities) {
       const expectedStop = Math.round(c.ltp * 0.50 * 100) / 100;
       assert.ok(Math.abs(c.stop - expectedStop) < 0.5, `Stop ${c.stop} should be ~50% of ltp ${c.ltp}`);
@@ -160,7 +177,7 @@ describe("TP22 — Options trade plan market-derived", () => {
 
   it("TP22-04: target2 > target1 for CE (more ambitious second target)", () => {
     const s = bullishSnapshot();
-    const r = evaluateOptionsOpportunity(s, "NIFTY");
+    const r = evaluateOptionsOpportunity(s, "NIFTY", FIXTURE_NOW);
     for (const c of r.topOpportunities) {
       if (c.optionType === "CE") {
         assert.ok(c.target2 > c.target1, `T2 ${c.target2} must be > T1 ${c.target1}`);
@@ -231,7 +248,7 @@ describe("TP22S — Stock trade plan ATR-derived", () => {
 
   it("TP22S-04: stock scanner produces no forced R:R (0 or organic)", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("intraday");
+    const r = await scanStocks("intraday", FIXTURE_NOW, FIXTURE_DEPS);
     for (const s of r.topOpportunities) {
       // R:R should be 1.04–1.52 range (natural ATR-based), never exactly 1.5 from forced multiplier
       assert.ok(s.rr >= 1.0, `R:R ${s.rr} must be >= 1.0`);
@@ -252,7 +269,7 @@ describe("TP22S — Stock trade plan ATR-derived", () => {
 describe("RK22 — Opportunity ranking", () => {
   it("RK22-01: higher score ranks first in same options run", () => {
     const s = bullishSnapshot();
-    const r = evaluateOptionsOpportunity(s, "NIFTY");
+    const r = evaluateOptionsOpportunity(s, "NIFTY", FIXTURE_NOW);
     for (let i = 0; i < r.topOpportunities.length - 1; i++) {
       assert.ok(
         r.topOpportunities[i].opportunityScore >= r.topOpportunities[i + 1].opportunityScore,
@@ -263,7 +280,7 @@ describe("RK22 — Opportunity ranking", () => {
 
   it("RK22-02: grade field is present on all returned contracts", () => {
     const s = bullishSnapshot();
-    const r = evaluateOptionsOpportunity(s, "NIFTY");
+    const r = evaluateOptionsOpportunity(s, "NIFTY", FIXTURE_NOW);
     const validGrades: OpportunityGrade[] = ["A+", "A", "B", "C", "REJECT"];
     for (const c of r.topOpportunities) {
       assert.ok(validGrades.includes(c.grade), `Invalid grade: ${c.grade}`);
@@ -382,5 +399,53 @@ describe("SF22 — Safety Phase 22", () => {
     const apiDir = base.replace(/\/src\/lib\/?$/, "/src/app/api/opportunities");
     assert.ok(fs.existsSync(`${apiDir}/outcomes/route.ts`), "Missing outcomes route");
     assert.ok(fs.existsSync(`${apiDir}/track/route.ts`), "Missing track route");
+  });
+});
+
+describe("OA — options fail closed while the chain is unverified (options-audit-1)", () => {
+  it("OA-01: a STALE option chain forces REJECT even when other sources are LIVE", () => {
+    const base = bullishSnapshot();
+    const live = evaluateOptionsOpportunity(base, "NIFTY", FIXTURE_NOW);
+    const stale = evaluateOptionsOpportunity({ ...base, sources: { ...base.sources, optionChain: { ...base.sources.optionChain, source: "STALE" } } } as Snapshot, "NIFTY", FIXTURE_NOW);
+    assert.ok(stale.topOpportunities.length > 0, "fixture must produce contracts so the check is not vacuous");
+    assert.ok(live.topOpportunities.some((c) => c.grade !== "REJECT"), "same contracts are gradeable when the chain is LIVE");
+    for (const c of stale.topOpportunities) assert.equal(c.grade, "REJECT");
+  });
+});
+
+describe("OG — unverified chain Greeks cannot influence options ranking", () => {
+  const staleOf = (s: Snapshot) => ({ ...s, sources: { ...s.sources, optionChain: { ...s.sources.optionChain, source: "STALE" } } }) as Snapshot;
+  const scramble = (s: Snapshot, seed: number) => ({
+    ...s,
+    chain: s.chain.map((r, i) => ({
+      ...r,
+      call: { ...r.call, delta: ((i * 37 + seed) % 97) / 100, iv: 5 + ((i * 13 + seed) % 60) },
+      put: { ...r.put, delta: -((i * 53 + seed) % 97) / 100, iv: 5 + ((i * 29 + seed) % 60) },
+    })),
+  }) as Snapshot;
+  const view = (s: Snapshot) => evaluateOptionsOpportunity(s, "NIFTY", FIXTURE_NOW).topOpportunities.map((c) => [c.strike, c.optionType, c.opportunityScore, c.grade, c.rr]);
+
+  it("OG-01: scrambling chain delta/IV leaves candidates, order, scores and grades identical when the chain is unverified", () => {
+    const base = staleOf(bullishSnapshot());
+    const ref = view(base);
+    assert.ok(ref.length > 0, "fixture produces candidates");
+    for (const seed of [1, 7, 42, 99]) assert.deepEqual(view(scramble(base, seed)), ref, `seed ${seed}`);
+  });
+
+  it("OG-02: the same scrambling DOES change results when the chain is verified LIVE (the test is sensitive)", () => {
+    const live = bullishSnapshot();
+    const ref = view(live);
+    assert.ok([1, 7, 42, 99].some((seed) => JSON.stringify(view(scramble(live, seed))) !== JSON.stringify(ref)));
+  });
+
+  it("OG-03: unverified chain → every candidate REJECT, with the exclusion stated", () => {
+    const r = evaluateOptionsOpportunity(staleOf(bullishSnapshot()), "NIFTY", FIXTURE_NOW);
+    for (const c of r.topOpportunities) {
+      assert.equal(c.grade, "REJECT");
+      assert.equal(c.scoreBreakdown.delta, 0);
+      assert.equal(c.scoreBreakdown.iv_attractiveness, 0);
+      assert.equal(c.scoreBreakdown.expected_move_fit, 0);
+      assert.ok(c.reasons.some((x) => /unverified/.test(x)));
+    }
   });
 });

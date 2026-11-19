@@ -3,7 +3,7 @@
 //   membership from the NSE Indices constituent CSVs, instrument keys validated against the current
 //   Upstox NSE instrument master. Re-run the script after any index rebalance or corporate action.
 import type { IndexId } from "../types.ts";
-import { BANK_NIFTY, NIFTY_50 } from "./breadthConstituents.generated.ts";
+import { BANK_NIFTY, BANKEX, FIN_NIFTY, MIDCAP_SELECT, NIFTY_50, SENSEX } from "./breadthConstituents.generated.ts";
 
 export { GENERATED_AT as CONSTITUENTS_GENERATED_AT } from "./breadthConstituents.generated.ts";
 
@@ -26,4 +26,9 @@ export const BANK_NIFTY_CONSTITUENTS: ConstituentMeta[] = BANK_NIFTY.map(({ symb
 export const INDEX_CONSTITUENTS: Record<IndexId, ConstituentMeta[]> = {
   nifty: NIFTY_50_CONSTITUENTS,
   banknifty: BANK_NIFTY_CONSTITUENTS,
+  finnifty: FIN_NIFTY.map(({ symbol, name, instrumentKey }) => ({ symbol, name, instrumentKey })),
+  midcpnifty: MIDCAP_SELECT.map(({ symbol, name, instrumentKey }) => ({ symbol, name, instrumentKey })),
+  // Empty until scripts/constituents/{sensex,bankex}.txt exist (BSE blocks automated download) → breadth UNAVAILABLE.
+  sensex: SENSEX.map(({ symbol, name, instrumentKey }) => ({ symbol, name, instrumentKey })),
+  bankex: BANKEX.map(({ symbol, name, instrumentKey }) => ({ symbol, name, instrumentKey })),
 };

@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { fmtIst, marketStatus } from "@/lib/time";
 import { Badge, num, signed } from "./ui";
 
-const REFRESH_MS = 5 * 60_000;
 
 export interface Ticker {
   name: string;
@@ -24,21 +23,19 @@ export function TopBar({
   tickers: Ticker[];
   generatedAt: string;
   dataLabel: string;
-  upstoxStatus: "VALID" | "EXPIRED" | "MISSING" | "INVALID" | "UNKNOWN";
+  upstoxStatus: "VERIFIED_CONNECTED" | "CONFIGURED_UNVERIFIED" | "VERIFICATION_FAILED" | "EXPIRED" | "MISSING" | "INVALID" | "UNKNOWN";
 }) {
-  const router = useRouter();
   const [now, setNow] = useState<Date | null>(null); // null on the server: avoids a hydration mismatch
 
+  // Only the local clock ticks here. Market data is never re-fetched on a timer: every Upstox request must be
+  // deliberate (the Refresh data button). A timer re-running the server data loading would make live calls
+  // in the background, outside any approval.
   useEffect(() => {
     const tick = () => setNow(new Date());
     tick();
     const clock = setInterval(tick, 1000);
-    const refresh = setInterval(() => router.refresh(), REFRESH_MS);
-    return () => {
-      clearInterval(clock);
-      clearInterval(refresh);
-    };
-  }, [router]);
+    return () => clearInterval(clock);
+  }, []);
 
   const status = now ? marketStatus(now) : null;
 
@@ -66,13 +63,17 @@ export function TopBar({
         <span className="flex items-center gap-1">
           <RefreshCw size={12} aria-hidden /> {fmtIst(generatedAt)}
         </span>
-        <Badge tone={dataLabel === "LIVE DATA" ? "neutral" : "warn"}>{dataLabel}</Badge>
-        {upstoxStatus === "VALID" ? (
+        <Link href="/system-health#data-sources" title="Which inputs are live, stale, mock or unavailable" className="inline-flex min-h-[24px] items-center rounded py-1">
+          <Badge tone={dataLabel === "LIVE DATA" || dataLabel === "END OF DAY" ? "neutral" : "warn"}>{dataLabel}{dataLabel !== "LIVE DATA" && dataLabel !== "END OF DAY" ? " — why?" : ""}</Badge>
+        </Link>
+        {upstoxStatus === "VERIFIED_CONNECTED" ? (
           <span className="text-emerald-400">● Upstox Connected</span>
+        ) : upstoxStatus === "CONFIGURED_UNVERIFIED" ? (
+          <span className="text-amber-400" title="A credential is configured but no verification request has succeeded yet">◐ Upstox Not Verified</span>
         ) : (
           <span className="flex items-center gap-2">
             <span className={upstoxStatus === "MISSING" ? "text-zinc-400" : "text-amber-400"}>
-              {upstoxStatus === "MISSING" ? "○ Upstox Not Connected" : "⚠ Upstox Session Expired"}
+              {upstoxStatus === "MISSING" ? "○ Upstox Not Connected" : upstoxStatus === "VERIFICATION_FAILED" ? "⚠ Upstox Verification Failed" : upstoxStatus === "UNKNOWN" ? "⚠ Upstox Status Unknown" : "⚠ Upstox Session Expired"}
             </span>
             {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- API route redirecting to Upstox needs a full page load */}
             <a href="/api/auth/login" className="rounded bg-zinc-100 px-2 py-0.5 font-semibold text-zinc-900 hover:bg-white">

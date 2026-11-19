@@ -1,0 +1,9 @@
+# G3 — new files only (apply-ready). Review before applying.
+NEW src/lib/ops/collectionAge.ts
+NEW src/lib/ops/collectionAge.test.ts
+NEW src/lib/ops/structuredLog.ts
+NEW src/lib/ops/structuredLog.test.ts
+NEW src/lib/ops/authLogging.test.ts
+NEW src/app/saved-picks/savedPicks.dom.test.tsx
+NEW src/types/jsdom.d.ts
+NEW src/instrumentation.ts

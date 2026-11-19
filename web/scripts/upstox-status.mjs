@@ -1,3 +1,6 @@
+import { assertCollectionAuthorized } from "./lib/collectionGuard.mjs";
+assertCollectionAuthorized("upstox-status.mjs", "upstox");
+
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { BASE, fmtExpiry, getJson, serverUp } from "./upstox-cli.mjs";
@@ -11,7 +14,7 @@ if (!(await serverUp())) {
       const isExpired = new Date() >= new Date(data.expiresAt);
       console.log("Token File (Disk Check)");
       console.log("=======================");
-      console.log(`Token Status: ${isExpired ? "EXPIRED" : "VALID (on disk)"}`);
+      console.log(`Token Status: ${isExpired ? "EXPIRED" : "VALID (on disk) — expiry date only, NOT confirmed with Upstox; start the server for a verified check"}`);
       console.log(`Expires At:   ${fmtExpiry(data.expiresAt)}`);
       if (isExpired) console.log("\nTo refresh token: start server ('npm run dev:upstox') and run 'npm run upstox:login'");
     } else {

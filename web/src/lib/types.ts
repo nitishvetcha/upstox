@@ -1,4 +1,4 @@
-export type IndexId = "nifty" | "banknifty";
+export type IndexId = "nifty" | "banknifty" | "finnifty" | "midcpnifty" | "sensex" | "bankex";
 
 // Where a piece of data came from. UNAVAILABLE = not produced yet (e.g. candle indicators before Phase 3).
 export type DataSource = "LIVE" | "MOCK" | "END_OF_DAY" | "STALE" | "UNAVAILABLE";
@@ -16,7 +16,9 @@ export type FallbackReason =
   | "UPSTOX_BAD_RESPONSE"
   | "UPSTOX_EMPTY_CHAIN"
   | "UPSTOX_NO_EXPIRY"
-  | "UPSTOX_INVALID_INSTRUMENT";
+  | "UPSTOX_INVALID_INSTRUMENT"
+  | "UPSTOX_NOT_FOUND"
+  | "UPSTOX_QUOTE_MISSING";
 
 export interface SourceInfo {
   source: DataSource;
@@ -40,6 +42,22 @@ export interface Quote {
   /** Upstox canonical instrument key for this option side (e.g. NSE_FO|NIFTY06OCT2026CE22700).
    *  null when the chain does not provide one (backtest/mock). Never constructed — must come from the source. */
   instrumentKey?: string | null;
+  /** Exchange trade time for this individual contract side (ISO string). Null when absent/unverified. */
+  lastTradeTime?: string | null;
+  /** Independently fetched contract LTP. It never replaces the chain LTP above. */
+  independentQuoteLtp?: number | null;
+  ltpDiscrepancy?: number | null;
+  ltpConsistent?: boolean | null;
+  contractPriceQuality?: import("./services/optionPriceVerification.ts").ContractPriceQuality;
+  /** Full Quotes V3 fields. Null means the provider did not supply a usable value. */
+  previousOi?: number | null;
+  /** Local receipt bound for the REST snapshot; never an exchange update timestamp. */
+  quoteResponseTime?: string | null;
+  analyticsProvenance?: "UPSTOX_FULL_QUOTES_V3_BOUNDED_REST_SNAPSHOT" | "UNAVAILABLE";
+  oiAnalyticsAvailable?: boolean;
+  volumeAnalyticsAvailable?: boolean;
+  ivProvenance?: "VENDOR_REPORTED_UNVERIFIED" | "INDEPENDENTLY_DERIVED" | "VERIFIED" | "UNAVAILABLE";
+  greeksProvenance?: "VENDOR_REPORTED_UNVERIFIED" | "INDEPENDENTLY_DERIVED" | "VERIFIED" | "UNAVAILABLE";
 }
 
 export interface OptionRow {
@@ -98,8 +116,10 @@ export interface Candle {
 export interface CandleSeries {
   index: IndexId;
   timeframe: Timeframe;
-  candles: Candle[]; // oldest first
+  candles: Candle[]; // oldest first; completed candles only (B5)
   source: SourceInfo;
+  unavailableReason?: string | null; // why the series is UNAVAILABLE (B5)
+  reasonCode?: import("./services/candleFreshness.ts").TechnicalReasonCode | null;
 }
 
 export interface TechnicalAnalysis {
@@ -207,7 +227,8 @@ export interface NewsEvent {
 
 export interface NewsSentiment {
   index: IndexId;
-  status: "LIVE" | "AGING" | "STALE" | "UNAVAILABLE";
+  // MOCK: simulated headlines served in mock mode. Never LIVE, never an input to a live recommendation.
+  status: "LIVE" | "AGING" | "STALE" | "UNAVAILABLE" | "MOCK";
   reason: string | null;
   score: number; // -1..1, weighted by relevance × freshness × confidence
   overall: "BULLISH" | "BEARISH" | "NEUTRAL";
@@ -254,7 +275,7 @@ export interface ConstituentQuote {
 
 export interface MarketBreadth {
   index: IndexId;
-  status: "LIVE" | "PARTIAL" | "END_OF_DAY" | "STALE" | "UNAVAILABLE";
+  status: "LIVE" | "PARTIAL" | "END_OF_DAY" | "STALE" | "UNAVAILABLE" | "MOCK";
   advances: number;
   declines: number;
   unchanged: number;
@@ -293,6 +314,10 @@ export interface Snapshot {
   technical: TechnicalAnalysis | null; // real-candle analysis (null in mock mode or when candles are unavailable)
   sources: Record<Subsystem, SourceInfo>;
   fallbackReason: FallbackReason | null;
+  optionPriceVerification?: import("./services/optionPriceVerification.ts").OptionPriceVerificationSummary;
+  chainFreshness?: import("./services/chainFreshness.ts").ChainFreshness;
+  technicalReasonCode?: import("./services/candleFreshness.ts").TechnicalReasonCode | null; // why technicals are unavailable (B5)
+  technicalReason?: string | null;
 }
 
 // --- Provider contract (mock and Upstox implement it) ---
@@ -312,6 +337,7 @@ export interface OptionChain {
   lotSize?: number | null;
   rows: OptionRow[]; // full chain for the expiry, sorted by strike
   source: SourceInfo;
+  optionPriceVerification?: import("./services/optionPriceVerification.ts").OptionPriceVerificationSummary;
 }
 
 export interface Technicals {
@@ -321,6 +347,7 @@ export interface Technicals {
   analysis: TechnicalAnalysis | null;
   source: SourceInfo;
   unavailableReason?: string; // why technical data is UNAVAILABLE (never a secret)
+  reasonCode?: import("./services/candleFreshness.ts").TechnicalReasonCode | null;
 }
 
 export interface MarketDataProvider {

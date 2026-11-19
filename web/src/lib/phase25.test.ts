@@ -207,11 +207,12 @@ describe("Phase 25 — Multi-Session Evidence & Pipeline Integrity", () => {
 
   // 5. Lifecycle & Terminal State Integrity
   it("P25-05: Terminal states remain immutable upon repeated monitoring calls", () => {
+    const AT = "2026-10-06T05:00:00.000Z"; // fixed clock: fixtures expire 2026-10-15
     const opp = makeTestOpp();
     savePaperOpportunity(opp);
 
     // Trigger T1 HIT
-    const eval1 = evaluatePaperOpportunity(opp, { currentPrice: 135 });
+    const eval1 = evaluatePaperOpportunity(opp, { currentPrice: 135, timestamp: AT });
     assert.equal(eval1.transitioned, true);
     assert.equal(eval1.toStatus, "TARGET1_HIT");
 
@@ -219,7 +220,7 @@ describe("Phase 25 — Multi-Session Evidence & Pipeline Integrity", () => {
     assert.equal(saved1.status, "TARGET1_HIT");
 
     // Repeated call with higher price must NOT transition again or alter entry snapshot
-    const eval2 = evaluatePaperOpportunity(saved1, { currentPrice: 170 });
+    const eval2 = evaluatePaperOpportunity(saved1, { currentPrice: 170, timestamp: AT });
     assert.equal(eval2.transitioned, false);
     assert.equal(eval2.reason, "already terminal");
 
@@ -242,13 +243,14 @@ describe("Phase 25 — Multi-Session Evidence & Pipeline Integrity", () => {
 
   // 7. Correct Realized R and Profit Factor calculations
   it("P25-07: Calculates realized R, MFE/MAE R, and profit factor correctly for mixed outcomes", () => {
+    const AT = "2026-10-06T05:00:00.000Z"; // fixed clock: fixtures expire 2026-10-15
     const o1 = makeTestOpp({ entry: 100, stop: 80, target1: 130, target2: 160 }); // risk = 20
     savePaperOpportunity(o1);
-    evaluatePaperOpportunity(o1, { currentPrice: 130 }); // T1 hit -> PnL = 30, R = +1.5
+    evaluatePaperOpportunity(o1, { currentPrice: 130, timestamp: AT }); // T1 hit -> PnL = 30, R = +1.5
 
     const o2 = makeTestOpp({ entry: 100, stop: 80, target1: 130, target2: 160 }); // risk = 20
     savePaperOpportunity(o2);
-    evaluatePaperOpportunity(o2, { currentPrice: 75 }); // Stop hit -> PnL = -25, R = -1.25 (since stop is 80, exit price 75)
+    evaluatePaperOpportunity(o2, { currentPrice: 75, timestamp: AT }); // Stop hit -> PnL = -25, R = -1.25 (since stop is 80, exit price 75)
 
     const opps = listPaperOpportunities();
     const summary = buildMultiSessionSummary([], opps);

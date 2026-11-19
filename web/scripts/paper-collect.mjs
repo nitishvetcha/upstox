@@ -1,13 +1,14 @@
 // npm run paper:collect — one live collection cycle, then exit.
-import { BASE, getJson, serverUp } from "./upstox-cli.mjs";
+import { BASE, getJson, serverUp, requireOperatorHeaders } from "./upstox-cli.mjs";
 
+const AUTH = requireOperatorHeaders();
 if (!(await serverUp())) {
   console.log(`Server not running at ${BASE}. Start with: npm run dev:upstox`);
   process.exit(1);
 }
 
 console.log("Running one live collection cycle...\n");
-const result = await fetch(`${BASE}/api/paper-opportunities/collect`, { method: "POST" })
+const result = await fetch(`${BASE}/api/paper-opportunities/collect`, { method: "POST", headers: AUTH })
   .then((r) => r.json())
   .catch((e) => ({ error: e.message }));
 

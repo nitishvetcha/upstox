@@ -3,9 +3,28 @@
 import { execFile } from "node:child_process";
 
 export const PORT = process.env.PORT ?? "3123";
-export const BASE = `http://localhost:${PORT}`;
-export const LOGIN_URL = `${BASE}/api/auth/login`;
+// 127.0.0.1, not "localhost": the dev server listens on loopback only, and "localhost" can resolve to IPv6 ::1.
+export const BASE = `http://127.0.0.1:${PORT}`;
+// Upstox OAuth start. (/api/auth/login is the operator login, POST only; it is not the Upstox login.)
+export const LOGIN_URL = `${BASE}/api/auth/upstox/start`;
 export const LINE = "=".repeat(40);
+
+// Operator token for POSTs to the protected paper routes. Read from the environment only and never printed.
+// Same rule as the server (src/lib/operatorSession.ts): at least 32 characters.
+export function operatorHeadersFrom(env) {
+  const token = env.OPERATOR_TOKEN ?? "";
+  if (token.length < 32) throw new Error("OPERATOR_TOKEN is missing or shorter than 32 characters. Set it in the environment and run again.");
+  return { Authorization: `Bearer ${token}` };
+}
+
+export function requireOperatorHeaders() {
+  try {
+    return operatorHeadersFrom(process.env);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+}
 
 export async function getJson(path, timeoutMs = 60_000) {
   const res = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(timeoutMs) });

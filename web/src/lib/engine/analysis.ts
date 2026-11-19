@@ -21,14 +21,14 @@ function binary(checks: [boolean, string, string][]) {
 function rawFactors(s: Snapshot, m: ChainMetrics) {
   const i = s.indicators;
 
-  const trend: Computed = i
+  // F-R1 fix: without EMA 200 the trend factor is UNAVAILABLE as a whole (not scored on three votes). The engine's
+  // existing missing-factor rule then blocks the trade. strategy.ts is not changed.
+  const trend: Computed = i && i.ema200 !== null
     ? binary([
         [i.ema9 > i.ema21, "EMA 9 above EMA 21", "EMA 9 below EMA 21"],
         [i.ema21 > i.ema50, "EMA 21 above EMA 50", "EMA 21 below EMA 50"],
         [s.spot > i.ema50, "Price above EMA 50", "Price below EMA 50"],
-        ...(i.ema200 === null
-          ? []
-          : [[i.ema50 > i.ema200, "EMA 50 above EMA 200 (long-term uptrend)", "EMA 50 below EMA 200 (long-term downtrend)"] as [boolean, string, string]]),
+        [i.ema50 > i.ema200, "EMA 50 above EMA 200 (long-term uptrend)", "EMA 50 below EMA 200 (long-term downtrend)"],
       ])
     : null;
 

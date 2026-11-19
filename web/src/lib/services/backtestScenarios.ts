@@ -5,6 +5,7 @@ import type { HistoricalContext } from "./historicalContext.ts";
 import { BacktestEngine } from "../backtestEngine.ts";
 import { buildPerformanceReport } from "./performance/report.ts";
 import type { Metric } from "./performance/metrics.ts";
+import { performanceClaimOf } from "../backtestTiming.ts";
 
 export const CAPITAL_SCENARIOS = [100_000, 200_000, 500_000, 1_000_000, 2_500_000, 5_000_000];
 export const CAPITAL_NOTE = "Capital scenario analysis is descriptive. It does not optimize or recommend account size.";
@@ -16,6 +17,8 @@ export function summaryRow(r: BacktestResult) {
     runId: r.runId,
     capital: r.config.startingCapital,
     executionModel: r.execution.model,
+    performanceClaim: performanceClaimOf(r.execution.model),
+    optionPrices: r.dataQuality.optionData,
     flattenOnDailyLossLimit: r.execution.flattenOnDailyLossLimit,
     trades: p.core.totalTrades,
     wins: p.core.winningTrades,
@@ -30,6 +33,7 @@ export function summaryRow(r: BacktestResult) {
     sharpe: p.ratios.sharpe.annualized,
     sortino: p.ratios.sortino.annualized,
     grossPnL: r.costSummary?.grossPnL ?? null,
+    slippage: r.costSummary?.slippage ?? null,
     transactionCosts: r.costSummary?.modeled ? r.costSummary.totalCosts : "NOT MODELED",
     dataModel: r.metadata?.dataModel ?? "PHASE9_LEGACY",
     dataQuality: r.scorecard ? Object.fromEntries(Object.entries(r.scorecard).map(([k, v]) => [k, v.quality])) : null,

@@ -44,3 +44,9 @@ next-env.d.ts
 # Upstox access token (server-side store) & test data stores
 /.data
 /.test-data
+/.next-verify/
+
+# Build verification outputs and playwright artefacts (approved 2026-11-08)
+/.next-*/
+/playwright-report/
+/test-results/

@@ -1,0 +1,12 @@
+# G2 v2 — new files only, index-validated. Review before applying.
+NEW web/src/lib/services/paperOpportunityProvenance.ts
+NEW web/src/lib/services/paperOpportunityProvenance.test.ts
+NEW web/src/lib/services/paperOpportunityOpen.ts
+NEW web/src/lib/services/paperOpportunityOpen.test.ts
+NEW web/src/lib/services/paperOpportunityOpenReason.test.ts
+NEW web/src/lib/services/paperOpenDeps.ts
+NEW web/src/lib/services/paperRouteAuth.test.ts
+NEW web/src/lib/services/providerFallback.test.ts
+NEW web/src/lib/integration/openRoute.integration.ts
+NEW web/src/lib/integration/openRouteSuccess.integration.ts
+NEW web/src/app/api/paper-opportunities/[id]/open/route.ts

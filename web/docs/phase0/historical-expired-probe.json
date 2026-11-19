@@ -1,0 +1,243 @@
+{
+  "checkedAt": "2026-11-12T06:35:38.515Z",
+  "requestsUsed": 18,
+  "maxRequests": 18,
+  "stopped": null,
+  "note": "metadata only; no token, no raw candles",
+  "indices": [
+    {
+      "index": "NIFTY",
+      "underlyingKey": "NSE_INDEX|Nifty 50",
+      "expiriesCall": {
+        "httpStatus": 200,
+        "latencyMs": 102,
+        "errorCode": null,
+        "message": null
+      },
+      "expiryChosen": "2026-11-09",
+      "expiriesReturned": 111,
+      "contractsCall": {
+        "httpStatus": 200,
+        "latencyMs": 50,
+        "errorCode": null,
+        "message": null
+      },
+      "contract": {
+        "expiredInstrumentKey": "NSE_FO|39947|09-11-2026",
+        "strike": 23700,
+        "lotSize": 65,
+        "ceRowsReturned": 147
+      },
+      "candlesCall": {
+        "httpStatus": 200,
+        "latencyMs": 46,
+        "errorCode": null,
+        "message": null
+      },
+      "candles": {
+        "count": 55,
+        "fieldsPerCandle": 7,
+        "firstTimestamp": "2026-11-09T15:15:00+05:30",
+        "lastTimestamp": "2026-11-04T09:15:00+05:30",
+        "oiPresent": 55,
+        "oiNonZero": 55,
+        "volumePresent": 55
+      }
+    },
+    {
+      "index": "BANKNIFTY",
+      "underlyingKey": "NSE_INDEX|Nifty Bank",
+      "expiriesCall": {
+        "httpStatus": 200,
+        "latencyMs": 41,
+        "errorCode": null,
+        "message": null
+      },
+      "expiryChosen": "2026-10-27",
+      "expiriesReturned": 31,
+      "contractsCall": {
+        "httpStatus": 200,
+        "latencyMs": 204,
+        "errorCode": null,
+        "message": null
+      },
+      "contract": {
+        "expiredInstrumentKey": "NSE_FO|49473|27-10-2026",
+        "strike": 56300,
+        "lotSize": 30,
+        "ceRowsReturned": 161
+      },
+      "candlesCall": {
+        "httpStatus": 200,
+        "latencyMs": 49,
+        "errorCode": null,
+        "message": null
+      },
+      "candles": {
+        "count": 52,
+        "fieldsPerCandle": 7,
+        "firstTimestamp": "2026-10-27T15:15:00+05:30",
+        "lastTimestamp": "2026-10-22T09:15:00+05:30",
+        "oiPresent": 52,
+        "oiNonZero": 52,
+        "volumePresent": 52
+      }
+    },
+    {
+      "index": "FINNIFTY",
+      "underlyingKey": "NSE_INDEX|Nifty Fin Service",
+      "expiriesCall": {
+        "httpStatus": 200,
+        "latencyMs": 46,
+        "errorCode": null,
+        "message": null
+      },
+      "expiryChosen": "2026-10-27",
+      "expiriesReturned": 32,
+      "contractsCall": {
+        "httpStatus": 200,
+        "latencyMs": 70,
+        "errorCode": null,
+        "message": null
+      },
+      "contract": {
+        "expiredInstrumentKey": "NSE_FO|60393|27-10-2026",
+        "strike": 25150,
+        "lotSize": 60,
+        "ceRowsReturned": 135
+      },
+      "candlesCall": {
+        "httpStatus": 200,
+        "latencyMs": 55,
+        "errorCode": null,
+        "message": null
+      },
+      "candles": {
+        "count": 52,
+        "fieldsPerCandle": 7,
+        "firstTimestamp": "2026-10-27T15:15:00+05:30",
+        "lastTimestamp": "2026-10-22T09:15:00+05:30",
+        "oiPresent": 52,
+        "oiNonZero": 52,
+        "volumePresent": 52
+      }
+    },
+    {
+      "index": "MIDCPNIFTY",
+      "underlyingKey": "NSE_INDEX|NIFTY MID SELECT",
+      "expiriesCall": {
+        "httpStatus": 200,
+        "latencyMs": 40,
+        "errorCode": null,
+        "message": null
+      },
+      "expiryChosen": "2026-10-27",
+      "expiriesReturned": 32,
+      "contractsCall": {
+        "httpStatus": 200,
+        "latencyMs": 260,
+        "errorCode": null,
+        "message": null
+      },
+      "contract": {
+        "expiredInstrumentKey": "NSE_FO|50721|27-10-2026",
+        "strike": 13800,
+        "lotSize": 120,
+        "ceRowsReturned": 179
+      },
+      "candlesCall": {
+        "httpStatus": 200,
+        "latencyMs": 42,
+        "errorCode": null,
+        "message": null
+      },
+      "candles": {
+        "count": 52,
+        "fieldsPerCandle": 7,
+        "firstTimestamp": "2026-10-27T15:15:00+05:30",
+        "lastTimestamp": "2026-10-22T09:15:00+05:30",
+        "oiPresent": 52,
+        "oiNonZero": 52,
+        "volumePresent": 52
+      }
+    },
+    {
+      "index": "SENSEX",
+      "underlyingKey": "BSE_INDEX|SENSEX",
+      "expiriesCall": {
+        "httpStatus": 200,
+        "latencyMs": 39,
+        "errorCode": null,
+        "message": null
+      },
+      "expiryChosen": "2026-11-05",
+      "expiriesReturned": 109,
+      "contractsCall": {
+        "httpStatus": 200,
+        "latencyMs": 66,
+        "errorCode": null,
+        "message": null
+      },
+      "contract": {
+        "expiredInstrumentKey": "BSE_FO|1134247|05-11-2026",
+        "strike": 73700,
+        "lotSize": 20,
+        "ceRowsReturned": 182
+      },
+      "candlesCall": {
+        "httpStatus": 200,
+        "latencyMs": 46,
+        "errorCode": null,
+        "message": null
+      },
+      "candles": {
+        "count": 52,
+        "fieldsPerCandle": 7,
+        "firstTimestamp": "2026-11-05T15:15:00+05:30",
+        "lastTimestamp": "2026-11-02T09:15:00+05:30",
+        "oiPresent": 52,
+        "oiNonZero": 52,
+        "volumePresent": 52
+      }
+    },
+    {
+      "index": "BANKEX",
+      "underlyingKey": "BSE_INDEX|BANKEX",
+      "expiriesCall": {
+        "httpStatus": 200,
+        "latencyMs": 49,
+        "errorCode": null,
+        "message": null
+      },
+      "expiryChosen": "2026-10-29",
+      "expiriesReturned": 32,
+      "contractsCall": {
+        "httpStatus": 200,
+        "latencyMs": 275,
+        "errorCode": null,
+        "message": null
+      },
+      "contract": {
+        "expiredInstrumentKey": "BSE_FO|878229|29-10-2026",
+        "strike": 63100,
+        "lotSize": 30,
+        "ceRowsReturned": 158
+      },
+      "candlesCall": {
+        "httpStatus": 200,
+        "latencyMs": 45,
+        "errorCode": null,
+        "message": null
+      },
+      "candles": {
+        "count": 15,
+        "fieldsPerCandle": 7,
+        "firstTimestamp": "2026-10-29T15:15:00+05:30",
+        "lastTimestamp": "2026-10-28T14:45:00+05:30",
+        "oiPresent": 15,
+        "oiNonZero": 15,
+        "volumePresent": 15
+      }
+    }
+  ]
+}

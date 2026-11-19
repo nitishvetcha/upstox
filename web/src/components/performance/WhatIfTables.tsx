@@ -2,7 +2,7 @@
 
 type M = { value: number | null; reason: string | null };
 type Row = {
-  runId: string; capital: number; executionModel: string; flattenOnDailyLossLimit: boolean; trades: number; wins: number; losses: number;
+  runId: string; capital: number; executionModel: string; performanceClaim: string; optionPrices: string; grossPnL: number | null; slippage: number | null; transactionCosts: number | string; flattenOnDailyLossLimit: boolean; trades: number; wins: number; losses: number;
   winRate: M; netPnL: number; returnPercent: number; profitFactor: M; expectancy: M; averageR: M; maxDrawdownPercent: number; sharpe: M;
   positionSizeRejections: number; riskRejections: number; dailyLossFlattens: number; feasibility: string;
 };
@@ -13,7 +13,9 @@ export type WhatIf =
 const m = (x: M) => (x.value === null ? "NOT AVAILABLE" : x.value.toLocaleString("en-IN"));
 const inr = (v: number) => `${v < 0 ? "−" : ""}₹${Math.abs(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 const cols: [string, (r: Row) => string | number][] = [
-  ["Trades", (r) => r.trades], ["Wins", (r) => r.wins], ["Losses", (r) => r.losses], ["Win rate", (r) => m(r.winRate)], ["Net P&L", (r) => inr(r.netPnL)],
+  ["Performance claim", (r) => r.performanceClaim], ["Option prices", (r) => r.optionPrices], ["Trades", (r) => r.trades], ["Wins", (r) => r.wins], ["Losses", (r) => r.losses], ["Win rate", (r) => m(r.winRate)],
+  ["Gross P&L (before slippage and costs)", (r) => (r.grossPnL === null ? "NOT AVAILABLE" : inr(r.grossPnL))], ["Slippage", (r) => (r.slippage === null ? "NOT AVAILABLE" : inr(r.slippage))],
+  ["Transaction costs", (r) => (typeof r.transactionCosts === "number" ? inr(r.transactionCosts) : r.transactionCosts)], ["Net P&L (after all costs)", (r) => inr(r.netPnL)],
   ["Return", (r) => `${r.returnPercent}%`], ["Profit factor", (r) => m(r.profitFactor)], ["Expectancy", (r) => m(r.expectancy)], ["Avg R", (r) => m(r.averageR)],
   ["Max DD", (r) => `${r.maxDrawdownPercent}%`], ["Sharpe", (r) => m(r.sharpe)], ["Position-size rejections", (r) => r.positionSizeRejections], ["Risk rejections", (r) => r.riskRejections],
 ];
@@ -26,7 +28,7 @@ export function WhatIfTables({ w }: { w: WhatIf }) {
       <p className="mb-2 text-zinc-300">
         {w.kind === "scenarios"
           ? `${w.data.note} Minimum capital for one lot: ${w.data.feasibility?.minimumCapitalForOneLot ? `${inr(w.data.feasibility.minimumCapitalForOneLot.min)} (cheapest signal) – ${inr(w.data.feasibility.minimumCapitalForOneLot.median)} (median signal)` : "not measurable"}.`
-          : `Execution sensitivity: ${w.data.sensitivity} (return difference ${w.data.returnDifferencePp} pp; HIGH > ${w.data.thresholds.highReturnDiffPp} pp or P&L sign flip, MODERATE > ${w.data.thresholds.moderateReturnDiffPp} pp). Same candles, config and strategy; only execution differs.`}
+          : `Execution sensitivity: ${w.data.sensitivity} (return difference ${w.data.returnDifferencePp} pp; HIGH > ${w.data.thresholds.highReturnDiffPp} pp or P&L sign flip, MODERATE > ${w.data.thresholds.moderateReturnDiffPp} pp). Same candles, config and strategy; only execution differs. Option prices are model-derived (synthetic) in both columns. CLOSE_ONLY performance claims are disabled; INTRABAR is research only.`}
       </p>
       <div className="overflow-x-auto">
         <table className="w-full font-mono text-xs">

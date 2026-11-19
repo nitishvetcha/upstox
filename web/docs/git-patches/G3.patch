@@ -1,0 +1,393 @@
+diff --git a/src/lib/ops/collectionAge.ts b/src/lib/ops/collectionAge.ts
+new file mode 100644
+index 00000000..5edafd16
+--- /dev/null
++++ b/src/lib/ops/collectionAge.ts
+@@ -0,0 +1,11 @@
++// Age label for the last stored stock-collection run. Pure: the caller passes `now` (epoch ms).
++// Behaviour is unchanged from the OpsPanel rule: under 24 hours shows hours; 24 hours or more is labelled STALE.
++export interface CollectionAgeDisplay { text: string; stale: boolean; known: boolean }
++
++export function collectionAgeDisplay(lastCollectionAt: string | null | undefined, now: number): CollectionAgeDisplay {
++  const t = lastCollectionAt ? Date.parse(lastCollectionAt) : NaN;
++  if (!Number.isFinite(t)) return { text: "no collection run recorded", stale: false, known: false };
++  const hours = (now - t) / 3_600_000;
++  if (hours < 24) return { text: `${Math.round(hours)} h ago`, stale: false, known: true };
++  return { text: `${Math.round(hours / 24)} days ago — STALE (stored run, not current prices)`, stale: true, known: true };
++}
+diff --git a/src/lib/ops/collectionAge.test.ts b/src/lib/ops/collectionAge.test.ts
+new file mode 100644
+index 00000000..d812bd3f
+--- /dev/null
++++ b/src/lib/ops/collectionAge.test.ts
+@@ -0,0 +1,34 @@
++// OpsPanel collection-age rule: under 24 h shows hours and is not stale; 24 h or more is STALE; no run is unknown.
++import test from "node:test";
++import assert from "node:assert/strict";
++import { collectionAgeDisplay } from "./collectionAge.ts";
++
++const NOW = Date.parse("2026-11-13T12:00:00.000Z");
++
++test("under 24 hours: shows hours, not stale", () => {
++  const r = collectionAgeDisplay("2026-11-13T06:00:00.000Z", NOW); // 6 h
++  assert.deepEqual(r, { text: "6 h ago", stale: false, known: true });
++});
++
++test("exactly 24 hours and over: labelled STALE with the existing wording", () => {
++  const r = collectionAgeDisplay("2026-11-12T12:00:00.000Z", NOW); // 24 h
++  assert.equal(r.stale, true);
++  assert.equal(r.text, "1 days ago — STALE (stored run, not current prices)");
++});
++
++test("several days old: rounds to days and stays STALE", () => {
++  const r = collectionAgeDisplay("2026-11-09T12:00:00.000Z", NOW); // 4 days
++  assert.equal(r.text, "4 days ago — STALE (stored run, not current prices)");
++  assert.equal(r.stale, true);
++});
++
++test("no collection run recorded: unknown, not stale", () => {
++  assert.deepEqual(collectionAgeDisplay(null, NOW), { text: "no collection run recorded", stale: false, known: false });
++  assert.equal(collectionAgeDisplay("not a date", NOW).known, false);
++});
++
++test("the result depends only on its inputs (no clock read): same inputs, same output", () => {
++  const a = collectionAgeDisplay("2026-11-13T06:00:00.000Z", NOW);
++  const b = collectionAgeDisplay("2026-11-13T06:00:00.000Z", NOW);
++  assert.deepEqual(a, b);
++});
+diff --git a/src/lib/ops/structuredLog.ts b/src/lib/ops/structuredLog.ts
+new file mode 100644
+index 00000000..9ff277b5
+--- /dev/null
++++ b/src/lib/ops/structuredLog.ts
+@@ -0,0 +1,32 @@
++// Structured, redacted operational log lines (one JSON object per line on stderr/stdout).
++// Redaction runs on every field. Keys that look like credentials and values that look like bearer tokens are removed.
++export type LogLevel = "info" | "warn" | "error";
++
++const SECRET_KEY = /(token|secret|password|passwd|pin|apikey|api_key|authorization|cookie|key)$/i;
++const BEARER = /Bearer\s+[A-Za-z0-9._~+/=-]+/gi;
++
++export function redactValue(v: unknown): unknown {
++  if (typeof v === "string") return v.replace(BEARER, "Bearer [REDACTED]");
++  if (Array.isArray(v)) return v.map(redactValue);
++  if (v && typeof v === "object") {
++    const out: Record<string, unknown> = {};
++    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
++      if (SECRET_KEY.test(k)) out[k] = "[REDACTED]";
++      else out[k] = redactValue(val);
++    }
++    return out;
++  }
++  return v;
++}
++
++// Returns the line that would be written. Pure, so it can be tested without I/O.
++export function formatLogLine(level: LogLevel, event: string, fields: Record<string, unknown> = {}, at = new Date()): string {
++  return JSON.stringify({ at: at.toISOString(), level, event, ...(redactValue(fields) as object) });
++}
++
++export function logEvent(level: LogLevel, event: string, fields: Record<string, unknown> = {}): void {
++  const line = formatLogLine(level, event, fields);
++  if (level === "error") console.error(line);
++  else if (level === "warn") console.warn(line);
++  else console.log(line);
++}
+diff --git a/src/lib/ops/structuredLog.test.ts b/src/lib/ops/structuredLog.test.ts
+new file mode 100644
+index 00000000..98b17bab
+--- /dev/null
++++ b/src/lib/ops/structuredLog.test.ts
+@@ -0,0 +1,33 @@
++// Structured logging: lines are valid JSON, carry the event, and never contain credentials.
++import test from "node:test";
++import assert from "node:assert/strict";
++import { formatLogLine, redactValue } from "./structuredLog.ts";
++
++test("a log line is valid JSON with level, event and time", () => {
++  const line = formatLogLine("info", "paper_open_rejected", { code: "PROVENANCE" }, new Date("2026-11-13T05:00:00.000Z"));
++  const o = JSON.parse(line);
++  assert.equal(o.level, "info");
++  assert.equal(o.event, "paper_open_rejected");
++  assert.equal(o.code, "PROVENANCE");
++  assert.equal(o.at, "2026-11-13T05:00:00.000Z");
++});
++
++test("credential-named keys are redacted at any depth", () => {
++  const r = redactValue({ accessToken: "abc", nested: { operatorPin: "123456", password: "x", apiKey: "k", ok: 1 } }) as Record<string, any>;
++  assert.equal(r.accessToken, "[REDACTED]");
++  assert.equal(r.nested.operatorPin, "[REDACTED]");
++  assert.equal(r.nested.password, "[REDACTED]");
++  assert.equal(r.nested.apiKey, "[REDACTED]");
++  assert.equal(r.nested.ok, 1);
++});
++
++test("bearer tokens inside free text are redacted", () => {
++  const line = formatLogLine("warn", "upstream_error", { detail: "request had Authorization: Bearer eyJhbGciOi.payload-part.sig" });
++  assert.doesNotMatch(line, /eyJhbGciOi/);
++  assert.match(line, /Bearer \[REDACTED\]/);
++});
++
++test("no PIN or token value appears in any formatted line", () => {
++  const line = formatLogLine("error", "ledger_persist_failed", { path: "/x/y.json", pin: "998877", token: "TOKEN-VALUE-XYZ" });
++  assert.doesNotMatch(line, /998877|TOKEN-VALUE-XYZ/);
++});
+diff --git a/src/lib/ops/authLogging.test.ts b/src/lib/ops/authLogging.test.ts
+new file mode 100644
+index 00000000..7e29833c
+--- /dev/null
++++ b/src/lib/ops/authLogging.test.ts
+@@ -0,0 +1,19 @@
++// Authentication refusals are logged without any credential.
++import test from "node:test";
++import assert from "node:assert/strict";
++import { requireOperator } from "../operatorSession.ts";
++
++test("a refused request logs method and path, never the bearer token", () => {
++  const seen: string[] = [];
++  const original = console.warn;
++  console.warn = (...a: unknown[]) => { seen.push(a.map(String).join(" ")); };
++  try {
++    const secret = "SUPER-SECRET-BEARER-VALUE-0123456789abcdefghijkl";
++    const res = requireOperator(new Request("http://localhost/api/paper-trading/enter?x=1", { method: "POST", headers: { Authorization: `Bearer ${secret}` } }), {} as NodeJS.ProcessEnv);
++    assert.equal(res?.status, 401);
++    assert.ok(seen.some((l) => /auth_refused/.test(l) && /\/api\/paper-trading\/enter/.test(l)), "refusal is logged with its path");
++    assert.ok(seen.every((l) => !l.includes(secret)), "no token in any log line");
++  } finally {
++    console.warn = original;
++  }
++});
+diff --git a/src/app/saved-picks/savedPicks.dom.test.tsx b/src/app/saved-picks/savedPicks.dom.test.tsx
+new file mode 100644
+index 00000000..edcad633
+--- /dev/null
++++ b/src/app/saved-picks/savedPicks.dom.test.tsx
+@@ -0,0 +1,204 @@
++// Component tests for the saved-picks page, rendered with React DOM in jsdom. Run with: npm run test:dom
++import test from "node:test";
++import assert from "node:assert/strict";
++import { JSDOM, VirtualConsole } from "jsdom";
++
++const navErrors: string[] = [];
++const vc = new VirtualConsole();
++vc.on("jsdomError", (e: Error) => navErrors.push(e.message));
++const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/saved-picks", virtualConsole: vc });
++const g = globalThis as unknown as Record<string, unknown>;
++g.window = dom.window;
++g.document = dom.window.document;
++g.HTMLElement = dom.window.HTMLElement;
++g.Node = dom.window.Node;
++g.IS_REACT_ACT_ENVIRONMENT = true;
++
++const React = await import("react");
++const { createRoot } = await import("react-dom/client");
++const { default: SavedPicksPage } = await import("./page.tsx");
++const act = (React as unknown as { act: (f: () => Promise<void>) => Promise<void> }).act;
++
++const pause = () => new Promise((r) => setTimeout(r, 0));
++const pick = {
++  id: "p1", savedAt: "2026-11-13T05:00:00.000Z", instrument: "NIFTY 22000 CE", instrumentType: "OPTION", direction: "LONG",
++  entry: 100, stopLoss: 80, targets: [140], source: "RESEARCH", note: "", validation: "NOT VALIDATED", statusLabel: "Saved",
++};
++
++function fetchReply(body: unknown, status = 200) {
++  return async () => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
++}
++
++async function mount() {
++  const container = dom.window.document.createElement("div");
++  dom.window.document.body.appendChild(container);
++  const root = createRoot(container);
++  await act(async () => { root.render(React.createElement(SavedPicksPage)); });
++  return { container, root };
++}
++
++async function settle() {
++  await act(async () => { await pause(); await pause(); });
++}
++
++test("initial mount shows the loading state before the response arrives", async () => {
++  g.fetch = () => new Promise(() => {}); // never resolves
++  const { container, root } = await mount();
++  assert.match(container.textContent ?? "", /Loading saved picks/);
++  await act(async () => root.unmount());
++});
++
++test("successful response renders the saved picks and no error", async () => {
++  g.fetch = fetchReply({ picks: [pick] });
++  const { container, root } = await mount();
++  await settle();
++  assert.match(container.textContent ?? "", /NIFTY 22000 CE/);
++  assert.equal(container.querySelector("[role=alert]"), null);
++  assert.match(container.textContent ?? "", /Showing 1 of 1 saved picks/);
++  await act(async () => root.unmount());
++});
++
++test("empty response shows the empty-state message", async () => {
++  g.fetch = fetchReply({ picks: [] });
++  const { container, root } = await mount();
++  await settle();
++  assert.match(container.textContent ?? "", /No saved picks yet\./);
++  await act(async () => root.unmount());
++});
++
++test("401 response redirects to login with the return path (navigation attempted, no picks shown)", async () => {
++  navErrors.length = 0;
++  g.fetch = fetchReply({ error: "unauthorized" }, 401);
++  const { container, root } = await mount();
++  await settle();
++  assert.ok(navErrors.some((m) => /navigation/i.test(m)), "a navigation to the login page was attempted");
++  assert.doesNotMatch(container.textContent ?? "", /NIFTY 22000 CE/);
++  await act(async () => root.unmount());
++});
++
++test("a non-OK or malformed response shows the exact error message", async () => {
++  g.fetch = fetchReply({ oops: true }, 500);
++  const { container, root } = await mount();
++  await settle();
++  const alert = container.querySelector("[role=alert]");
++  assert.ok(alert, "error alert is shown");
++  assert.equal(alert?.textContent, "Could not load saved picks. The list may be out of date; retry.");
++  await act(async () => root.unmount());
++});
++
++test("a network failure shows the same error message", async () => {
++  g.fetch = async () => { throw new TypeError("network down"); };
++  const { container, root } = await mount();
++  await settle();
++  assert.match(container.querySelector("[role=alert]")?.textContent ?? "", /Could not load saved picks/);
++  await act(async () => root.unmount());
++});
++
++test("unmount before the response cancels the load: no state is applied and nothing throws", async () => {
++  const errors: unknown[] = [];
++  const originalError = console.error;
++  console.error = (...args: unknown[]) => { errors.push(args); };
++  let release: (v: Response) => void = () => {};
++  g.fetch = () => new Promise<Response>((resolve) => { release = resolve; });
++  try {
++    const { container, root } = await mount();
++    await act(async () => root.unmount());
++    release(new Response(JSON.stringify({ picks: [pick] }), { status: 200, headers: { "Content-Type": "application/json" } }));
++    await settle();
++    assert.equal(container.childNodes.length, 0, "unmounted tree is not repopulated");
++    assert.equal(errors.length, 0, "no React warning or error after unmount");
++  } finally {
++    console.error = originalError;
++  }
++});
++
++test("a fresh mount after a failed load recovers the list", async () => {
++  g.fetch = fetchReply({ oops: true }, 500);
++  const first = await mount();
++  await settle();
++  assert.ok(first.container.querySelector("[role=alert]"));
++  assert.ok(clickButton(first.container, /^Retry$/), "a Retry button is shown in the error state");
++  await act(async () => first.root.unmount());
++  g.fetch = fetchReply({ picks: [pick] });
++  const second = await mount();
++  await settle();
++  assert.match(second.container.textContent ?? "", /NIFTY 22000 CE/, "reloading recovers the list");
++  await act(async () => second.root.unmount());
++});
++
++function clickButton(container: HTMLElement, label: RegExp): HTMLButtonElement | null {
++  const buttons = Array.from(container.querySelectorAll("button")) as HTMLButtonElement[];
++  return buttons.find((b) => label.test(b.textContent ?? "")) ?? null;
++}
++async function click(el: HTMLElement) {
++  await act(async () => { el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true })); });
++}
++
++test("Retry button appears only in the error state, and a successful retry shows the list and clears the error", async () => {
++  let calls = 0;
++  g.fetch = async () => { calls++; return calls === 1 ? new Response("{}", { status: 500 }) : new Response(JSON.stringify({ picks: [pick] }), { status: 200, headers: { "Content-Type": "application/json" } }); };
++  const { container, root } = await mount();
++  await settle();
++  assert.ok(container.querySelector("[role=alert]"), "error is shown");
++  const retry = clickButton(container, /^Retry$/);
++  assert.ok(retry, "Retry button is shown in the error state");
++  await click(retry!);
++  await settle();
++  assert.equal(container.querySelector("[role=alert]"), null, "error cleared after a successful retry");
++  assert.match(container.textContent ?? "", /NIFTY 22000 CE/);
++  assert.equal(calls, 2, "exactly one retry request");
++  await act(async () => root.unmount());
++});
++
++test("repeated clicks while a retry is in flight send only one request", async () => {
++  let calls = 0;
++  let release: (r: Response) => void = () => {};
++  g.fetch = () => { calls++; if (calls === 1) return Promise.resolve(new Response("{}", { status: 500 })); return new Promise<Response>((res) => { release = res; }); };
++  const { container, root } = await mount();
++  await settle();
++  const retry = clickButton(container, /^Retry$/)!;
++  await click(retry);
++  await click(clickButton(container, /Retry|Loading/) ?? retry);
++  await click(clickButton(container, /Retry|Loading/) ?? retry);
++  release(new Response(JSON.stringify({ picks: [pick] }), { status: 200, headers: { "Content-Type": "application/json" } }));
++  await settle();
++  assert.equal(calls, 2, "one initial request and one retry request only");
++  await act(async () => root.unmount());
++});
++
++test("while a retry is loading, the Retry button is disabled and the loading row is shown", async () => {
++  let calls = 0;
++  g.fetch = () => { calls++; if (calls === 1) return Promise.resolve(new Response("{}", { status: 500 })); return new Promise<Response>(() => {}); };
++  const { container, root } = await mount();
++  await settle();
++  await click(clickButton(container, /^Retry$/)!);
++  await settle();
++  assert.match(container.textContent ?? "", /Loading saved picks/);
++  const btn = clickButton(container, /Retry/);
++  assert.ok(btn === null || btn.disabled, "button disabled while loading");
++  await act(async () => root.unmount());
++});
++
++test("a failed retry keeps the error message and the Retry button", async () => {
++  g.fetch = async () => new Response("{}", { status: 500 });
++  const { container, root } = await mount();
++  await settle();
++  await click(clickButton(container, /^Retry$/)!);
++  await settle();
++  assert.equal(container.querySelector("[role=alert]")?.textContent, "Could not load saved picks. The list may be out of date; retry.");
++  assert.ok(clickButton(container, /^Retry$/), "Retry is still available");
++  await act(async () => root.unmount());
++});
++
++test("401 on retry still redirects to login (navigation attempted)", async () => {
++  navErrors.length = 0;
++  let calls = 0;
++  g.fetch = async () => { calls++; return calls === 1 ? new Response("{}", { status: 500 }) : new Response("{}", { status: 401 }); };
++  const { container, root } = await mount();
++  await settle();
++  await click(clickButton(container, /^Retry$/)!);
++  await settle();
++  assert.ok(navErrors.some((m) => /navigation/i.test(m)), "redirect to login was attempted on retry");
++  assert.doesNotMatch(container.textContent ?? "", /NIFTY 22000 CE/);
++  await act(async () => root.unmount());
++});
+diff --git a/src/types/jsdom.d.ts b/src/types/jsdom.d.ts
+new file mode 100644
+index 00000000..55ad164d
+--- /dev/null
++++ b/src/types/jsdom.d.ts
+@@ -0,0 +1,2 @@
++// jsdom ships without type declarations. Used only by the saved-picks DOM tests (tsx runner). Not a runtime dependency.
++declare module "jsdom";
+diff --git a/src/instrumentation.ts b/src/instrumentation.ts
+new file mode 100644
+index 00000000..b08eb2a8
+--- /dev/null
++++ b/src/instrumentation.ts
+@@ -0,0 +1,10 @@
++// Next.js instrumentation hook: startup and shutdown events, redacted.
++import { logEvent } from "./lib/ops/structuredLog.ts";
++
++export function register() {
++  if (process.env.NEXT_RUNTIME !== "nodejs") return;
++  logEvent("info", "app_startup", { node: process.version, provider: process.env.MARKET_DATA_PROVIDER ?? "mock" });
++  for (const signal of ["SIGINT", "SIGTERM"] as const) {
++    process.once(signal, () => { logEvent("info", "app_shutdown", { signal }); });
++  }
++}

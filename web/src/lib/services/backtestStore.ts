@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import { dataRoot } from "../dataRoot.ts";
 import type { BacktestResult } from "../backtestTypes.ts";
 
 // The single source of truth for completed backtest runs. Kept on globalThis because Next can load this module once
 // per route bundle; /api/backtest/* and /api/performance/* must share it. Persisted to .data/backtests/<runId>.json
 // so completed runs (e.g. Phase 10 Runs A–D) survive a server restart. Run IDs are deterministic, so a re-run of the
 // same inputs overwrites the same file.
-const DIR = path.join(process.cwd(), ".data", "backtests");
+const DIR = path.join(dataRoot(), "backtests");
 const g = globalThis as typeof globalThis & { __backtestRuns?: Map<string, BacktestResult> };
 
 function store(): Map<string, BacktestResult> {

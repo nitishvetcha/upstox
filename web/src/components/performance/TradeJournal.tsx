@@ -62,8 +62,8 @@ export function TradeJournal({ runId, rows }: { runId: string; rows: Row[] }) {
         </select>
         <input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} className={field} aria-label="From date" />
         <input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className={field} aria-label="To date" />
-        <input type="number" step="0.5" placeholder="min R" value={f.minR} onChange={(e) => setF({ ...f, minR: e.target.value })} className={`${field} w-20`} />
-        <input type="number" step="0.5" placeholder="max R" value={f.maxR} onChange={(e) => setF({ ...f, maxR: e.target.value })} className={`${field} w-20`} />
+        <input type="number" step="0.5" aria-label="Minimum R multiple" placeholder="min R" value={f.minR} onChange={(e) => setF({ ...f, minR: e.target.value })} className={`${field} w-20`} />
+        <input type="number" step="0.5" aria-label="Maximum R multiple" placeholder="max R" value={f.maxR} onChange={(e) => setF({ ...f, maxR: e.target.value })} className={`${field} w-20`} />
         <span className="ml-auto flex gap-2 text-xs">
           <a className="rounded border border-zinc-700 px-2 py-1 text-zinc-200 hover:bg-zinc-800" href={`/api/performance/${runId}/export?type=trades${qs ? `&${qs}` : ""}`}>Export trades CSV</a>
           <a className="rounded border border-zinc-700 px-2 py-1 text-zinc-200 hover:bg-zinc-800" href={`/api/performance/${runId}/export?type=legs${qs ? `&${qs}` : ""}`}>Export legs CSV</a>

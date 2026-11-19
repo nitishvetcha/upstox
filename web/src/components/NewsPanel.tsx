@@ -39,8 +39,9 @@ function IndexNews({ name, d, now }: { name: string; d: NewsSentiment; now: Date
       </div>
 
       <ul className="divide-y divide-zinc-800">
-        {d.articles.slice(0, 8).map((a) => (
-          <li key={a.id} className="py-2">
+        {/* Article ids can repeat (several items may share one live-blog URL), so the list index keeps the React key unique. */}
+        {d.articles.slice(0, 8).map((a, i) => (
+          <li key={`${a.id}-${i}`} className="py-2">
             <a href={a.url} target="_blank" rel="noopener noreferrer" className="group flex gap-1 text-sm text-zinc-200 hover:text-white">
               <span className="line-clamp-2">{a.title}</span>
               <ExternalLink size={12} className="mt-1 shrink-0 text-zinc-600 group-hover:text-zinc-400" aria-label="opens in new tab" />

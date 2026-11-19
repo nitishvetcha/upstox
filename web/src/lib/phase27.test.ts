@@ -144,6 +144,7 @@ describe("Phase 27 — Live Market Readiness & End-to-End Integration", () => {
 
   // 6. Monitoring Idempotency & Lifecycle Transition
   it("P27-06: Monitoring transition is idempotent and creates exactly 1 lifecycle event", () => {
+    const AT = "2026-10-06T05:00:00.000Z"; // fixed clock: fixtures expire 2026-10-15
     const opp = createPaperOpportunity({
       instrumentType: "OPTION", underlying: "NIFTY", symbol: null, instrumentKey: "NSE_FO|999", optionType: "CE",
       strike: 24000, expiry: "2026-10-15T15:30:00.000Z", strategyType: "BREAKOUT", direction: "BULLISH",
@@ -152,7 +153,7 @@ describe("Phase 27 — Live Market Readiness & End-to-End Integration", () => {
     });
     savePaperOpportunity(opp);
 
-    const res1 = evaluatePaperOpportunity(opp, { currentPrice: 135 }); // T1 hit
+    const res1 = evaluatePaperOpportunity(opp, { currentPrice: 135, timestamp: AT }); // T1 hit
     assert.equal(res1.transitioned, true);
     assert.equal(res1.toStatus, "TARGET1_HIT");
 
@@ -160,7 +161,7 @@ describe("Phase 27 — Live Market Readiness & End-to-End Integration", () => {
     assert.equal(saved1.events.length, 1);
 
     // Second call with same price
-    const res2 = evaluatePaperOpportunity(saved1, { currentPrice: 135 });
+    const res2 = evaluatePaperOpportunity(saved1, { currentPrice: 135, timestamp: AT });
     assert.equal(res2.transitioned, false);
     const saved2 = getPaperOpportunity(opp.id)!;
     assert.equal(saved2.events.length, 1, "Duplicate evaluation must NOT add repeated events");

@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import { dataRoot } from "../dataRoot.ts";
 import type { WalkForwardResult } from "../walkForwardEngine.ts";
 
-const DIR = path.join(process.cwd(), ".data", "walk-forward");
+const DIR = path.join(dataRoot(), "walk-forward");
 const g = globalThis as typeof globalThis & { __walkForwardRuns?: Map<string, WalkForwardResult> };
 
 function store(): Map<string, WalkForwardResult> {

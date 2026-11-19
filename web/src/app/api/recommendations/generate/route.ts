@@ -1,18 +1,28 @@
+import { requireOperator } from "../../../../lib/operatorSession.ts";
 export const dynamic = "force-dynamic";
 
-import { getSnapshot } from "@/lib/services/market";
-import { analyze } from "@/lib/engine/strategy";
-import { buildRecommendationResponse } from "@/lib/recommendationEnricher";
-import { saveJournalEntry } from "@/lib/services/recommendationStore";
-import type { IndexId } from "@/lib/types";
-import type { RecommendationJournalEntry } from "@/lib/journalTypes";
-import { STRATEGY_VERSION } from "@/lib/journalTypes";
+import { getSnapshot } from "../../../../lib/services/market.ts";
+import { analyze } from "../../../../lib/engine/strategy.ts";
+import { buildRecommendationResponse } from "../../../../lib/recommendationEnricher.ts";
+import { saveJournalEntry } from "../../../../lib/services/recommendationStore.ts";
+import type { IndexId } from "../../../../lib/types.ts";
+import type { RecommendationJournalEntry } from "../../../../lib/journalTypes.ts";
+import { STRATEGY_VERSION } from "../../../../lib/journalTypes.ts";
+import { hasMockInput } from "../../../../lib/services/mockInputs.ts";
+import { INDICES } from "../../../../lib/services/instrumentRegistry.ts";
 
 export async function POST(request: Request) {
+  const __refused = requireOperator(request);
+  if (__refused) return __refused;
   try {
     const body = await request.json().catch(() => ({}));
-    const rawUnderlying = (body.underlying ?? body.index ?? "").toString().toLowerCase();
-    const index: IndexId = rawUnderlying === "banknifty" ? "banknifty" : "nifty";
+    // Absent input keeps the previous default (NIFTY). Anything supplied must be a registered index.
+    const supplied = body.underlying ?? body.index;
+    const rawUnderlying = supplied == null || supplied === "" ? "nifty" : String(supplied).toLowerCase();
+    if (!(INDICES as string[]).includes(rawUnderlying)) {
+      return Response.json({ error: `unknown underlying "${rawUnderlying}"; expected one of ${INDICES.join(", ")}` }, { status: 400 });
+    }
+    const index = rawUnderlying as IndexId;
     const snapshot = await getSnapshot(index);
     const analysis = analyze(snapshot);
     const rec = buildRecommendationResponse(analysis);
@@ -29,9 +39,11 @@ export async function POST(request: Request) {
         : null,
       versionInfo: STRATEGY_VERSION,
     };
-    saveJournalEntry(entry);
+    // Simulated runs are returned but never written to the production journal.
+    const journaled = !hasMockInput(snapshot);
+    if (journaled) saveJournalEntry(entry);
 
-    return Response.json(rec);
+    return Response.json({ ...rec, journaled });
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: 500 });
   }

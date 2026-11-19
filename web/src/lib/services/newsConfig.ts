@@ -44,6 +44,27 @@ export const RELEVANCE: Record<IndexId, { group: "INDEX" | "BANKING" | "MARKET" 
     { group: "MARKET", terms: [["nifty", 0.5], ...BROAD.map(([p]) => [p, 0.5] as [string, number])] },
     { group: "MACRO", terms: MACRO.map(([p, w]) => [p, ["rbi", "reserve bank", "repo rate", "monetary policy", "mpc"].includes(p) ? 0.75 : w * 0.8] as [string, number]) },
   ],
+  finnifty: [
+    { group: "INDEX", terms: [["finnifty", 1], ["nifty financial services", 1], ["nifty fin service", 1], ["financial stocks", 0.85], ["nbfc", 0.8], ["nbfcs", 0.8], ["insurers", 0.6]] },
+    { group: "BANKING", terms: [...BANKING, ...BANK_NAMES] },
+    { group: "MARKET", terms: BROAD.map(([p]) => [p, 0.5] as [string, number]) },
+    { group: "MACRO", terms: MACRO },
+  ],
+  midcpnifty: [
+    { group: "INDEX", terms: [["midcap", 1], ["midcaps", 1], ["mid-cap", 1], ["midcpnifty", 1], ["nifty midcap", 1], ["broader market", 0.7]] },
+    { group: "MARKET", terms: BROAD.map(([p]) => [p, 0.6] as [string, number]) },
+    { group: "MACRO", terms: MACRO },
+  ],
+  sensex: [
+    { group: "INDEX", terms: [["sensex", 1], ["bse", 0.8], ...BROAD] },
+    { group: "MARKET", terms: NIFTY_NAMES },
+    { group: "MACRO", terms: MACRO },
+  ],
+  bankex: [
+    { group: "INDEX", terms: [["bankex", 1], ["bse bankex", 1], ...BANK_INDEX.map(([p]) => [p, 0.7] as [string, number])] },
+    { group: "BANKING", terms: [...BANKING, ...BANK_NAMES] },
+    { group: "MACRO", terms: MACRO },
+  ],
 };
 
 // Sentiment lexicon: market-direction words, whole words / phrases only. Weights are per occurrence.

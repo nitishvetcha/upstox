@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { analyze, recommendationOfTheDay, straddle } from "./strategy.ts";
 import { chainMetrics } from "./analysis.ts";
-import { mockSnapshot } from "../services/mock.ts";
+import { mockSnapshotTradeInputs as mockSnapshot } from "../testFixtures/mockSnapshotTradeInputs.ts";
 import type { Snapshot } from "../types.ts";
 
 const MIDDAY = new Date("2026-10-05T07:00:00Z"); // Mon 12:30 IST

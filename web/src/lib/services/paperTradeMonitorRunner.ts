@@ -11,6 +11,7 @@ import {
 import { evaluatePaperOpportunity, applyEndOfDay } from "./paperOpportunityMonitor.ts";
 import type { EvalInput } from "./paperOpportunityMonitor.ts";
 import type { PaperOpportunity } from "./paperOpportunityStore.ts";
+import { pruneRunFiles } from "./runLogRetention.ts";
 
 // ── Monitor audit ─────────────────────────────────────────────────────────────
 
@@ -43,19 +44,21 @@ export function saveMonitorRun(run: PaperMonitorRun): void {
   const dir = getMonitorLogDir();
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
-    path.join(dir, `mon_${run.id}.json`),
+    path.join(/* turbopackIgnore: true */ dir, `mon_${run.id}.json`),
     JSON.stringify(run, null, 2),
   );
+  pruneRunFiles(dir, "mon_");
 }
 
 export function listMonitorRuns(): PaperMonitorRun[] {
   try {
     const dir = getMonitorLogDir();
-    if (!fs.existsSync(dir)) return [];
-    return fs.readdirSync(dir)
+    // turbopackIgnore: the monitor log directory is a runtime data path (MONITOR_LOG_DIR or .data), not bundled.
+    if (!fs.existsSync(/* turbopackIgnore: true */ dir)) return [];
+    return fs.readdirSync(/* turbopackIgnore: true */ dir)
       .filter((f) => f.endsWith(".json"))
       .map((f) => {
-        try { return JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")) as PaperMonitorRun; }
+        try { return JSON.parse(fs.readFileSync(path.join(/* turbopackIgnore: true */ dir, f), "utf8")) as PaperMonitorRun; }
         catch { return null; }
       })
       .filter((r): r is PaperMonitorRun => r !== null)
@@ -167,10 +170,10 @@ export async function runOnce(
 
   // Record session evidence
   try {
-    const { tokenStatus } = await import("./upstoxAuth.ts");
+    const { tokenStatus, evidenceAuthStatus } = await import("./upstoxAuth.ts");
     const { recordMonitoringCycle } = await import("./sessionEvidenceStore.ts");
     const st = await tokenStatus();
-    const authStatus = st.status === "VALID" ? "CONNECTED" : st.status === "EXPIRED" || st.status === "INVALID" ? "EXPIRED" : "NOT_CONNECTED";
+    const authStatus = evidenceAuthStatus(st.status);
     recordMonitoringCycle(run, authStatus, new Date());
   } catch {
     try {

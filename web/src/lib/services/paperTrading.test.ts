@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PaperTradingEngine, calculateEntryFill, calculateExitFill, calculateNetValue, calculateTradePnL } from "../paperEngine.ts";
-import { mockSnapshot } from "./mock.ts";
+import { mockSnapshotTradeInputs as mockSnapshot } from "../testFixtures/mockSnapshotTradeInputs.ts";
 import { analyze } from "../engine/strategy.ts";
 import type { Analysis, Quote, Snapshot, TradePlan } from "../types.ts";
 
@@ -21,7 +21,8 @@ test("1. Paper Engine: TRADE + APPROVED + LIVE market data creates paper trade",
   assert.ok(result.trade);
   assert.equal(result.trade!.status, "OPEN");
   assert.equal(result.trade!.executionMode, "PAPER");
-  assert.equal(result.trade!.marketDataSource, "UPSTOX_LIVE");
+  // Fixture is a MOCK snapshot: provenance must say so. It was previously (wrongly) hard-coded to UPSTOX_LIVE.
+  assert.equal(result.trade!.marketDataSource, "MOCK_SIMULATION");
   assert.equal(engine.getTrades().length, 1);
 });
 
@@ -199,7 +200,7 @@ test("13. Lifecycle: Target Hit Execution", () => {
   assert.ok((trade.realizedPnL ?? 0) > 0);
 });
 
-test("14. Lifecycle: Expiry Execution", () => {
+test("14. Lifecycle: Expiry Execution (Phase 2.3.14 — transitions to SETTLEMENT_PENDING)", () => {
   const engine = new PaperTradingEngine({ accountCapital: 500_000 });
   const snapshot = mockSnapshot("nifty", MIDDAY);
   const analysis = analyze(snapshot, MIDDAY, { accountCapital: 500_000 });
@@ -213,8 +214,11 @@ test("14. Lifecycle: Expiry Execution", () => {
   const updated = engine.evaluateOpenTrades(snapshot, postExpiryTime);
 
   assert.equal(updated.length, 1);
-  assert.equal(trade.status, "EXPIRED");
-  assert.equal(trade.exitReason, "EXPIRY");
+  assert.equal(trade.status, "SETTLEMENT_PENDING");
+  assert.equal(trade.exitPrice, null, "no fabricated exit price");
+  assert.equal(trade.realizedPnL, null, "no premature P&L realization");
+  const ev = engine.getEvents(trade.id).find((e) => e.event === "PAPER_TRADE_SETTLEMENT_PENDING");
+  assert.ok(ev, "PAPER_TRADE_SETTLEMENT_PENDING event emitted");
 });
 
 test("15. Portfolio Summary Statistics", () => {
@@ -224,7 +228,8 @@ test("15. Portfolio Summary Statistics", () => {
   engine.processRecommendation(analysis, MIDDAY);
 
   const summary = engine.getPortfolioSummary();
-  assert.equal(summary.startingCapital, 100_000);
+  // Engine was configured with accountCapital 500_000; the summary used to ignore it and report 100_000.
+  assert.equal(summary.startingCapital, 500_000);
   assert.equal(summary.openPositions, 1);
   assert.ok(summary.openRisk > 0);
 });

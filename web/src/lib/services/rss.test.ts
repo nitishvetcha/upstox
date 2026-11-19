@@ -1,3 +1,5 @@
+// News gate setup: these tests stub fetch to exercise the authorised news path. Both flags are needed; mock-mode tests stay blocked.
+process.env.NEWS_EXTERNAL_ENABLED = "true";
 // Run: npm test   (deterministic fixtures; real feeds are validated live, not here)
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
@@ -8,6 +10,8 @@ import { clearUpstoxCache } from "./cache.ts";
 import { RSS_FEEDS } from "./newsConfig.ts";
 import { mockSnapshot } from "./mock.ts";
 import { analyze } from "../engine/strategy.ts";
+// These tests exercise the live provider pipeline. Mode is set explicitly: unset means mock. Each test file runs in its own process.
+process.env.MARKET_DATA_PROVIDER = "upstox";
 
 const NOW = new Date("2026-10-05T07:00:00Z"); // Mon 12:30 IST
 const rfc = (hoursAgo: number) => new Date(NOW.getTime() - hoursAgo * 3_600_000).toUTCString().replace("GMT", "+0000");

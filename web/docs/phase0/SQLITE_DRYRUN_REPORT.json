@@ -1,0 +1,43 @@
+{
+  "generatedAt": "2026-11-13T05:24:36.218Z",
+  "backupDir": ".research-data/migration-backup/2026-11-13T05-24-36-157Z",
+  "backupFiles": 75,
+  "backupAllCopiesVerified": true,
+  "dryRunDb": ".research-data/migration-dryrun/dryrun.sqlite",
+  "dryRunDbSha256": "cef3138738d79b8817ecd4d5ecb205a9ae4df0039bce1aafde72f36293868ef9",
+  "reconciliation": {
+    "sourceDataLines": 4859,
+    "parsed": 4859,
+    "quarantined": 0,
+    "inserted": 4859,
+    "duplicatesRejected": 0,
+    "dbRows": 4859,
+    "rowCountMatches": true,
+    "sumVolumeSource": 17924841865,
+    "sumVolumeDb": 17924841865,
+    "volumeMatches": true,
+    "sumCloseSource": 1955265.74,
+    "sumCloseDb": 1955265.74,
+    "closeMatches": true
+  },
+  "quarantine": [],
+  "quarantineTotal": 0,
+  "qualityStatusCounts": [
+    {
+      "s": "OI_ZERO",
+      "n": 159
+    },
+    {
+      "s": "OK",
+      "n": 4700
+    }
+  ],
+  "integrityCheck": "ok",
+  "foreignKeyViolations": 0,
+  "rollbackRehearsal": {
+    "changedHashDiffers": true,
+    "restoredHashMatches": true
+  },
+  "scriptSha256": "424eb9980756880d0d49767238ede6fb4dcc0aa152b9cae6360f34d658df458f",
+  "note": "Dry run only. Application storage NOT switched. JSON and JSONL sources untouched."
+}

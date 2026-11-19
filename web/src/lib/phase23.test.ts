@@ -447,8 +447,8 @@ describe("RR23 — Realized R calculation", () => {
     assert.ok(saved.realizedR! < 0);
   });
 
-  it("RR23-03: zero-risk guard in createPaperOpportunity", () => {
-    const opp = createPaperOpportunity({
+  it("RR23-03: zero-risk trade is rejected (a 0.01 floor produced ±1000R outcomes)", () => {
+    assert.throws(() => createPaperOpportunity({
       instrumentType: "OPTION",
       underlying: "NIFTY",
       symbol: null,
@@ -459,7 +459,7 @@ describe("RR23 — Realized R calculation", () => {
       strategyType: "LONG_CALL",
       direction: "BULLISH",
       entry: 100,
-      stop: 100, // same as entry → riskPerUnit should be 0.01 floor
+      stop: 100, // same as entry → no defined risk
       target1: 160,
       target2: 200,
       score: 50,
@@ -469,8 +469,7 @@ describe("RR23 — Realized R calculation", () => {
       reasons: [],
       strategyVersion: "20.1",
       source: "LIVE",
-    });
-    assert.ok(opp.riskPerUnit >= 0.01, "riskPerUnit has floor");
+    }), /Invalid paper trade/);
   });
 });
 
@@ -651,6 +650,6 @@ describe("SF23 — Safety Phase 23", () => {
   });
 
   it("SF23-05: opportunity journal page exists", () => {
-    assert.ok(fs.existsSync(path.join(process.cwd(), "src/app/opportunity-journal/page.tsx")));
+    assert.ok(fs.existsSync(path.join(process.cwd(), "src/app/(dashboard)/opportunity-journal/page.tsx")));
   });
 });

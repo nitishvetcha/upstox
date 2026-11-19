@@ -3,13 +3,14 @@
 import { DEFAULT_TRANSACTION_COSTS, type TransactionCostConfig } from "../transactionCosts.ts";
 
 export interface RiskConfig {
-  accountCapital: number; // Configured Risk Capital (INR)
+  accountCapital: number; // Configured Risk Capital (INR). Default portfolio baseline; recommendations do not require capital.
   riskPerTradePercent: number; // Max risk per trade (% of capital)
   maxDailyLossPercent: number; // Max daily loss (% of capital)
   maxOpenRiskPercent: number; // Max open risk across portfolio (% of capital)
   maxPositionValuePercent: number; // Max capital per position (% of capital)
   maxConcurrentPositions: number; // Max concurrent open positions
-  minRiskReward: number; // Minimum acceptable R:R ratio
+  minRiskReward: number; // Minimum acceptable R:R ratio for debit strategies (default 1.2)
+  minRiskRewardCredit?: number; // Minimum acceptable R:R ratio for credit strategies (default 0.4 per Strategy 11.4)
   maxLotsPerTrade: number; // Hard lot cap per trade
   optionSlippagePercent: number; // Default adverse slippage (%) when entry/exit values are not set
   entrySlippagePercent: number; // Adverse slippage on the entry fill (%). Assumption, configurable.
@@ -26,6 +27,7 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
   maxPositionValuePercent: 20.0,
   maxConcurrentPositions: 3,
   minRiskReward: 1.2,
+  minRiskRewardCredit: 0.4,
   maxLotsPerTrade: 5,
   optionSlippagePercent: 1.0,
   entrySlippagePercent: 1.0,
@@ -67,6 +69,7 @@ export function getRiskConfig(override?: Partial<RiskConfig>): RiskConfig {
     maxPositionValuePercent: override?.maxPositionValuePercent ?? DEFAULT_RISK_CONFIG.maxPositionValuePercent,
     maxConcurrentPositions: override?.maxConcurrentPositions ?? envMaxConcurrent ?? DEFAULT_RISK_CONFIG.maxConcurrentPositions,
     minRiskReward: override?.minRiskReward ?? DEFAULT_RISK_CONFIG.minRiskReward,
+    minRiskRewardCredit: override?.minRiskRewardCredit ?? DEFAULT_RISK_CONFIG.minRiskRewardCredit ?? 0.4,
     maxLotsPerTrade: override?.maxLotsPerTrade ?? DEFAULT_RISK_CONFIG.maxLotsPerTrade,
     optionSlippagePercent,
     entrySlippagePercent: override?.entrySlippagePercent ?? envEntrySlippage ?? optionSlippagePercent,
@@ -82,7 +85,7 @@ export function getRiskConfig(override?: Partial<RiskConfig>): RiskConfig {
 const nonNeg = (v: number) => Number.isFinite(v) && v >= 0;
 
 export function validateRiskConfig(cfg: RiskConfig): void {
-  if (!Number.isFinite(cfg.accountCapital) || cfg.accountCapital <= 0) {
+  if (cfg.accountCapital !== undefined && (!Number.isFinite(cfg.accountCapital) || cfg.accountCapital < 0)) {
     throw new Error(`Invalid risk config: accountCapital must be > 0 (got ${cfg.accountCapital})`);
   }
   if (!Number.isFinite(cfg.riskPerTradePercent) || cfg.riskPerTradePercent <= 0) {
@@ -102,6 +105,9 @@ export function validateRiskConfig(cfg: RiskConfig): void {
   }
   if (!Number.isFinite(cfg.minRiskReward) || cfg.minRiskReward <= 0) {
     throw new Error(`Invalid risk config: minRiskReward must be > 0 (got ${cfg.minRiskReward})`);
+  }
+  if (cfg.minRiskRewardCredit !== undefined && (!Number.isFinite(cfg.minRiskRewardCredit) || cfg.minRiskRewardCredit <= 0)) {
+    throw new Error(`Invalid risk config: minRiskRewardCredit must be > 0 (got ${cfg.minRiskRewardCredit})`);
   }
   if (!Number.isFinite(cfg.maxLotsPerTrade) || cfg.maxLotsPerTrade <= 0) {
     throw new Error(`Invalid risk config: maxLotsPerTrade must be > 0 (got ${cfg.maxLotsPerTrade})`);

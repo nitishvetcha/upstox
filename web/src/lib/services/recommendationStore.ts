@@ -5,9 +5,12 @@ import fs from "node:fs";
 import path from "node:path";
 import type { RecommendationJournalEntry } from "../journalTypes.ts";
 
-/** Canonical production path — never used by tests. */
+const DEFAULT_PROD_STORE_DIR = path.resolve(process.cwd(), ".data", "recommendations");
+
+/** Canonical runtime path. Tests may redirect it with RECOMMENDATION_STORE_DIR. */
 export const PROD_STORE_DIR = path.resolve(
-  process.env.RECOMMENDATION_STORE_DIR ?? path.join(process.cwd(), ".data", "recommendations"),
+  // turbopackIgnore: the recommendation store path is a runtime environment value (RECOMMENDATION_STORE_DIR), not bundled.
+  /* turbopackIgnore: true */ process.env.RECOMMENDATION_STORE_DIR ?? DEFAULT_PROD_STORE_DIR,
 );
 
 /** Factory: creates a fully isolated store backed by `dir`. Each instance has its own in-memory map. */
@@ -16,8 +19,11 @@ export function createRecommendationStore(dir: string) {
 
   // Safety guard: reject any store that resolves to the production path when running under an
   // explicit override (i.e. a test that forgot to pass its own directory).
-  if (absDir === PROD_STORE_DIR && process.env.RECOMMENDATION_STORE_DIR && process.env.RECOMMENDATION_STORE_DIR !== dir) {
-    throw new Error(`Recommendation store safety guard: test store path resolved to the production store (${PROD_STORE_DIR}). Tests must use an isolated directory.`);
+  const configuredOverride = process.env.RECOMMENDATION_STORE_DIR
+    ? path.resolve(process.env.RECOMMENDATION_STORE_DIR)
+    : null;
+  if (absDir === DEFAULT_PROD_STORE_DIR && configuredOverride && configuredOverride !== DEFAULT_PROD_STORE_DIR) {
+    throw new Error(`Recommendation store safety guard: test store path resolved to the production store (${DEFAULT_PROD_STORE_DIR}). Tests must use an isolated directory.`);
   }
 
   const cache = new Map<string, RecommendationJournalEntry>();

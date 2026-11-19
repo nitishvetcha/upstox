@@ -7,8 +7,9 @@
 import type { IndexId, NewsProviderStatus, NewsSentiment } from "../types.ts";
 import { cached } from "./cache.ts";
 import { NewsError } from "./errors.ts";
-import { analyzeNews, normalizeNewsApi, unavailableNews, type RawArticle } from "./news.ts";
+import { analyzeNews, mockNewsSentiment, normalizeNewsApi, unavailableNews, type RawArticle } from "./news.ts";
 import { NEWS_PAGE_SIZE, NEWS_QUERY, newsCacheMs } from "./newsConfig.ts";
+import { assertNewsAllowed } from "./newsNetworkGate.ts";
 import { feedFreshness, fetchRss } from "./rssNewsProvider.ts";
 import { INSTRUMENTS } from "./instrumentRegistry.ts";
 
@@ -29,6 +30,7 @@ export function fetchNewsPool(now = () => new Date()) {
     let status: number | null = null;
     try {
       const q = new URLSearchParams({ q: NEWS_QUERY, language: "en", sortBy: "publishedAt", pageSize: String(NEWS_PAGE_SIZE) });
+      assertNewsAllowed("newsapi/everything"); // fail-closed: no external news in mock mode
       const res = await fetch(`${ENDPOINT}?${q}`, { headers: { "X-Api-Key": key }, signal: AbortSignal.timeout(10_000), cache: "no-store" });
       status = res.status;
       const body = await res.json().catch(() => null);
@@ -72,6 +74,8 @@ export const NEWS_PROVIDERS: NewsProvider[] = [rssProvider, newsApiProvider];
 // Never throws. Combined status comes from the merged pool's newest relevant article, so a fresh RSS story
 // makes news LIVE while stale NewsAPI copies only add (down-weighted) context. All providers failed → UNAVAILABLE.
 export async function getIndexNews(index: IndexId, now = () => new Date()): Promise<NewsSentiment> {
+  // Mock mode: simulated headlines, and no RSS or NewsAPI request. Only MARKET_DATA_PROVIDER=upstox reaches the providers.
+  if (process.env.MARKET_DATA_PROVIDER !== "upstox") return mockNewsSentiment(index, now());
   const results = await Promise.all(NEWS_PROVIDERS.map((p) => p.fetchNews(now)));
   const providers = results.flatMap((r) => r.statuses);
   const working = providers.filter((p) => p.status !== "FAILED" && p.status !== "DISABLED");

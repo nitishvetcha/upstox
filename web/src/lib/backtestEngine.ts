@@ -22,20 +22,27 @@ import { getRiskConfig } from "./services/risk/riskConfig.ts";
 import { calculateTradePnL } from "./paperEngine.ts";
 import type { PaperTradeLeg } from "./paperTypes.ts";
 import { coreMetrics, drawdownAnalytics, groupStats, istDay, istMonth } from "./services/performance/metrics.ts";
-import { evaluateIntrabarExit, intrabarPath, INTRABAR_PATH_MODEL, SAME_BAR_EXIT_POLICY } from "./backtestExecution.ts";
+import { adverseFill, OPTION_TICK, evaluateIntrabarExit, intrabarPath, INTRABAR_PATH_MODEL, SAME_BAR_EXIT_POLICY } from "./backtestExecution.ts";
 import type { CapitalFeasibility } from "./backtestTypes.ts";
 import { isTradingDay } from "./time.ts";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
+// Fill-time charges are estimated from the fill mids; the margin covers the difference from the realized exit premium
+// (measured: entry-mid estimate within ±1.1% of recorded risk, worst under-estimate 4.7%). Used in the budget.
+export const CHARGE_ESTIMATE_MARGIN = 1.1;
 
 export const STRATEGY_VERSION = "strategy-2026.10-p9"; // engine/strategy.ts rules + thresholds (unchanged in Phase 10)
 export const RISK_CONFIG_VERSION = "risk-2026.10-p10"; // risk defaults + slippage-aware sizing
 export const DATA_VERSION = { PHASE9_LEGACY: "data-p9-synthetic", PHASE10: "data-p10-vix-breadth" } as const;
 const TF_MS: Record<string, number> = { "5m": 5 * 60_000, "15m": 15 * 60_000, "30m": 30 * 60_000, "1h": 60 * 60_000, "1d": 0 };
 
+// Execution timing constants and the read-side label live in backtestTiming.ts (dependency-free, shared with the UI).
+export { EXECUTION_TIMING, EXECUTION_TIMING_VERSION, LEGACY_EXECUTION_TIMING, executionTimingOf } from "./backtestTiming.ts";
+import { EXECUTION_TIMING, EXECUTION_TIMING_VERSION } from "./backtestTiming.ts";
+
 // Deterministic id from the inputs (FNV-1a): same config + candles (+ dataset fingerprint) → same run id and trade ids.
 function stableId(config: BacktestRunConfig, candles: Candle[], dsHash = ""): string {
-  const s = JSON.stringify({ ...config, id: undefined }) + `|${candles.length}|${candles[0]?.timestamp}|${candles[candles.length - 1]?.timestamp}|${candles[candles.length - 1]?.close}` + (dsHash ? `|${dsHash}` : "");
+  const s = JSON.stringify({ ...config, id: undefined }) + `|${candles.length}|${candles[0]?.timestamp}|${candles[candles.length - 1]?.timestamp}|${candles[candles.length - 1]?.close}` + (dsHash ? `|${dsHash}` : "") + `|${EXECUTION_TIMING_VERSION}`;
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
   return `bt_${h.toString(16).padStart(8, "0")}`;
@@ -86,6 +93,53 @@ export function rejectionCode(blocker: string): string {
 
 type Open = { trade: BacktestTrade; legUnits: number };
 
+// Fill-time repricing of a planned position at the next bar's open (pure). Legs are priced with the same model as the
+// chain, at the open of the fill bar, with the decision-time IV. Stop and target are the strategy's own levels in the
+// plan's value units (debit: position value; credit: cost to close). Already beyond a level at the open: the stop is
+// checked first (conservative), and the exit is booked at the open.
+export function repriceAtFill(a: {
+  legs: { side: "BUY" | "SELL"; type: "CE" | "PE"; strike: number }[];
+  credit: boolean;
+  stop: number;
+  target1: number;
+  expiry: string;
+  openSpot: number;
+  fillTime: Date;
+  iv: number;
+}): { mids: number[]; net: number; value: number; stopBeyond: boolean; targetBeyond: boolean; exitAtOpen: "GAP_EXIT" | "TARGET" | null } {
+  const mids = a.legs.map((l) => r2(priceOption(l.type, a.openSpot, l.strike, a.expiry, a.fillTime, a.iv)));
+  const net = r2(a.legs.reduce((acc, l, k) => acc + (l.side === "BUY" ? mids[k] : -mids[k]), 0));
+  const value = a.credit ? -net : net;
+  const stopBeyond = a.credit ? value >= a.stop : value <= a.stop;
+  const targetBeyond = a.credit ? value <= a.target1 : value >= a.target1;
+  return { mids, net, value, stopBeyond, targetBeyond, exitAtOpen: stopBeyond ? "GAP_EXIT" : targetBeyond ? "TARGET" : null };
+}
+
+// A decided entry waiting for the next bar's open. Holds the decision-time plan; the fill reprices it at that open.
+type PendingEntry = {
+  legs: { side: "BUY" | "SELL"; type: "CE" | "PE"; strike: number; ltp: number }[];
+  credit: boolean;
+  strategy: BacktestTrade["strategy"];
+  expiry: string;
+  stop: number;
+  target1: number;
+  target2: number;
+  rr: number;
+  score: number;
+  confidence: number;
+  regime: string;
+  lots: number;
+  lotSize: number;
+  quantity: number;
+  riskAmount: number;
+  plannedRiskAmount: number;
+  iv: number; // decision-time IV, used to reprice the legs at the fill
+  capital: number; // decision-time capital: the fill is re-sized against the same budget
+  signalNow: Date;
+  signalBarTimestamp: string;
+  signalSession: string;
+};
+
 // Phase 10 sizing: the risk engine sizes on (entry − stop) × (1 + slippage%), which understates the modeled loss at
 // the stop (entry fill is worse by slippage, and so is the stop fill). Re-size on the executable risk:
 //   planned risk + entry slippage + estimated exit slippage at the stop, never above the per-trade / open-risk budget.
@@ -103,7 +157,8 @@ export function slippageAwareSizing(a: {
   const entrySlippagePerUnit = a.legs.reduce((t, l) => t + Math.abs(l.fill - l.mid), 0);
   const gross = a.legs.reduce((t, l) => t + l.mid, 0);
   // ponytail: exit slippage estimated from entry gross premium scaled by stop/entry; exact only for single legs.
-  const exitSlippagePerUnit = a.slip * gross * Math.max(1, a.netMid > 0 ? Math.abs(a.stop) / a.netMid : 1);
+  // Exit fills are tick-aligned and adverse (adverseFill), so each leg may also pay up to one tick of rounding.
+  const exitSlippagePerUnit = a.slip * gross * Math.max(1, a.netMid > 0 ? Math.abs(a.stop) / a.netMid : 1) + OPTION_TICK * a.legs.length;
   const riskPerUnit = r2(a.plannedRiskPerUnit + entrySlippagePerUnit + exitSlippagePerUnit);
   const perLot = riskPerUnit * a.lotSize;
   const byBudget = perLot > 0 ? Math.floor(a.budget / perLot) : 0;
@@ -213,6 +268,7 @@ export class BacktestEngine {
 
     const trades: BacktestTrade[] = [];
     const open: Open[] = [];
+    let pending: PendingEntry | null = null; // at most one: decided on bar N, filled at bar N+1's open
     const equityCurve: EquityCurvePoint[] = [];
     const rejectionReasons: Record<string, number> = {};
     const bump = (k: string) => (rejectionReasons[k] = (rejectionReasons[k] ?? 0) + 1);
@@ -237,7 +293,7 @@ export class BacktestEngine {
       t.legs.forEach((leg) => {
         leg.exitMid = r2(priceOption(leg.type, spot, leg.strike, t.expiry, now, iv));
         // Selling a long leg receives less; buying back a short leg pays more.
-        leg.exitPrice = r2(leg.side === "BUY" ? leg.exitMid * (1 - slip) : leg.exitMid * (1 + slip));
+        leg.exitPrice = adverseFill(leg.side === "BUY" ? "SELL" : "BUY", leg.exitMid, slip);
       });
       t.exitTimestamp = now.toISOString();
       t.exitReason = reason;
@@ -263,6 +319,125 @@ export class BacktestEngine {
     let ivNow = BACKTEST_IV;
     for (let i = 0; i < validCandles.length; i++) {
       const candle = validCandles[i];
+
+      // 0. Fill the entry decided on the previous bar at THIS bar's open (next-bar execution). The legs are repriced at
+      //    the open with the decision-time IV. The stop and target stay at the strategy's own premium levels, so a gap
+      //    that has already taken the position through one of them is booked as an exit at the open, never hidden by
+      //    moving the level. A fill that cannot happen is counted, never silently dropped.
+      if (pending) {
+        const p: PendingEntry = pending;
+        pending = null;
+        const fillNow = new Date(Date.parse(candle.timestamp));
+        const fillSide = (side: "BUY" | "SELL", mid: number) => adverseFill(side, mid, slip);
+        const step = TF_MS[config.timeframe] ?? 0;
+        if (istDay(candle.timestamp) !== p.signalSession) bump("PENDING_SESSION_ENDED");
+        else if (step > 0 && Date.parse(candle.timestamp) - Date.parse(p.signalBarTimestamp) !== step) bump("PENDING_NEXT_BAR_MISSING");
+        else if (fillNow.getTime() >= Date.parse(`${p.expiry}T09:45:00Z`)) bump("EXPIRY_CUTOFF");
+        else if (open.length >= riskConfig.maxConcurrentPositions) {
+          riskRejections++;
+          bump("MAX_CONCURRENT_POSITIONS");
+        } else {
+          const rep = repriceAtFill({ legs: p.legs, credit: p.credit, stop: p.stop, target1: p.target1, expiry: p.expiry, openSpot: candle.open, fillTime: fillNow, iv: p.iv });
+          const fillMid = rep.mids;
+          const netF = rep.net;
+          const valueF = rep.value; // position value in the plan's units (stop and target are in these units)
+          const exitAtOpen = rep.exitAtOpen;
+          // Re-size on the fill price with the same rule and the decision-time budget. Lots never rise above the decision.
+          // A position that opens beyond a level keeps the decision size: its loss is the gap, recorded rather than budgeted.
+          const existingRisk = open.reduce((a, o) => a + o.trade.riskAmount, 0);
+          const sizedAtFill = exitAtOpen === null
+            ? slippageAwareSizing({
+                plannedRiskPerUnit: Math.abs(valueF - p.stop),
+                legs: p.legs.map((l, k) => ({ mid: fillMid[k], fill: fillSide(l.side, fillMid[k]) })),
+                slip,
+                netMid: Math.abs(netF),
+                stop: p.stop,
+                lotSize: p.lotSize,
+                maxLots: p.lots,
+                budget: p.capital * (riskConfig.riskPerTradePercent / 100),
+                openRiskRoom: p.capital * (riskConfig.maxOpenRiskPercent / 100) - existingRisk,
+              })
+            : null;
+          // Round-trip charges are part of the executable loss, so the budget must include them: keep lots only while
+          // risk + estimated charges fit the decision-time budget. Estimate: entry and exit fills at the fill mids with the
+          // same slippage; brokerage and statutory charges from the same cost model used at close.
+          const estCharges = (qty: number) => (costCfg ? CHARGE_ESTIMATE_MARGIN * costsFor(p.legs.flatMap((l, k) => {
+            const ex: "BUY" | "SELL" = l.side === "BUY" ? "SELL" : "BUY";
+            return [{ side: l.side, price: fillSide(l.side, fillMid[k]), quantity: qty }, { side: ex, price: fillSide(ex, fillMid[k]), quantity: qty }];
+          }), costCfg).totalCosts : 0);
+          const budgetFill = p.capital * (riskConfig.riskPerTradePercent / 100);
+          // Per lot: the planned distance with its slippage (sized above), or — for a position closed at the open — the
+          // round-trip slippage at the fill price (entry and exit both at the open), which is the whole loss at that exit.
+          const roundTripPerUnit = p.legs.reduce((a, l, k) => {
+            const exitSide: "BUY" | "SELL" = l.side === "BUY" ? "SELL" : "BUY";
+            return a + Math.abs(fillSide(l.side, fillMid[k]) - fillMid[k]) + Math.abs(adverseFill(exitSide, fillMid[k], slip) - fillMid[k]);
+          }, 0);
+          const riskPerLot = sizedAtFill ? sizedAtFill.riskPerUnit * p.lotSize : exitAtOpen ? roundTripPerUnit * p.lotSize : p.riskAmount / Math.max(1, p.lots);
+          let lots = sizedAtFill ? sizedAtFill.lots : p.lots;
+          while (lots > 0 && riskPerLot * lots + estCharges(lots * p.lotSize) > budgetFill) lots--;
+          if (lots === 0) {
+            riskRejections++;
+            bump(sizedAtFill?.limitedBy ?? "POSITION_SIZE_ZERO");
+          } else {
+            if (lots < p.lots) slippageResized++;
+            tradeCount++;
+            const quantity = lots * p.lotSize;
+            const legs: BacktestTradeLeg[] = p.legs.map((l, k) => ({
+              side: l.side,
+              type: l.type,
+              strike: l.strike,
+              entryMid: fillMid[k],
+              entryPrice: fillSide(l.side, fillMid[k]),
+              exitPrice: 0,
+              exitMid: 0,
+              quantity,
+            }));
+            const trade: BacktestTrade = {
+              tradeId: `${runId}_${String(tradeCount).padStart(4, "0")}`,
+              index: config.index,
+              strategy: p.strategy,
+              signalTimestamp: p.signalNow.toISOString(),
+              signalBarTimestamp: p.signalBarTimestamp,
+              entryTimestamp: fillNow.toISOString(),
+              entryBarTimestamp: candle.timestamp,
+              exitTimestamp: "",
+              expiry: p.expiry,
+              legs,
+              credit: p.credit,
+              entryPrice: r2(legs.reduce((a, l) => a + (l.side === "BUY" ? l.entryPrice : -l.entryPrice), 0)),
+              exitPrice: 0,
+              quantity,
+              lots,
+              lotSize: p.lotSize,
+              stopLoss: p.stop,
+              target1: p.target1,
+              target2: p.target2,
+              riskAmount: r2(riskPerLot * lots + estCharges(lots * p.lotSize)),
+              plannedRiskAmount: p.plannedRiskAmount,
+              riskReward: p.rr,
+              realizedPnL: 0,
+              pnlPercent: 0,
+              rMultiple: 0,
+              slippageCost: 0,
+              exitReason: "END_OF_BACKTEST",
+              executionDataQuality: model === "INTRABAR_MODEL_DERIVED" ? "MODEL_DERIVED_INTRABAR" : "CLOSE_ONLY_SYNTHETIC",
+              entrySession: istDay(fillNow.toISOString()),
+              signalScore: p.score,
+              confidence: p.confidence,
+              regime: p.regime,
+            };
+            trades.push(trade);
+            const o: Open = { trade, legUnits: quantity };
+            maxLots = Math.max(maxLots, lots);
+            if (exitAtOpen) {
+              // Booked at the open price (what a market order at the open receives), never at the level it passed.
+              trade.exitGap = exitAtOpen === "GAP_EXIT";
+              trade.exitAtFill = true;
+              closeTrade(o, candle.open, fillNow, exitAtOpen, p.iv);
+            } else open.push(o);
+          }
+        }
+      }
       // Decision time. Legacy: the bar's OPEN timestamp (while using its close: a labeling look-ahead). Phase 10: the
       // bar's CLOSE (open + interval), the first moment its close is actually known.
       const now = new Date(Date.parse(candle.timestamp) + barMs);
@@ -365,7 +540,7 @@ export class BacktestEngine {
             { ...config.riskConfig, accountCapital: capital },
             now,
           );
-          const fill = (leg: { side: "BUY" | "SELL"; ltp: number }) => r2(leg.side === "BUY" ? leg.ltp * (1 + slip) : leg.ltp * (1 - slip));
+          const fill = (leg: { side: "BUY" | "SELL"; ltp: number }) => adverseFill(leg.side, leg.ltp, slip);
           const existingOpenRisk = open.reduce((a, o) => a + o.trade.riskAmount, 0);
           const sized = p10 && risk.allowed
             ? slippageAwareSizing({
@@ -380,63 +555,41 @@ export class BacktestEngine {
                 openRiskRoom: capital * (riskConfig.maxOpenRiskPercent / 100) - existingOpenRisk,
               })
             : null;
-          if (sized && sized.lots < risk.lots) slippageResized++;
           if (sized?.limitedBy) {
             riskRejections++;
             bump(sized.limitedBy);
-          } else if (risk.allowed && open.length < riskConfig.maxConcurrentPositions) {
-            tradeCount++;
+          } else if (risk.portfolioAllowed && open.length < riskConfig.maxConcurrentPositions) {
+            // Decided at this bar's close; filled at the next bar's open (see step 0 above). Nothing is booked here.
             const lots = sized ? sized.lots : risk.lots;
-            const quantity = lots * risk.lotSize;
-            const legs: BacktestTradeLeg[] = plan.legs.map((leg) => ({
-              side: leg.side,
-              type: leg.type,
-              strike: leg.strike,
-              entryMid: leg.ltp,
-              entryPrice: fill(leg),
-              exitPrice: 0,
-              exitMid: 0,
-              quantity,
-            }));
-            const net = r2(legs.reduce((a, l) => a + (l.side === "BUY" ? l.entryPrice : -l.entryPrice), 0));
-            const trade: BacktestTrade = {
-              tradeId: `${runId}_${String(tradeCount).padStart(4, "0")}`,
-              index: config.index,
-              strategy: plan.strategy,
-              signalTimestamp: now.toISOString(),
-              entryTimestamp: now.toISOString(),
-              exitTimestamp: "",
-              expiry: snapshot.expiry,
-              legs,
+            pending = {
+              legs: plan.legs.map((leg) => ({ side: leg.side, type: leg.type, strike: leg.strike, ltp: leg.ltp })),
               credit: plan.credit,
-              entryPrice: net,
-              exitPrice: 0,
-              quantity,
-              lots,
-              lotSize: risk.lotSize,
-              stopLoss: plan.stop,
+              strategy: plan.strategy,
+              expiry: snapshot.expiry,
+              stop: plan.stop,
               target1: plan.target1,
               target2: plan.target2,
-              riskAmount: sized ? sized.totalRisk : risk.totalRisk,
-              plannedRiskAmount: risk.totalRisk,
-              riskReward: plan.rr,
-              realizedPnL: 0,
-              pnlPercent: 0,
-              rMultiple: 0,
-              slippageCost: 0,
-              exitReason: "END_OF_BACKTEST",
-              executionDataQuality: model === "INTRABAR_MODEL_DERIVED" ? "MODEL_DERIVED_INTRABAR" : "CLOSE_ONLY_SYNTHETIC",
-              entrySession: istDay(now.toISOString()),
-              signalScore: plan.score,
+              rr: plan.rr,
+              score: plan.score,
               confidence: analysis.total,
               regime: analysis.regime,
+              lots,
+              lotSize: risk.lotSize,
+              quantity: lots * risk.lotSize,
+              riskAmount: sized ? sized.totalRisk : risk.totalRisk,
+              plannedRiskAmount: risk.totalRisk,
+              iv: ivNow,
+              capital,
+              signalNow: now,
+              signalBarTimestamp: candle.timestamp,
+              signalSession: today,
             };
-            trades.push(trade);
-            open.push({ trade, legUnits: quantity });
-            maxLots = Math.max(maxLots, lots);
           } else {
             riskRejections++;
-            bump(risk.allowed ? "MAX_CONCURRENT_POSITIONS" : riskRejectionCode(risk.reasons[0]));
+            const rejectReason = !risk.portfolioAllowed && (risk.portfolioReasons?.length ?? 0) > 0
+              ? risk.portfolioReasons![0]
+              : (!risk.allowed ? risk.reasons[0] : "MAX_CONCURRENT_POSITIONS");
+            bump(riskRejectionCode(rejectReason));
           }
         }
       } else {
@@ -463,6 +616,10 @@ export class BacktestEngine {
         openPositions: open.length,
       });
     }
+
+    // A decision on the last bar has no next bar to fill at: counted, never booked.
+    if (pending) bump("PENDING_NO_NEXT_BAR");
+    pending = null;
 
     // Close what is still open at the last evaluated bar (model price + slippage); equity's last point then
     // reflects the realized result.
@@ -661,6 +818,7 @@ export class BacktestEngine {
         flattenOnDailyLossLimit: flatten,
         dailyLossDefinition: "REALIZED_ONLY",
         dailyLossFlattens,
+        entryTiming: EXECUTION_TIMING,
       },
       metadata: {
         runId,
@@ -674,6 +832,8 @@ export class BacktestEngine {
         executionModel: model,
         transactionCostConfig: costCfg,
         strategyVersion: STRATEGY_VERSION,
+        executionTiming: EXECUTION_TIMING,
+        executionTimingVersion: EXECUTION_TIMING_VERSION,
         dataVersion: p10 ? DATA_VERSION.PHASE10 : DATA_VERSION.PHASE9_LEGACY,
         riskConfigVersion: p10 ? RISK_CONFIG_VERSION : "risk-2026.10-p9",
         datasetHash: dsHash,

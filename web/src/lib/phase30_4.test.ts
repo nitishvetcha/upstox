@@ -1,3 +1,5 @@
+// Network-gate setup: these tests stub fetch to exercise the live (upstox) code path. Without this the gate refuses.
+process.env.MARKET_DATA_PROVIDER = "upstox";
 // Phase 30.4 — Prototype option-contract LTT association tests.
 // All fixtures are deterministic. Not live-market validation.
 // Tests verify freshness classification, key matching, fail-close behaviour,

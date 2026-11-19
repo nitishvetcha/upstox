@@ -1,11 +1,15 @@
+// News gate setup: these tests stub fetch to exercise the authorised news path. Both flags are needed; mock-mode tests stay blocked.
+process.env.NEWS_EXTERNAL_ENABLED = "true";
 // Run: npm test   (deterministic fixtures; no news-provider account needed)
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { analyzeNews, dedupe, freshnessWeight, normalizeNewsApi, relevance, sentiment, tokenize } from "./news.ts";
 import { getIndexNews } from "./newsProvider.ts";
+// These tests exercise the live provider pipeline. Mode is set explicitly: unset means mock. Each test file runs in its own process.
+process.env.MARKET_DATA_PROVIDER = "upstox";
 import { clearUpstoxCache } from "./cache.ts";
 import { NewsError } from "./errors.ts";
-import { mockSnapshot } from "./mock.ts";
+import { mockSnapshotTradeInputs as mockSnapshot } from "../testFixtures/mockSnapshotTradeInputs.ts";
 import { analyze } from "../engine/strategy.ts";
 import { dataLabel } from "../dataStatus.ts";
 import type { News, NewsSentiment, Snapshot } from "../types.ts";

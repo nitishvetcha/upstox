@@ -1,22 +1,18 @@
 export const dynamic = "force-dynamic";
 
-import { NextResponse } from "next/server";
-import { STATE_COOKIE, STATE_TTL_MS, authorizeUrl, createAuthState, upstoxConfig } from "@/lib/services/upstoxAuth";
+import { createSession, sessionCookieHeader } from "../../../../lib/operatorSession.ts";
+import { checkPin, isValidPinFormat } from "../../../../lib/operatorPin.ts";
 
-export async function GET() {
-  if (!upstoxConfig()) {
-    return Response.json({ error: "AUTH_NOT_CONFIGURED", message: "Set UPSTOX_CLIENT_ID, UPSTOX_CLIENT_SECRET, UPSTOX_REDIRECT_URI in web/.env.local" }, { status: 500 });
-  }
-  const state = createAuthState(); // 32 random bytes, stored server-side, single-use
-  console.info("[AUTH] Redirecting to Upstox login");
-  const res = NextResponse.redirect(authorizeUrl(state));
-  // Also bound to this browser: the callback needs the cookie AND the server-side state. Lax survives Upstox's redirect.
-  res.cookies.set(STATE_COOKIE, state, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/api/auth",
-    maxAge: STATE_TTL_MS / 1000,
-  });
-  return res;
+// Operator sign-in with the 6-digit PIN. Generic errors only; the lock reveals only how long to wait.
+export async function POST(req: Request) {
+  if (!(req.headers.get("content-type") ?? "").includes("application/json")) return Response.json({ error: "invalid request" }, { status: 400 });
+  let body: unknown;
+  try { body = await req.json(); } catch { return Response.json({ error: "invalid request" }, { status: 400 }); }
+  const pin = (body as { pin?: unknown })?.pin;
+  if (!isValidPinFormat(pin)) return Response.json({ error: "Enter the 6-digit PIN." }, { status: 400 });
+  const r = checkPin(pin);
+  if (r.ok) return Response.json({ ok: true }, { headers: { "Set-Cookie": sessionCookieHeader(createSession()) } });
+  if (r.reason === "NOT_SET_UP") return Response.json({ error: "PIN is not set up. In a terminal, run: node --experimental-strip-types scripts/operator-pin.ts" }, { status: 503 });
+  if (r.reason === "LOCKED") return Response.json({ error: `Too many attempts. Try again in ${Math.ceil(r.retryAfterSec / 60)} minutes.` }, { status: 429 });
+  return Response.json({ error: "Wrong PIN." }, { status: 401 });
 }

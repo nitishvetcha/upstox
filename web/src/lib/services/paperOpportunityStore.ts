@@ -3,6 +3,7 @@
 // Stores at .data/paper-opportunities/popp_<id>.json
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 import type { OpportunityGrade } from "../engine/opportunityEngine.ts";
 
 function getDir() {
@@ -47,10 +48,13 @@ export const TERMINAL_STATES: PaperStatus[] = [
 // or counted as live evidence. New records carry an explicit `provenance` field.
 export const LEGACY_FIXTURE_CUTOFF = "2026-10-14T18:30:00.000Z"; // 2026-10-15 00:00 IST
 
-export function isFixture(opp: Pick<PaperOpportunity, "provenance" | "createdAt">): boolean {
-  if (opp.provenance === "FIXTURE") return true;
+export type Provenance = "LIVE_COLLECTOR" | "FIXTURE" | "MANUAL_UI";
+
+export function isFixture(opp: Pick<PaperOpportunity, "provenance" | "createdAt" | "source">): boolean {
+  if (opp.provenance === "FIXTURE" || opp.provenance === "MANUAL_UI") return true;
   if (opp.provenance === "LIVE_COLLECTOR") return false;
-  return opp.createdAt < LEGACY_FIXTURE_CUTOFF;
+  // Legacy records without provenance count as genuine only if live-sourced (e.g. "test_eod_debug" had no source).
+  return opp.createdAt < LEGACY_FIXTURE_CUTOFF || opp.source !== "LIVE";
 }
 
 // ── Audit event ───────────────────────────────────────────────────────────────
@@ -124,6 +128,13 @@ export interface PaperOpportunity {
   // Lifecycle
   status: PaperStatus;
   openedAt: string;
+  // Set only when an opening attempt produced a paper trade through the full server-side gates.
+  openedPaperTradeId?: string | null;
+  // Audit of the most recent opening attempt (accepted or rejected). Never an execution price.
+  lastOpenAttempt?: { at: string; code: string; reasons: string[] } | null;
+  // Set while an open attempt runs; cleared when it ends. Stale claims expire (see claimOpportunityOpening).
+  openingClaimedAt?: string | null;
+  openingClaimId?: string | null; // unique per claim: only the holder can release it
   closedAt: string | null;
 
   // Outcome (mutable)
@@ -150,7 +161,7 @@ export interface PaperOpportunity {
   lastLivePriceAt?: string | null;
 
   // Where the record came from. Absent on legacy records (see isFixture).
-  provenance?: "LIVE_COLLECTOR" | "FIXTURE";
+  provenance?: Provenance;
 
   // Audit trail
   events: PaperOpportunityEvent[];
@@ -167,7 +178,34 @@ function filePath(id: string) {
 export function savePaperOpportunity(opp: PaperOpportunity): void {
   const dir = getDir();
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(filePath(opp.id), JSON.stringify(opp, null, 2));
+  // Atomic replace: readers (and a crash) see either the old complete record or the new complete record.
+  const target = filePath(opp.id);
+  const tmp = `${target}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(opp, null, 2));
+  fs.renameSync(tmp, target);
+}
+
+// Record files that exist but cannot be parsed. listPaperOpportunities() skips them, so without this they
+// would silently drop out of every statistic. Surfaced for integrity checks; never deleted or modified.
+export function listUnreadablePaperOpportunityFiles(): string[] {
+  try {
+    // turbopackIgnore: the paper-opportunity directory is a runtime data path (environment override or .data), not bundled.
+    const dir = getDir();
+    if (!fs.existsSync(/* turbopackIgnore: true */ dir)) return [];
+    return fs
+      .readdirSync(/* turbopackIgnore: true */ dir)
+      .filter((f) => f.startsWith("popp_") && f.endsWith(".json"))
+      .filter((f) => {
+        try {
+          JSON.parse(fs.readFileSync(path.join(/* turbopackIgnore: true */ dir, f), "utf8"));
+          return false;
+        } catch {
+          return true;
+        }
+      });
+  } catch {
+    return [];
+  }
 }
 
 export function getPaperOpportunity(id: string): PaperOpportunity | null {
@@ -181,14 +219,14 @@ export function getPaperOpportunity(id: string): PaperOpportunity | null {
 export function listPaperOpportunities(): PaperOpportunity[] {
   try {
     const dir = getDir();
-    if (!fs.existsSync(dir)) return [];
+    if (!fs.existsSync(/* turbopackIgnore: true */ dir)) return [];
     return fs
-      .readdirSync(dir)
+      .readdirSync(/* turbopackIgnore: true */ dir)
       .filter((f) => f.startsWith("popp_") && f.endsWith(".json"))
       .map((f) => {
         try {
           return JSON.parse(
-            fs.readFileSync(path.join(dir, f), "utf8"),
+            fs.readFileSync(path.join(/* turbopackIgnore: true */ dir, f), "utf8"),
           ) as PaperOpportunity;
         } catch {
           return null;
@@ -225,6 +263,30 @@ export function updatePaperOpportunity(
   };
   savePaperOpportunity(updated);
   return updated;
+}
+
+// ── Opening claim ─────────────────────────────────────────────────────────────
+// Lets one open attempt run at a time per opportunity. The check and the write are one synchronous step (no await
+// between them), so two requests in the same server process cannot both take the claim.
+// shortcut: claim is kept in the record, not an OS file lock; one server process only. Multiple processes need a file lock.
+const OPEN_CLAIM_MS = 120_000; // a crashed attempt cannot block the opportunity for longer than this
+
+// Returns this attempt's claim id, or null when the opportunity is linked or another live claim holds it.
+export function claimOpportunityOpening(id: string, now: Date): string | null {
+  const opp = getPaperOpportunity(id);
+  if (!opp || opp.openedPaperTradeId) return null;
+  const since = opp.openingClaimedAt ? Date.parse(opp.openingClaimedAt) : NaN;
+  if (Number.isFinite(since) && now.getTime() - since < OPEN_CLAIM_MS) return null;
+  const claimId = randomUUID();
+  updatePaperOpportunity(id, { openingClaimedAt: now.toISOString(), openingClaimId: claimId });
+  return claimId;
+}
+
+// Clears the claim only when it is still this attempt's. A request whose claim expired must not clear a newer one.
+export function releaseOpportunityOpening(id: string, claimId: string): void {
+  const opp = getPaperOpportunity(id);
+  if (!opp || opp.openingClaimId !== claimId) return;
+  updatePaperOpportunity(id, { openingClaimedAt: null, openingClaimId: null });
 }
 
 // ── Analytics helpers ─────────────────────────────────────────────────────────

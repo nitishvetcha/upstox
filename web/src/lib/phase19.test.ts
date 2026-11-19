@@ -2,6 +2,7 @@
 // Covers: engine versioning, options scoring, event risk penalty, contract filtering,
 // stock scanner, trade plan R:R, source safety, and API route existence.
 import assert from "node:assert/strict";
+import { FIXTURE_DEPS, FIXTURE_NOW } from "./testFixtures/stockScan.ts";
 import { describe, it } from "node:test";
 
 import { OPPORTUNITY_ENGINE_VERSION, evaluateOptionsOpportunity, WEIGHTS } from "./engine/opportunityEngine.ts";
@@ -294,12 +295,12 @@ describe("SP — Score properties", () => {
 });
 
 // ── SO — Stock opportunity engine ─────────────────────────────────────────────
-// Tests run without live API access; scanStocks will return UNAVAILABLE source gracefully.
+// Deterministic fixtures (testFixtures/stockScan.ts); no live Upstox calls.
 
 describe("SO — Stock opportunity engine source safety", () => {
   it("SO-01: scanStocks resolves without throwing (no API token)", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("intraday");
+    const r = await scanStocks("intraday", FIXTURE_NOW, FIXTURE_DEPS);
     assert.ok(r.timestamp);
     assert.ok(Array.isArray(r.topOpportunities));
     assert.equal(r.kind, "intraday");
@@ -307,28 +308,29 @@ describe("SO — Stock opportunity engine source safety", () => {
 
   it("SO-02: scanStocks swing resolves without throwing", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("swing");
+    const r = await scanStocks("swing", FIXTURE_NOW, FIXTURE_DEPS);
     assert.equal(r.kind, "swing");
     assert.ok(r.engineVersion === "20.1");
   });
 
   it("SO-03: unavailable source returns noOpportunityReason", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("intraday");
-    if (r.source === "UNAVAILABLE") {
-      assert.ok(r.noOpportunityReason !== null, "UNAVAILABLE source must have noOpportunityReason");
-    }
+    const none = { quotes: async (inst: { symbol: string; instrumentKey: string }[], now: Date) => inst.map((i) => ({ symbol: i.symbol, exchange: "NSE" as const, instrumentKey: i.instrumentKey, timestamp: now.toISOString(), ltp: null, marketStatus: "OPEN" as const, freshness: "UNAVAILABLE" as const, source: null, unavailableReason: "UPSTOX_NOT_CONNECTED" })) };
+    const r = await scanStocks("intraday", FIXTURE_NOW, none);
+    assert.equal(r.source, "UNAVAILABLE");
+    assert.ok(r.noOpportunityReason !== null, "UNAVAILABLE source must have noOpportunityReason");
+    assert.equal(r.topOpportunities.length, 0);
   });
 
   it("SO-04: universe is NIFTY_50", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("intraday");
+    const r = await scanStocks("intraday", FIXTURE_NOW, FIXTURE_DEPS);
     assert.equal(r.universe, "NIFTY_50");
   });
 
   it("SO-05: topOpportunities length is at most 3", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("swing");
+    const r = await scanStocks("swing", FIXTURE_NOW, FIXTURE_DEPS);
     assert.ok(r.topOpportunities.length <= 3);
   });
 });

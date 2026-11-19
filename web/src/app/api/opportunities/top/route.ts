@@ -30,14 +30,14 @@ export async function GET() {
       : { result: bnOptions, top: bnOptions.topOpportunities[0] ?? null };
 
     const intradayBest = intradayResult.topOpportunities[0] ?? null;
-    const swingBest = swingResult.topOpportunities[0] ?? null;
+    const swingBest = swingResult.topOpportunities[0] ?? null; // retired strategy: reported, never ranked as best
 
     // Determine overall best across all engines (not by fixed bonus — use raw score comparison)
+    // Exclude candidates with grade === "REJECT" (e.g. from EOD scan with zero live data sources)
     const candidates = [
       { engine: "OPTIONS", score: optionsBest.top?.opportunityScore ?? 0, item: optionsBest.top },
       { engine: "STOCK_INTRADAY", score: intradayBest?.opportunityScore ?? 0, item: intradayBest },
-      { engine: "STOCK_SWING", score: swingBest?.opportunityScore ?? 0, item: swingBest },
-    ].filter((c) => c.item !== null);
+    ].filter((c) => c.item !== null && c.item.grade !== "REJECT");
     candidates.sort((a, b) => b.score - a.score);
     const overall = candidates[0] ?? null;
 
@@ -74,6 +74,7 @@ export async function GET() {
           topScore: swingBest?.opportunityScore ?? null,
           top: swingBest,
           freshness: swingResult.freshness,
+          retired: true,
         },
         longTerm: {
           dataAvailable: ltResult.fundamentalDataAvailable,

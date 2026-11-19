@@ -1,47 +1,28 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
-import { TopBar } from "@/components/TopBar";
-import { getDashboard } from "@/lib/services/market";
-import { fmtDate } from "@/lib/time";
-import { dataLabel } from "@/lib/dataStatus";
-import { tokenStatus } from "@/lib/services/upstoxAuth";
+import AppChrome from "../components/AppChrome";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// Self-hosted Geist and Geist Mono (official Vercel release v1.9.2, SIL OFL 1.1). Variable fonts cover weights 100–900.
+// Replaces the build-time Google Fonts download so the production build needs no external network access.
+const geistSans = localFont({ src: "./fonts/Geist-Variable.woff2", variable: "--font-geist-sans", weight: "100 900", display: "swap" });
+const geistMono = localFont({ src: "./fonts/GeistMono-Variable.woff2", variable: "--font-geist-mono", weight: "100 900", display: "swap" });
+
+// Required for the nonce-based CSP: statically prerendered pages cannot receive a per-request nonce (Next 16 CSP guide).
+// Every other route is already dynamic, so this changes only the previously static /saved-picks and /strategy-evidence.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Options Analyzer",
-  description: "NIFTY and BANK NIFTY options analysis and paper trading",
+  description: "NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, BANKEX — options analysis and paper trading",
 };
 
-// Market data changes every request; never prerender.
-export const dynamic = "force-dynamic";
-
-export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const [{ analyses, generatedAt }, token] = await Promise.all([getDashboard(), tokenStatus()]);
-  const tickers = analyses.map(({ snapshot: s }) => ({
-    name: s.name,
-    spot: s.spot,
-    change: s.prevClose === null ? null : s.spot - s.prevClose,
-    expiry: fmtDate(s.expiry),
-  }));
-
+// Root layout performs no data access. Live market data is loaded only by the (dashboard) layout and its pages.
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col bg-zinc-950 text-zinc-100 md:flex-row">
-        <Sidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar
-            tickers={tickers}
-            generatedAt={generatedAt}
-            dataLabel={dataLabel(analyses.map((a) => a.snapshot))}
-            upstoxStatus={token.status}
-          />
-          <main className="flex-1 p-4 md:p-6">{children}</main>
-        </div>
-      </body>
+      <body className="min-h-full bg-zinc-950 text-zinc-100">{children}
+        <AppChrome /></body>
     </html>
   );
 }

@@ -142,6 +142,7 @@ describe("Phase 28 — Live Market Readiness & Operational Integrity", () => {
 
   // 6. Monitoring Idempotency
   it("P28-06: State transitions are strictly idempotent and prevent duplicate audit events", () => {
+    const AT = "2026-10-06T05:00:00.000Z"; // fixed clock: fixtures expire 2026-10-15
     const opp = createPaperOpportunity({
       instrumentType: "OPTION", underlying: "NIFTY", symbol: null, instrumentKey: "NSE_FO|999", optionType: "CE",
       strike: 24000, expiry: "2026-10-15T15:30:00.000Z", strategyType: "BREAKOUT", direction: "BULLISH",
@@ -150,14 +151,14 @@ describe("Phase 28 — Live Market Readiness & Operational Integrity", () => {
     });
     savePaperOpportunity(opp);
 
-    const res1 = evaluatePaperOpportunity(opp, { currentPrice: 135 });
+    const res1 = evaluatePaperOpportunity(opp, { currentPrice: 135, timestamp: AT });
     assert.equal(res1.transitioned, true);
     assert.equal(res1.toStatus, "TARGET1_HIT");
 
     const saved1 = getPaperOpportunity(opp.id)!;
     assert.equal(saved1.events.length, 1);
 
-    const res2 = evaluatePaperOpportunity(saved1, { currentPrice: 135 });
+    const res2 = evaluatePaperOpportunity(saved1, { currentPrice: 135, timestamp: AT });
     assert.equal(res2.transitioned, false);
     const saved2 = getPaperOpportunity(opp.id)!;
     assert.equal(saved2.events.length, 1);

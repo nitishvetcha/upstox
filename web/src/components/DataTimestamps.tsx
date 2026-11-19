@@ -1,5 +1,7 @@
 import type { Snapshot, Subsystem } from "@/lib/types";
 import { fmtIst, freshnessOf } from "@/lib/time";
+import { chainFreshnessLabel } from "@/lib/services/chainFreshness";
+import { freshnessDisplayLabel } from "@/lib/freshnessLabel";
 import { Badge } from "./ui";
 
 const NAMES: Record<Subsystem, string> = { market: "Market", optionChain: "Option chain", technical: "Technical", news: "News", breadth: "Breadth" };
@@ -14,9 +16,11 @@ export function DataTimestamps({ s, stale, now = new Date() }: { s: Snapshot; st
         return (
           <span key={k} className="flex items-center gap-1">
             {NAMES[k]}
-            <Badge tone={info.source === "LIVE" ? "neutral" : "warn"}>{info.source === "UNAVAILABLE" ? "N/A" : info.source}</Badge>
-            {info.fetchedAt && `${fmtIst(info.fetchedAt)} IST`}
+            <Badge tone={info.source === "LIVE" ? "neutral" : "warn"}>{info.source === "UNAVAILABLE" ? "N/A" : freshnessDisplayLabel(info.source)}</Badge>
+            {info.lastTradeTime && <span className="text-zinc-400">last trade {fmtIst(info.lastTradeTime)} IST ·</span>}
+            {info.fetchedAt && `fetched ${fmtIst(info.fetchedAt)} IST`}
             {f.freshness === "AGING" && <span className="text-amber-400">({f.freshnessSeconds}s old)</span>}
+            {k === "optionChain" && s.chainFreshness && <span className="text-zinc-400">· {chainFreshnessLabel(s.chainFreshness)}</span>}
           </span>
         );
       })}

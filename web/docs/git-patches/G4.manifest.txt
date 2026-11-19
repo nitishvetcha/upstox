@@ -1,0 +1,12 @@
+# G4 — new files only (apply-ready). Review before applying.
+NEW tests/browser/chain-selection.probe.mjs
+NEW tests/browser/contract-scenarios.check.mjs
+NEW tests/browser/contract-selection.check.mjs
+NEW tests/browser/csp-measure.check.mjs
+NEW tests/browser/journal-filters.check.mjs
+NEW tests/browser/login-logout.check.mjs
+NEW tests/browser/option-chain.check.mjs
+NEW tests/browser/refresh.check.mjs
+NEW tests/browser/saved-picks.check.mjs
+NEW tests/browser/state-sweep.check.mjs
+NEW tests/browser/technical-chart.check.mjs

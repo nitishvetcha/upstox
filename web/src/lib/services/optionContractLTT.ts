@@ -14,16 +14,39 @@
 
 import type { IndexId, OptionRow } from "../types.ts";
 import { FILTERS } from "../engine/opportunityEngine.ts";
-import { tradeFreshnessOf } from "../time.ts";
+import { tradeFreshnessOf, MIN_LTT_EPOCH_MS } from "../time.ts";
 import { get } from "./upstoxMarket.ts";
 
-/** Feature flag — disabled by default.
+/**
+ * Server-side runtime feature flag reader.
+ * Evaluates process.env.OPTION_QUOTE_LTT_ENABLED at request time in server-only code.
+ * Strict equality check: only explicitly "true" enables the feature.
+ * Missing, malformed, or any non-"true" value safely defaults to false.
+ */
+export function isOptionQuoteLttEnabled(): boolean {
+  return process.env.OPTION_QUOTE_LTT_ENABLED === "true";
+}
+
+/**
+ * Server-side canary execution flag reader.
+ * Controlled separately by OPTION_QUOTE_CANARY_ENABLED.
+ * Defaults strictly to false.
+ */
+export function isOptionQuoteCanaryEnabled(): boolean {
+  return process.env.OPTION_QUOTE_CANARY_ENABLED === "true";
+}
+
+/** Feature flag constant — disabled by default.
+ *  Preserved for backward compatibility with existing test assertions.
  *  Do NOT enable in production until the freshness policy for IV/Greeks
  *  (which have no independent timestamp) is explicitly approved. */
 export const OPTION_QUOTE_LTT_ENABLED = false;
 
-/** Defensive batch limit. Upstox has no published cap; 14 confirmed working in Phase 30.3. */
-const BATCH_SIZE = 20;
+/** Defensive batch limit. Maximum 20 contract keys per batch. */
+export const BATCH_SIZE = 20;
+
+/** Minimum inter-request delay in milliseconds (≥ 131 ms). */
+export const MIN_REQUEST_SPACING_MS = 131;
 
 /** 2 % of chain LTP. Options can move within a tick between two fetches; >2 % suggests
  *  a data mismatch or illiquid strike and warrants ineligibility. */
@@ -101,11 +124,12 @@ export function extractEvaluationKeys(rows: OptionRow[], spot: number): string[]
 
 /** Parse last_trade_time from a raw Upstox market-quote entry.
  *  Returns an ISO string, or null for absent / zero / implausible values.
- *  "Implausible" = before 2020-01-01 in epoch ms, which catches both 0 and non-ms timestamps. */
-export function parseLTT(raw: Record<string, unknown>): string | null {
+ *  "Implausible" = before 2020-01-01 in epoch ms (MIN_LTT_EPOCH_MS), which catches
+ *  0, negative, and seconds-instead-of-milliseconds timestamps. */
+export function parseLTT(raw: Record<string, unknown> | null | undefined): string | null {
+  if (!raw || typeof raw !== "object") return null;
   const ltt = Number(raw.last_trade_time);
-  if (!Number.isFinite(ltt) || ltt <= 0) return null;
-  if (ltt < 1_577_836_800_000) return null; // before 2020-01-01 UTC
+  if (!Number.isFinite(ltt) || ltt < MIN_LTT_EPOCH_MS) return null;
   return new Date(ltt).toISOString();
 }
 

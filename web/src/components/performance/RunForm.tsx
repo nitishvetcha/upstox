@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { WhatIfTables, type WhatIf } from "./WhatIfTables";
 import { useRouter } from "next/navigation";
+import { BACKTEST_DEFAULTS, CHART_TIMEFRAMES, INDEX_OPTIONS, defaultDateRange } from "@/lib/uiConfig";
 
 const field = "rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm text-zinc-100";
 
@@ -14,6 +15,8 @@ export function RunForm() {
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState("CLOSE_ONLY");
   const [whatIf, setWhatIf] = useState<WhatIf | null>(null);
+  // Default range is computed once per form, from today, not typed in.
+  const [range] = useState(() => defaultDateRange());
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -33,13 +36,13 @@ export function RunForm() {
 
   return (
     <form onSubmit={submit} className="flex flex-wrap items-end gap-3 text-xs text-zinc-400">
-      <label className="flex flex-col gap-1">Index<select name="index" className={field}><option value="nifty">NIFTY 50</option><option value="banknifty">BANK NIFTY</option></select></label>
-      <label className="flex flex-col gap-1">From<input type="date" name="startDate" defaultValue="2026-09-10" className={field} /></label>
-      <label className="flex flex-col gap-1">To<input type="date" name="endDate" defaultValue="2026-10-05" className={field} /></label>
-      <label className="flex flex-col gap-1">Timeframe<select name="timeframe" defaultValue="15m" className={field}>{["5m", "15m", "30m", "1h"].map((t) => <option key={t}>{t}</option>)}</select></label>
-      <label className="flex flex-col gap-1">Capital ₹<input type="number" name="startingCapital" defaultValue={100000} min={10000} step={10000} className={`${field} w-28`} /></label>
-      <label className="flex flex-col gap-1">Risk %<input type="number" name="riskPerTradePercent" defaultValue={1} min={0.1} max={5} step={0.1} className={`${field} w-20`} /></label>
-      <label className="flex flex-col gap-1">Slippage %<input type="number" name="slippagePercent" defaultValue={1} min={0} max={5} step={0.1} className={`${field} w-20`} /></label>
+      <label className="flex flex-col gap-1">Index<select name="index" className={field}>{INDEX_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
+      <label className="flex flex-col gap-1">From<input type="date" name="startDate" defaultValue={range.startDate} className={field} /></label>
+      <label className="flex flex-col gap-1">To<input type="date" name="endDate" defaultValue={range.endDate} className={field} /></label>
+      <label className="flex flex-col gap-1">Timeframe<select name="timeframe" defaultValue={BACKTEST_DEFAULTS.timeframe} className={field}>{CHART_TIMEFRAMES.map((t) => <option key={t}>{t}</option>)}</select></label>
+      <label className="flex flex-col gap-1">Capital ₹<input type="number" name="startingCapital" defaultValue={BACKTEST_DEFAULTS.startingCapital} min={10000} step={10000} className={`${field} w-28`} /></label>
+      <label className="flex flex-col gap-1">Risk %<input type="number" name="riskPerTradePercent" defaultValue={BACKTEST_DEFAULTS.riskPerTradePercent} min={0.1} max={5} step={0.1} className={`${field} w-20`} /></label>
+      <label className="flex flex-col gap-1">Slippage %<input type="number" name="slippagePercent" defaultValue={BACKTEST_DEFAULTS.slippagePercent} min={0} max={5} step={0.1} className={`${field} w-20`} /></label>
       <label className="flex flex-col gap-1">Strategy<select name="strategyFilter" className={field}>{["ALL", "Long Call", "Long Put", "Bull Call Spread", "Bear Put Spread", "ATM Straddle", "Iron Condor"].map((s) => <option key={s}>{s}</option>)}</select></label>
       <label className="flex flex-col gap-1">Execution model<select name="executionModel" value={model} onChange={(e) => setModel(e.target.value)} className={field}><option value="CLOSE_ONLY">CLOSE_ONLY</option><option value="INTRABAR_MODEL_DERIVED">INTRABAR_MODEL_DERIVED</option></select></label>
       <label className="flex flex-col gap-1">Data model<select name="dataModel" className={field}><option value="PHASE10">PHASE10 (VIX IV, constituent breadth, costs)</option><option value="PHASE9_LEGACY">PHASE9_LEGACY (synthetic; comparison only)</option></select></label>

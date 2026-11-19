@@ -130,7 +130,7 @@ export function mockSource(fetchedAt: string): SourceInfo {
   return { source: "MOCK", provider: "MOCK", fetchedAt };
 }
 
-import { calculateBreadth } from "./breadthService.ts";
+import { asMockBreadth, calculateBreadth } from "./breadthService.ts";
 import { INDEX_CONSTITUENTS } from "./breadthConfig.ts";
 import type { ConstituentQuote } from "../types.ts";
 
@@ -165,7 +165,7 @@ export function mockSnapshot(index: IndexId, now = new Date()): Snapshot {
         timestamp: now.toISOString(),
       };
     });
-    const breadth = calculateBreadth("nifty", niftyQuotes, spotChgPct, now, breadthSrc);
+    const breadth = asMockBreadth(calculateBreadth("nifty", niftyQuotes, spotChgPct, now, breadthSrc));
     return {
       index,
       name: INSTRUMENTS.nifty.name,
@@ -175,7 +175,8 @@ export function mockSnapshot(index: IndexId, now = new Date()): Snapshot {
       strikeStep: 50,
       lotSize: 65,
       indicators: {
-        ema9: 25090, ema21: 25045, ema50: 24960, ema200: 24610, vwap: 25071, rsi: 61.4, macdHist: 6.2,
+        // vwap: null — spot VWAP is unavailable for index candles (no volume). The former literal had no provenance.
+        ema9: 25090, ema21: 25045, ema50: 24960, ema200: 24610, vwap: null, rsi: 61.4, macdHist: 6.2,
         atr: 182, pdh: 25064, pdl: 24921, orHigh: 25096, orLow: 25038,
       },
       ivPercentile: 38,
@@ -205,17 +206,17 @@ export function mockSnapshot(index: IndexId, now = new Date()): Snapshot {
       timestamp: now.toISOString(),
     };
   });
-  const breadth = calculateBreadth("banknifty", bankQuotes, spotChgPct, now, breadthSrc);
+  const breadth = asMockBreadth(calculateBreadth("banknifty", bankQuotes, spotChgPct, now, breadthSrc));
   return {
     index,
-    name: INSTRUMENTS.banknifty.name,
+    name: INSTRUMENTS[index].name,
     spot,
     prevClose,
     expiry,
     strikeStep: 100,
     lotSize: 30,
     indicators: {
-      ema9: 56280, ema21: 56310, ema50: 56150, ema200: 55400, vwap: 56300, rsi: 47.2, macdHist: -14,
+      ema9: 56280, ema21: 56310, ema50: 56150, ema200: 55400, vwap: null, rsi: 47.2, macdHist: -14,
       atr: 430, pdh: 56520, pdl: 56180, orHigh: 56450, orLow: 56250,
     },
     ivPercentile: 44,

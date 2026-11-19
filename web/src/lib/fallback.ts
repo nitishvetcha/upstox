@@ -12,4 +12,6 @@ export const FALLBACK_LABELS: Record<FallbackReason, string> = {
   UPSTOX_EMPTY_CHAIN: "Upstox returned an empty option chain",
   UPSTOX_NO_EXPIRY: "No valid expiry from Upstox",
   UPSTOX_INVALID_INSTRUMENT: "Instrument not recognised by Upstox",
+  UPSTOX_NOT_FOUND: "Upstox has no record for this resource (not found)",
+  UPSTOX_QUOTE_MISSING: "Upstox quote response did not include this instrument",
 };

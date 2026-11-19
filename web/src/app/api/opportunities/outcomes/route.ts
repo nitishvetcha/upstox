@@ -1,9 +1,12 @@
+import { requireOperator } from "../../../../lib/operatorSession.ts";
 export const dynamic = "force-dynamic";
 
-import { listOpportunityRecords, updateOpportunityRecord } from "@/lib/services/opportunityTrackingStore";
-import type { OutcomeState } from "@/lib/services/opportunityTrackingStore";
+import { listOpportunityRecords, updateOpportunityRecord } from "../../../../lib/services/opportunityTrackingStore.ts";
+import type { OutcomeState } from "../../../../lib/services/opportunityTrackingStore.ts";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const __refused = requireOperator(req);
+  if (__refused) return __refused;
   const records = listOpportunityRecords();
   const open = records.filter((r) => r.outcome === "OPEN");
   const closed = records.filter((r) => r.outcome !== "OPEN");
@@ -11,6 +14,8 @@ export async function GET() {
 }
 
 export async function PATCH(req: Request) {
+  const __refused = requireOperator(req);
+  if (__refused) return __refused;
   try {
     const body = await req.json() as { id: string; outcome?: OutcomeState; mfe?: number; mae?: number; exitPrice?: number; exitAt?: string; notes?: string };
     if (!body.id) return Response.json({ error: "id required" }, { status: 400 });

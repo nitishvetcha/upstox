@@ -17,6 +17,8 @@ import type { ContractOpportunity, OptionsOpportunityResult } from "../engine/op
 import { OPPORTUNITY_ENGINE_VERSION } from "../engine/opportunityEngine.ts";
 import { STOCK_OPPORTUNITY_VERSION } from "../engine/stockOpportunityEngine.ts";
 import type { StockOpportunity, StockOpportunityResult } from "../engine/stockOpportunityEngine.ts";
+import { tradeFreshnessOf } from "../time.ts";
+import { pruneRunFiles } from "./runLogRetention.ts";
 
 // ── Audit log ─────────────────────────────────────────────────────────────────
 
@@ -37,25 +39,30 @@ export interface LiveCollectionRun {
   errors: string[];
 }
 
-const COLLECTION_LOG_DIR =
-  process.env.COLLECTION_LOG_DIR ??
-  path.join(process.cwd(), ".data", "collection-logs");
+// Resolved on every call (not at import), so tests that set COLLECTION_LOG_DIR never write into the real logs.
+const collectionLogDir = () => process.env.COLLECTION_LOG_DIR ?? path.join(process.cwd(), ".data", "collection-logs");
 
 export function saveCollectionRun(run: LiveCollectionRun): void {
-  fs.mkdirSync(COLLECTION_LOG_DIR, { recursive: true });
+  fs.mkdirSync(collectionLogDir(), { recursive: true });
   fs.writeFileSync(
-    path.join(COLLECTION_LOG_DIR, `run_${run.id}.json`),
+    path.join(/* turbopackIgnore: true */ collectionLogDir(), `run_${run.id}.json`),
     JSON.stringify(run, null, 2),
   );
+  // The newest genuinely LIVE run is kept even when it is older than the newest 200 (ops status reads it).
+  pruneRunFiles(collectionLogDir(), "run_", 200, (file) => {
+    try { return (JSON.parse(fs.readFileSync(file, "utf8")) as LiveCollectionRun).sourceStatus === "LIVE"; }
+    catch { return false; }
+  });
 }
 
 export function listCollectionRuns(): LiveCollectionRun[] {
   try {
-    if (!fs.existsSync(COLLECTION_LOG_DIR)) return [];
-    return fs.readdirSync(COLLECTION_LOG_DIR)
+    // turbopackIgnore: the collection log directory is a runtime data path (COLLECTION_LOG_DIR or .data), not bundled.
+    if (!fs.existsSync(/* turbopackIgnore: true */ collectionLogDir())) return [];
+    return fs.readdirSync(/* turbopackIgnore: true */ collectionLogDir())
       .filter((f) => f.endsWith(".json"))
       .map((f) => {
-        try { return JSON.parse(fs.readFileSync(path.join(COLLECTION_LOG_DIR, f), "utf8")) as LiveCollectionRun; }
+        try { return JSON.parse(fs.readFileSync(path.join(/* turbopackIgnore: true */ collectionLogDir(), f), "utf8")) as LiveCollectionRun; }
         catch { return null; }
       })
       .filter((r): r is LiveCollectionRun => r !== null)
@@ -103,6 +110,14 @@ function optionToPaper(
   underlying: "NIFTY" | "BANKNIFTY",
   spot: number,
 ): PaperOpportunity {
+  if (
+    c.strategyType === "BEAR_PUT_SPREAD" ||
+    c.strategyType === "BULL_CALL_SPREAD" ||
+    Boolean(c.isMultiLeg) ||
+    ((c.legs?.length ?? 0) > 1)
+  ) {
+    throw new Error(`Multi-leg strategy ${c.strategyType ?? "spread"} is not supported by single-contract paper trading model`);
+  }
   const direction = c.optionType === "CE" ? "BULLISH" : "BEARISH";
   return createPaperOpportunity({
     instrumentType: "OPTION",
@@ -192,6 +207,8 @@ export interface CollectionResult {
   reason?: string;
 }
 
+export const ENTRY_CUTOFF_IST_MIN = 14 * 60 + 30;
+
 // ── Main collector ────────────────────────────────────────────────────────────
 
 export async function runLiveOpportunityCollection(
@@ -204,6 +221,11 @@ export async function runLiveOpportunityCollection(
   if (mStatus !== "OPEN") {
     return { market: mStatus, source: "NONE", generated: 0, accepted: 0, created: 0, duplicates: 0, rejected: 0, niftyCount: 0, bankNiftyCount: 0, stockCount: 0, errors: [], reason: "MARKET_CLOSED" };
   }
+  // Phase 2 evaluation rule (docs/intraday-evaluation-rules.md): no new entries at or after 14:30 IST.
+  const istMin = Math.floor(((now.getTime() + 5.5 * 3600e3) % 86_400_000) / 60_000);
+  if (istMin >= ENTRY_CUTOFF_IST_MIN) {
+    return { market: mStatus, source: "NONE", generated: 0, accepted: 0, created: 0, duplicates: 0, rejected: 0, niftyCount: 0, bankNiftyCount: 0, stockCount: 0, errors: [], reason: "ENTRY_CUTOFF" };
+  }
 
   const existing = listPaperOpportunities();
   const openOpps = existing.filter((o) => o.status === "OPEN");
@@ -213,7 +235,24 @@ export async function runLiveOpportunityCollection(
   );
   const existingKeys = new Set(existing.map(buildIdentityKey));
 
-  const result: CollectionResult = { market: mStatus, source: "LIVE", generated: 0, accepted: 0, created: 0, duplicates: 0, rejected: 0, niftyCount: 0, bankNiftyCount: 0, stockCount: 0, errors: [] };
+  const result: CollectionResult = {
+    market: mStatus,
+    source: "UNAVAILABLE", // Never initialize as LIVE before verifying actual data source
+    generated: 0,
+    accepted: 0,
+    created: 0,
+    duplicates: 0,
+    rejected: 0,
+    niftyCount: 0,
+    bankNiftyCount: 0,
+    stockCount: 0,
+    errors: [],
+  };
+
+  let hasLive = false;
+  let hasMock = false;
+  let hasAuthExpired = false;
+  let hasAuthUnavailable = false;
 
   // ── Options ──────────────────────────────────────────────────────────────
   for (const [fetchFn, label] of [
@@ -225,16 +264,61 @@ export async function runLiveOpportunityCollection(
       result.generated += r.topOpportunities.length + r.rejectedContracts.length;
       result.rejected += r.rejectedContracts.length;
 
+      const dqValues = Object.values(r.dataQuality ?? {});
+      if (dqValues.some((v) => v === "MOCK")) hasMock = true;
+      if (dqValues.some((v) => v === "AUTH_EXPIRED")) hasAuthExpired = true;
+      if (dqValues.some((v) => v === "AUTH_UNAVAILABLE")) hasAuthUnavailable = true;
+
       // Source quality check
       if (!isAllLive(r.dataQuality)) {
         result.rejected += r.topOpportunities.length;
         result.errors.push(`${label}: non-LIVE data quality`);
         continue;
       }
+      hasLive = true;
 
       for (const c of r.topOpportunities) {
+        if (
+          c.strategyType === "BEAR_PUT_SPREAD" ||
+          c.strategyType === "BULL_CALL_SPREAD" ||
+          Boolean(c.isMultiLeg) ||
+          ((c.legs?.length ?? 0) > 1)
+        ) {
+          result.rejected++;
+          result.errors.push(`${label} ${c.strike}${c.optionType}: Multi-leg strategy ${c.strategyType ?? "spread"} rejected (single-contract paper model only)`);
+          continue;
+        }
+        if (c.grade === "REJECT" || c.grade === "C") {
+          result.rejected++;
+          result.errors.push(`${label} ${c.strike}${c.optionType}: ${c.grade} grade (${c.grade === "C" ? "watch-only" : "unverified or poor quality"})`);
+          continue;
+        }
+        if (c.spreadPct !== null && c.spreadPct > 5.0) {
+          result.rejected++;
+          result.errors.push(`${label} ${c.strike}${c.optionType}: spread ${c.spreadPct.toFixed(1)}% exceeds 5.0% actionable limit`);
+          continue;
+        }
+        if (c.spreadPct === null) {
+          result.rejected++;
+          result.errors.push(`${label} ${c.strike}${c.optionType}: missing bid/ask quote`);
+          continue;
+        }
+        if (c.delta === null || !Number.isFinite(c.delta) || Math.abs(c.delta) < 0.10 || Math.abs(c.delta) > 0.80) {
+          result.rejected++;
+          result.errors.push(`${label} ${c.strike}${c.optionType}: delta ${c.delta} invalid or outside [0.10, 0.80]`);
+          continue;
+        }
+        if (c.lastTradeTime !== undefined) {
+          if (!c.lastTradeTime || tradeFreshnessOf(c.lastTradeTime, now).freshness !== "LIVE") {
+            result.rejected++;
+            result.errors.push(`${label} ${c.strike}${c.optionType}: unverified contract quote freshness`);
+            continue;
+          }
+        }
         result.accepted++;
-        const paper = optionToPaper(c, label as "NIFTY" | "BANKNIFTY", r.spot);
+        let paper: PaperOpportunity;
+        try { paper = optionToPaper(c, label as "NIFTY" | "BANKNIFTY", r.spot); }
+        catch (e) { result.rejected++; result.errors.push(`${label} ${c.strike}${c.optionType}: ${(e as Error).message}`); continue; }
         const key = buildIdentityKey(paper);
 
         if (openKeys.has(key)) {
@@ -264,8 +348,11 @@ export async function runLiveOpportunityCollection(
     const stockResult = await fetchStocks();
     result.generated += stockResult.topOpportunities.length;
 
+    if ((stockResult.source as string) === "MOCK") hasMock = true;
     const stockSourceOk = stockResult.source === "UPSTOX";
     const stockFreshnessOk = stockResult.freshness === "LIVE";
+    if (stockSourceOk && stockFreshnessOk) hasLive = true;
+
     if (!stockSourceOk) {
       // Source failure always reported — something went wrong fetching
       result.rejected += stockResult.topOpportunities.length;
@@ -288,7 +375,9 @@ export async function runLiveOpportunityCollection(
           result.duplicates++;
           continue;
         }
-        const paper = stockToPaper(s);
+        let paper: PaperOpportunity;
+        try { paper = stockToPaper(s); }
+        catch (e) { result.rejected++; result.errors.push(`Stock ${s.symbol}: ${(e as Error).message}`); continue; }
         const key = buildIdentityKey(paper);
         if (openKeys.has(key) || existingKeys.has(key)) {
           result.duplicates++;
@@ -306,19 +395,33 @@ export async function runLiveOpportunityCollection(
     result.errors.push(`Stocks: ${(e as Error).message}`);
   }
 
+  // Provenance resolution: never default to LIVE unless verified
+  if (hasAuthExpired) {
+    result.source = "AUTH_EXPIRED";
+  } else if (hasAuthUnavailable) {
+    result.source = "AUTH_UNAVAILABLE";
+  } else if (hasMock) {
+    result.source = "MOCK";
+  } else if (hasLive) {
+    result.source = "LIVE";
+  } else {
+    result.source = "UNAVAILABLE";
+  }
+
   // Record session evidence
   try {
-    const { tokenStatus } = await import("./upstoxAuth.ts");
+    const { tokenStatus, evidenceAuthStatus } = await import("./upstoxAuth.ts");
     const { recordCollectionCycle } = await import("./sessionEvidenceStore.ts");
     const st = await tokenStatus();
-    const authStatus = st.status === "VALID" ? "CONNECTED" : st.status === "EXPIRED" || st.status === "INVALID" ? "EXPIRED" : "NOT_CONNECTED";
+    const authStatus = evidenceAuthStatus(st.status);
     recordCollectionCycle(result, authStatus, now);
   } catch {
     try {
       const { recordCollectionCycle } = await import("./sessionEvidenceStore.ts");
       recordCollectionCycle(result, "UNKNOWN", now);
-    } catch {
-      // Ignore session store errors if unwriteable in isolated tests
+    } catch (fallbackErr: unknown) {
+      const msg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+      result.errors.push(`Session evidence persistence failed: ${msg}`);
     }
   }
 

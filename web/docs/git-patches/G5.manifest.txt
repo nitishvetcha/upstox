@@ -1,0 +1,12 @@
+# G5 — operator guard on paper route handlers (tracked files, guard-only hunks). Index-validated (git apply --check --cached).
+# Excluded: route files whose diffs also contain import-path rewrites or unrelated changes (see FINDINGS below).
+MOD src/app/api/paper-opportunities/[id]/evaluate/route.ts
+MOD src/app/api/paper-opportunities/[id]/route.ts
+MOD src/app/api/paper-opportunities/open/route.ts
+MOD src/app/api/paper-opportunities/sessions/route.ts
+MOD src/app/api/paper-trading/close/route.ts
+MOD src/app/api/paper-trading/enter/route.ts
+MOD src/app/api/paper-trading/trades/route.ts
+MOD src/app/api/paper-trading/trades/[id]/route.ts
+MOD src/app/api/paper-trading/update/route.ts
+MOD src/app/api/recommendations/[id]/paper-trade/route.ts

@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3123",
-    "build": "next build",
+    "dev": "next dev -H 127.0.0.1 -p 3123",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test \"src/**/*.test.ts\"",
+    "test": "env -u UPSTOX_ANALYTICS_TOKEN UPSTOX_TOKEN_FILE=.test-data/no-upstox-token.json SESSION_EVIDENCE_DIR=.test-data/paper-sessions PAPER_TRADES_DIR=.test-data/paper-trades node --test --experimental-strip-types \"src/**/*.test.ts\"",
     "dev:upstox": "node scripts/dev-upstox.mjs",
     "upstox:login": "node scripts/upstox-login.mjs",
     "upstox:status": "node scripts/upstox-status.mjs",
@@ -15,24 +15,34 @@
     "paper:evaluate": "node scripts/paper-evaluate.mjs",
     "paper:cycle": "node scripts/paper-cycle.mjs",
     "paper:live": "node scripts/paper-live.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:dom": "node --import tsx --test src/app/saved-picks/savedPicks.dom.test.tsx",
+    "test:integration": "node --import tsx --test src/lib/integration/openRoute.integration.ts src/lib/integration/openRouteSuccess.integration.ts src/lib/integration/openRouteLedgerFailure.integration.ts src/lib/integration/openRouteParallel.integration.ts src/lib/integration/securityRegression.integration.ts"
+  },
+  "engines": {
+    "node": ">=22.16.0 <23"
   },
   "dependencies": {
+    "lightweight-charts": "5.2.1",
     "lucide-react": "^1.52.0",
-    "next": "16.3.8",
+    "next": "16.4.5",
+    "protobufjs": "8.8.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "recharts": "^3.10.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "16.4.5",
+    "jsdom": "29.1.1",
     "tailwindcss": "^4",
+    "tsx": "4.23.15",
     "typescript": "^5"
   },
   "type": "module"

@@ -66,9 +66,25 @@ describe("MQ30 — normalizeStockQuote: missing LTT during OPEN session", () => 
     assert.equal(q.freshness, "END_OF_DAY");
   });
 
-  it("MQ30-06 CLOSED + null LTT → END_OF_DAY (market closed regardless)", () => {
+  it("MQ30-06 CLOSED + null LTT → STALE because exchange time is unverified", () => {
     const q = normalizeStockQuote(makeRaw(2800, null), INST, CLOSED_NOW);
-    assert.equal(q.freshness, "END_OF_DAY");
+    assert.equal(q.freshness, "STALE");
+    assert.equal(q.exchangeTimestamp, null);
+  });
+
+  it("MQ30-07 OPEN + future LTT beyond clock-skew tolerance → STALE", () => {
+    const q = normalizeStockQuote(makeRaw(2800, OPEN_NOW.getTime() + 60_000), INST, OPEN_NOW);
+    assert.equal(q.freshness, "STALE");
+    assert.equal(q.dataAgeSeconds, null);
+  });
+
+  it("MQ30-08 exposes exchange timestamp, fetch time, age and session date", () => {
+    const ltt = OPEN_NOW.getTime() - 5_000;
+    const q = normalizeStockQuote(makeRaw(2800, ltt), INST, OPEN_NOW);
+    assert.equal(q.exchangeTimestamp, new Date(ltt).toISOString());
+    assert.equal(q.fetchedAt, OPEN_NOW.toISOString());
+    assert.equal(q.dataAgeSeconds, 5);
+    assert.equal(q.sessionDate, "2026-10-13");
   });
 });
 
@@ -126,11 +142,10 @@ describe("LS30 — liveQuoteSource: no-LTT fallback is conservative", () => {
     assert.ok(!lqsBlock.includes(': "LIVE"'), "liveQuoteSource must not fall back to LIVE when LTT absent");
   });
 
-  it("LS30-03 source code: stock normalizer uses STALE for null ageMs during OPEN", async () => {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const src = fs.readFileSync(path.join(process.cwd(), "src/lib/services/stockService.ts"), "utf8");
-    assert.ok(src.includes('ageMs === null ? "STALE"'), "stockService must classify null ageMs as STALE during OPEN");
+  it("LS30-03 stock normalizer delegates timestamp validation to the shared fail-closed policy", () => {
+    const q = normalizeStockQuote(makeRaw(2800, null), INST, OPEN_NOW);
+    assert.equal(q.freshness, "STALE");
+    assert.equal(q.exchangeTimestamp, null);
   });
 });
 

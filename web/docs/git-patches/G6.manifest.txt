@@ -1,0 +1,3 @@
+# G6 — upstox_fallback logging only, built from HEAD (not from the working tree). Index-validated.
+# Contains: logEvent import + console.warn -> logEvent replacement. Excludes credential-resolution and freshness hunks (pre-existing changes).
+MOD src/lib/services/market.ts

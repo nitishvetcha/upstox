@@ -45,3 +45,33 @@ export const num = (n: number, d = 2) =>
   n.toLocaleString("en-IN", { minimumFractionDigits: d, maximumFractionDigits: d });
 export const inr = (n: number) => `₹${num(n)}`;
 export const signed = (n: number, d = 2) => `${n >= 0 ? "+" : ""}${num(n, d)}`;
+
+// Operational states, distinct from market tones. Text always states the status; colour only reinforces it.
+export type Status = "ok" | "warn" | "error" | "stale" | "blocked" | "unknown" | "info";
+const STATUS: Record<Status, string> = {
+  ok: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+  warn: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+  error: "border-red-500/50 bg-red-500/10 text-red-300",
+  stale: "border-orange-500/40 bg-orange-500/10 text-orange-300",
+  blocked: "border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300",
+  unknown: "border-zinc-600 bg-zinc-800 text-zinc-400",
+  info: "border-sky-500/40 bg-sky-500/10 text-sky-300",
+};
+export function StatusPill({ status, children, title }: { status: Status; children: ReactNode; title?: string }) {
+  return (
+    <span title={title} className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-semibold tracking-wide ${STATUS[status]}`}>
+      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />{children}
+    </span>
+  );
+}
+
+export function SectionTitle({ children, hint }: { children: ReactNode; hint?: string }) {
+  return (
+    <h2 className="mb-2 flex items-baseline gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-zinc-400">
+      {children}{hint && <span className="normal-case tracking-normal text-zinc-500" title={hint}>ⓘ</span>}
+    </h2>
+  );
+}
+
+export const fmtIstTs = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) + " IST" : "—";

@@ -1,3 +1,5 @@
+// Network-gate setup: these tests stub fetch to exercise the live (upstox) code path. Without this the gate refuses.
+process.env.MARKET_DATA_PROVIDER = "upstox";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ConstituentQuote } from "../types.ts";

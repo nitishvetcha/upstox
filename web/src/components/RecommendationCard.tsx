@@ -1,3 +1,4 @@
+import { scoreExplanation } from "@/lib/scoreText";
 import Link from "next/link";
 import { Check, Minus, TriangleAlert, X } from "lucide-react";
 import type { Analysis, TradePlan } from "@/lib/types";
@@ -65,7 +66,8 @@ function PlanDetails({ plan, expiry }: { plan: TradePlan; expiry: string }) {
 
 export function RecommendationCard({ a }: { a: Analysis }) {
   const s = a.snapshot;
-  const confidence = a.plan?.score ?? a.total;
+  const expl = scoreExplanation(a);
+  const availableMax = a.factors.reduce((t, f) => t + (f.available ? f.max : 0), 0);
   const notes = a.factors.filter((f) => f.key !== "news").flatMap((f) => f.notes);
   const newsNotes = a.factors.find((f) => f.key === "news")!.notes;
   const support = notes.filter((n) => n.sign > 0);
@@ -77,7 +79,7 @@ export function RecommendationCard({ a }: { a: Analysis }) {
     <Card className="p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-400">Recommendation of the day</h2>
-        <Badge tone={label === "LIVE DATA" ? "neutral" : "warn"}>{label}</Badge>
+        <Badge tone={label === "LIVE DATA" || label === "END OF DAY" ? "neutral" : "warn"}>{label}</Badge>
       </div>
 
       <div className="mt-4 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
@@ -90,10 +92,15 @@ export function RecommendationCard({ a }: { a: Analysis }) {
           </div>
 
           <div className="flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-semibold tabular-nums text-zinc-50">{confidence}%</span>
-            <span className="text-xs text-zinc-500">model confidence · {a.setup.toLowerCase()}</span>
+            <span className="font-mono text-3xl font-semibold tabular-nums text-zinc-50">
+              {expl.value}<span className="text-xl text-zinc-500">/{expl.max}</span>
+            </span>
+            <span className="text-xs text-zinc-500">{expl.label} · not a win probability</span>
           </div>
-
+          <details className="rounded border border-zinc-800 bg-zinc-950/40 p-2 text-xs text-zinc-400">
+            <summary className="inline-flex min-h-[24px] cursor-pointer items-center py-1 text-zinc-300">What does this score mean?</summary>
+            <ul className="mt-1 space-y-1">{expl.lines.map((l) => <li key={l}>• {l}</li>)}</ul>
+          </details>
           {a.plan ? (
             <PlanDetails plan={a.plan} expiry={s.expiry} />
           ) : (
@@ -185,7 +192,7 @@ export function RecommendationCard({ a }: { a: Analysis }) {
           <div>
             <h3 className="mb-2 flex justify-between text-xs font-semibold uppercase tracking-wider text-zinc-400">
               <span>Score breakdown</span>
-              <span className="font-mono text-zinc-200">{a.total}/100</span>
+              <span className="font-mono text-zinc-200">{a.total} / {availableMax} available ({100 - availableMax} pts unavailable)</span>
             </h3>
             <div className="space-y-1.5">
               {a.factors.map((f) => (

@@ -1,12 +1,15 @@
+import { requireOperator } from "../../../../lib/operatorSession.ts";
 export const dynamic = "force-dynamic";
 
 // Track a live opportunity for outcome monitoring.
 // Body: ContractOpportunity or StockOpportunity from the engine.
 // Does NOT create a real order.
-import { saveOpportunityRecord } from "@/lib/services/opportunityTrackingStore";
-import type { OpportunityRecord } from "@/lib/services/opportunityTrackingStore";
+import { saveOpportunityRecord } from "../../../../lib/services/opportunityTrackingStore.ts";
+import type { OpportunityRecord } from "../../../../lib/services/opportunityTrackingStore.ts";
 
 export async function POST(req: Request) {
+  const __refused = requireOperator(req);
+  if (__refused) return __refused;
   try {
     const body = await req.json() as Record<string, unknown>;
     const now = new Date().toISOString();

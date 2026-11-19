@@ -1,0 +1,3 @@
+# G1 — new files only (apply-ready). Review before applying.
+NEW src/lib/provenance/displayProvenance.ts
+NEW src/lib/provenance/displayProvenance.test.ts

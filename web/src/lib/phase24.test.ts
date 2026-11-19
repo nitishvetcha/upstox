@@ -11,22 +11,27 @@ import * as os from "node:os";
 let testDir: string;
 let collectionLogDir: string;
 let monitorLogDir: string;
+let sessionEvidenceDir: string;
 
 before(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), "phase24-paper-"));
   collectionLogDir = fs.mkdtempSync(path.join(os.tmpdir(), "phase24-coll-"));
   monitorLogDir = fs.mkdtempSync(path.join(os.tmpdir(), "phase24-mon-"));
+  sessionEvidenceDir = fs.mkdtempSync(path.join(os.tmpdir(), "phase24-sess-"));
   process.env.PAPER_OPPORTUNITY_DIR = testDir;
   process.env.COLLECTION_LOG_DIR = collectionLogDir;
   process.env.MONITOR_LOG_DIR = monitorLogDir;
+  process.env.SESSION_EVIDENCE_DIR = sessionEvidenceDir;
 });
 after(() => {
   fs.rmSync(testDir, { recursive: true, force: true });
   fs.rmSync(collectionLogDir, { recursive: true, force: true });
   fs.rmSync(monitorLogDir, { recursive: true, force: true });
+  fs.rmSync(sessionEvidenceDir, { recursive: true, force: true });
   delete process.env.PAPER_OPPORTUNITY_DIR;
   delete process.env.COLLECTION_LOG_DIR;
   delete process.env.MONITOR_LOG_DIR;
+  delete process.env.SESSION_EVIDENCE_DIR;
 });
 
 import {

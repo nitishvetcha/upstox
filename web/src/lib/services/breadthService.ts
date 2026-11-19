@@ -98,9 +98,26 @@ export function calculateBreadth(
   const classification = classifyBreadthSignal(signal);
   const priceBreadthState = classifyPriceBreadthState(spotChangePercent, signal);
 
-  const timestamps = validQuotes.map((q) => q.timestamp).filter((t): t is string => Boolean(t));
+  // Every valid constituent is judged on its own trade timestamp (Issue 2 / B4 finalisation). The set is LIVE only
+  // when every quote is fresh within the existing 150 s window (tradeFreshnessOf with slow 1.25; AGING is inside it).
+  // A stale, future-dated or unparseable/missing timestamp keeps the set from LIVE. The newest timestamp is kept in
+  // the source for information only; it does not judge freshness.
+  const counts = { fresh: 0, endOfDay: 0, stale: 0, undated: 0 };
+  for (const q of validQuotes) {
+    if (typeof q.timestamp !== "string" || !Number.isFinite(Date.parse(q.timestamp))) {
+      counts.undated++;
+      continue;
+    }
+    const f = tradeFreshnessOf(q.timestamp, now, 1.25).freshness;
+    if (f === "LIVE" || f === "AGING") counts.fresh++;
+    else if (f === "END_OF_DAY") counts.endOfDay++;
+    else counts.stale++;
+  }
+  const notFresh = counts.stale + counts.undated;
+  const timestamps = validQuotes
+    .map((q) => q.timestamp)
+    .filter((t): t is string => typeof t === "string" && Number.isFinite(Date.parse(t)));
   const latestTradeTime = timestamps.length ? [...timestamps].sort().reverse()[0] : null;
-  const tf = tradeFreshnessOf(latestTradeTime, now, 1.25);
 
   let status: MarketBreadth["status"] = "LIVE";
   let reason: string | null = null;
@@ -113,12 +130,15 @@ export function calculateBreadth(
     reason = `Coverage ${coverage}% below minimum ${BREADTH_MIN_COVERAGE_PERCENT}% threshold`;
   } else if (sourceOverride?.source === "MOCK") {
     status = coverage < 100 ? "PARTIAL" : "LIVE";
-  } else if (tf.freshness === "END_OF_DAY") {
+  } else if (notFresh > 0) {
+    status = "STALE";
+    reason = [
+      counts.stale > 0 ? `${counts.stale} of ${total} constituent quote(s) are stale or future-dated (outside the 150 s window)` : null,
+      counts.undated > 0 ? `${counts.undated} of ${total} constituent quote(s) have no usable trade timestamp; freshness cannot be verified` : null,
+    ].filter((r): r is string => r !== null).join("; ");
+  } else if (counts.endOfDay > 0) {
     status = "END_OF_DAY";
     reason = "Market closed: constituent quotes are end-of-day (END_OF_DAY)";
-  } else if (tf.freshness === "STALE") {
-    status = "STALE";
-    reason = "Constituent quote timestamps are stale";
   } else if (coverage < 100) {
     status = "PARTIAL";
     reason = `Partial coverage: ${total}/${expected} constituents`;
@@ -182,4 +202,11 @@ export function unavailableBreadth(index: IndexId, reason: string): MarketBreadt
     reason,
     source: { source: "UNAVAILABLE", provider: null, fetchedAt: null },
   };
+}
+
+// Mock providers only: synthetic breadth is labelled MOCK and never LIVE or PARTIAL, so the engine does not count it as
+// evidence. Backtests call calculateBreadth directly with a MOCK-labelled source and are deliberately NOT changed here.
+export function asMockBreadth(b: MarketBreadth): MarketBreadth {
+  if (b.status !== "LIVE" && b.status !== "PARTIAL") return b;
+  return { ...b, status: "MOCK", reason: "Mock constituent quotes (not live market data)" };
 }

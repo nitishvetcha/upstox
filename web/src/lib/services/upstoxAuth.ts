@@ -1,10 +1,12 @@
 // Upstox OAuth (authorization-code flow). Server-only: the access token, client secret and auth code never leave
 // the server and are never logged. The only Upstox POST in the codebase is the token exchange here.
+import { UPSTOX_API_BASE } from "./upstoxEndpoints.ts";
+import { assertUpstoxNetworkAllowed, UpstoxNetworkBlockedError } from "./upstoxNetworkGate.ts";
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const BASE = "https://api.upstox.com/v2";
+const BASE = `${UPSTOX_API_BASE}/v2`;
 export const STATE_COOKIE = "upstox_oauth_state";
 export const STATE_TTL_MS = 10 * 60_000;
 const VERIFY_KEY = "NSE_INDEX|Nifty 50"; // read-only quote used to prove the token works
@@ -24,7 +26,15 @@ export interface StoredToken {
   invalidatedAt?: string | null; // set when Upstox rejected the token (401) before its nominal expiry
 }
 
-export type TokenStatus = "VALID" | "EXPIRED" | "MISSING" | "INVALID" | "UNKNOWN";
+// Where a credential came from. ANALYTICS: UPSTOX_ANALYTICS_TOKEN (no file, no known expiry). OAUTH: the token file.
+export type CredentialSource = "ANALYTICS" | "OAUTH";
+// Presence is not validity. CONFIGURED_UNVERIFIED: a credential exists and is not known to be expired, but no request
+// has checked it. VERIFIED_CONNECTED: a verification request succeeded. VERIFICATION_FAILED: it was rejected or
+// unreachable. INVALID: the OAuth file was invalidated by a 401. UNKNOWN: the file could not be read.
+export type TokenStatus = "CONFIGURED_UNVERIFIED" | "VERIFIED_CONNECTED" | "VERIFICATION_FAILED" | "EXPIRED" | "MISSING" | "INVALID" | "UNKNOWN";
+export interface Credential { token: string; source: CredentialSource }
+// Status as it is shown in evidence records, ops and the runner gate.
+export type EvidenceAuthStatus = "CONNECTED" | "UNVERIFIED" | "NOT_CONNECTED" | "EXPIRED" | "UNKNOWN";
 export type ConnectionResult = "UPSTOX_CONNECTED" | "UPSTOX_AUTH_EXPIRED" | "UPSTOX_NETWORK_ERROR" | "UPSTOX_API_ERROR";
 
 export interface UpstoxConfig { clientId: string; clientSecret: string; redirectUri: string }
@@ -77,6 +87,7 @@ export function tokenExpiry(issued: Date): Date {
 
 export async function exchangeCode(code: string, now = new Date(), fetchImpl: typeof fetch = fetch, cfg = upstoxConfig()): Promise<StoredToken> {
   if (!cfg) throw new Error("Upstox credentials missing");
+  assertUpstoxNetworkAllowed("/login/authorization/token");
   const res = await fetchImpl(`${BASE}/login/authorization/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
@@ -135,17 +146,20 @@ export function classifyToken(r: Read, now = new Date()): TokenStatus {
   if (r.kind === "missing") return "MISSING";
   if (r.kind === "unreadable") return "UNKNOWN";
   if (r.token.invalidatedAt) return "INVALID";
-  return new Date(r.token.expiresAt) > now ? "VALID" : "EXPIRED";
+  return new Date(r.token.expiresAt) > now ? "CONFIGURED_UNVERIFIED" : "EXPIRED";
 }
 
-export async function tokenStatus(now = new Date(), file = tokenFile()): Promise<{ status: TokenStatus; expiresAt: string | null }> {
+// Local state only: no network request. An analytics token is CONFIGURED_UNVERIFIED (its expiry is not known to the app).
+export async function tokenStatus(now = new Date(), file = tokenFile()): Promise<{ status: TokenStatus; expiresAt: string | null; source: CredentialSource | null }> {
+  if (process.env.UPSTOX_ANALYTICS_TOKEN) return { status: "CONFIGURED_UNVERIFIED", expiresAt: null, source: "ANALYTICS" };
   const r = await readStored(file);
-  return { status: classifyToken(r, now), expiresAt: r.kind === "ok" ? r.token.expiresAt : null };
+  const status = classifyToken(r, now);
+  return { status, expiresAt: r.kind === "ok" ? r.token.expiresAt : null, source: status === "CONFIGURED_UNVERIFIED" ? "OAUTH" : null };
 }
 
 export async function loadToken(now = new Date(), file = tokenFile()): Promise<StoredToken | null> {
   const r = await readStored(file);
-  return r.kind === "ok" && classifyToken(r, now) === "VALID" ? r.token : null;
+  return r.kind === "ok" && classifyToken(r, now) === "CONFIGURED_UNVERIFIED" ? r.token : null;
 }
 
 // Upstox said 401: keep the file (so status reads INVALID → "session expired", not "never connected").
@@ -159,14 +173,56 @@ export async function clearToken(file = tokenFile()) {
 }
 
 // Used by the market-data layer: null means "no usable token".
+// Source-aware selection. Priority is unchanged: UPSTOX_ANALYTICS_TOKEN when set, else a non-expired OAuth token.
+export async function resolveCredential(now = new Date(), file = tokenFile()): Promise<Credential | null> {
+  const analyticsToken = process.env.UPSTOX_ANALYTICS_TOKEN;
+  if (analyticsToken) return { token: analyticsToken, source: "ANALYTICS" };
+  const t = await loadToken(now, file);
+  return t ? { token: t.accessToken, source: "OAUTH" } : null;
+}
+
+// Kept for existing callers. Use resolveCredential() where the source matters (e.g. invalidation on 401).
 export async function getAccessToken() {
-  return (await loadToken())?.accessToken ?? null;
+  return (await resolveCredential())?.token ?? null;
+}
+
+// The only place a verification request is made. Called on explicit request only (?verify=1, POST collect, canary).
+export function stateAfterVerification(c: ConnectionResult): TokenStatus {
+  return c === "UPSTOX_CONNECTED" ? "VERIFIED_CONNECTED" : "VERIFICATION_FAILED";
+}
+
+// Local state, then one read-only quote with the credential that would be used. No request when the local state
+// already says the credential is missing or expired.
+export async function verifyCurrentCredential(now = new Date(), file = tokenFile(), fetchImpl: typeof fetch = fetch): Promise<{
+  status: TokenStatus;
+  source: CredentialSource | null;
+  expiresAt: string | null;
+  connection: ConnectionResult | null;
+}> {
+  const local = await tokenStatus(now, file);
+  if (local.status !== "CONFIGURED_UNVERIFIED") return { status: local.status, source: local.source, expiresAt: local.expiresAt, connection: null };
+  const cred = await resolveCredential(now, file);
+  if (!cred) return { status: "MISSING", source: null, expiresAt: null, connection: null };
+  const connection = await verifyConnection(cred.token, fetchImpl);
+  return { status: stateAfterVerification(connection), source: cred.source, expiresAt: local.expiresAt, connection };
+}
+
+// Maps a local status to the evidence vocabulary. Token presence never maps to CONNECTED.
+export function evidenceAuthStatus(s: TokenStatus): EvidenceAuthStatus {
+  switch (s) {
+    case "VERIFIED_CONNECTED": return "CONNECTED";
+    case "CONFIGURED_UNVERIFIED": return "UNVERIFIED";
+    case "EXPIRED": case "INVALID": return "EXPIRED";
+    case "VERIFICATION_FAILED": case "MISSING": return "NOT_CONNECTED";
+    default: return "UNKNOWN";
+  }
 }
 
 // ── Connectivity: one safe read-only quote ────────────────────────────────────
 
 export async function verifyConnection(token: string, fetchImpl: typeof fetch = fetch): Promise<ConnectionResult> {
   try {
+    assertUpstoxNetworkAllowed("/market-quote/quotes");
     const url = new URL(`${BASE}/market-quote/quotes`);
     url.searchParams.set("instrument_key", VERIFY_KEY);
     const res = await fetchImpl(url.toString(), {
@@ -176,7 +232,10 @@ export async function verifyConnection(token: string, fetchImpl: typeof fetch = 
     });
     if (res.status === 401) return "UPSTOX_AUTH_EXPIRED";
     return res.ok ? "UPSTOX_CONNECTED" : "UPSTOX_API_ERROR";
-  } catch {
+  } catch (err) {
+    if (err instanceof UpstoxNetworkBlockedError) {
+      throw err;
+    }
     return "UPSTOX_NETWORK_ERROR";
   }
 }
@@ -232,4 +291,26 @@ export async function completeLogin(
   if (connection === "UPSTOX_AUTH_EXPIRED") await deps.markInvalid();
   deps.log(connection === "UPSTOX_CONNECTED" ? "[AUTH] Upstox connected" : `[AUTH] Live verification: ${connection}`);
   return { ok: true, connection, expiresAt: token.expiresAt };
+}
+
+// Verification reused across page loads, so the header can show "connected" without a live request on every load.
+// A successful verification is reused for 10 minutes; a failure for 1 minute. The cache key holds no secret:
+// it is the credential source and expiry only, so a new login or a changed token re-verifies at once.
+const VERIFIED_TTL_MS = 10 * 60_000;
+const FAILED_TTL_MS = 60_000;
+type VerifiedCache = { key: string; status: TokenStatus; at: number };
+const verifiedCache = globalThis as unknown as { __upstoxVerified?: VerifiedCache };
+
+export async function verifyCurrentCredentialCached(now = new Date(), file = tokenFile(), fetchImpl: typeof fetch = fetch) {
+  const local = await tokenStatus(now, file);
+  if (local.status !== "CONFIGURED_UNVERIFIED") return { status: local.status, source: local.source, expiresAt: local.expiresAt, connection: null };
+  const key = `${local.source}|${local.expiresAt}`;
+  const c = verifiedCache.__upstoxVerified;
+  if (c && c.key === key) {
+    const ttl = c.status === "VERIFIED_CONNECTED" ? VERIFIED_TTL_MS : FAILED_TTL_MS;
+    if (now.getTime() - c.at < ttl) return { status: c.status, source: local.source, expiresAt: local.expiresAt, connection: null };
+  }
+  const r = await verifyCurrentCredential(now, file, fetchImpl);
+  verifiedCache.__upstoxVerified = { key, status: r.status, at: now.getTime() };
+  return r;
 }

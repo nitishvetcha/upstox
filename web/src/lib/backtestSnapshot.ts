@@ -1,6 +1,6 @@
 import type { Candle, OptionRow, Snapshot } from "./types.ts";
 import { analyzeTechnicals } from "./services/technicalAnalysis.ts";
-import { toIndicators } from "./services/upstoxMarket.ts";
+import { toIndicators } from "./services/technicalMapping.ts";
 import { INSTRUMENTS } from "./services/instrumentRegistry.ts";
 import { INDEX_CONSTITUENTS } from "./services/breadthConfig.ts";
 import { calculateBreadth } from "./services/breadthService.ts";

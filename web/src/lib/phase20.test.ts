@@ -1,6 +1,12 @@
+// Scanner fixture tests: every I/O dependency is injected (deps), so these run as Upstox-mode engine tests with NO token
+// available. The token path is pointed at a file that does not exist and the analytics token is cleared, so no request can leave.
+process.env.MARKET_DATA_PROVIDER = "upstox";
+process.env.UPSTOX_TOKEN_FILE = "/nonexistent/upstox-token-for-scanner-fixture-tests.json";
+delete process.env.UPSTOX_ANALYTICS_TOKEN;
 // Phase 20 — Opportunity Engine v20.0 tests.
 // Realistic scenarios A-F as specified. Tests validate behaviour, not fixtures.
 import assert from "node:assert/strict";
+import { FIXTURE_DEPS, FIXTURE_NOW } from "./testFixtures/stockScan.ts";
 import { describe, it } from "node:test";
 
 import {
@@ -249,15 +255,15 @@ describe("Scenario D — Wide spread: contracts should be rejected", () => {
 describe("Scenario E — Stock: strong breakout setup", () => {
   it("SC-E-01: stock scanner runs without error", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("intraday");
+    const r = await scanStocks("intraday", FIXTURE_NOW, FIXTURE_DEPS);
     assert.equal(r.kind, "intraday");
     assert.ok(Array.isArray(r.topOpportunities));
-    assert.ok(r.topOpportunities.length <= 3);
+    assert.ok(r.topOpportunities.length > 0 && r.topOpportunities.length <= 3, "fixture produces candidates, at most 3");
   });
 
   it("SC-E-02: stocks in result have all required fields", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("intraday");
+    const r = await scanStocks("intraday", FIXTURE_NOW, FIXTURE_DEPS);
     for (const s of r.topOpportunities) {
       assert.ok(s.symbol, "Missing symbol");
       assert.ok(s.direction === "BULLISH" || s.direction === "BEARISH");
@@ -272,7 +278,7 @@ describe("Scenario E — Stock: strong breakout setup", () => {
 
   it("SC-E-03: all stocks have valid invalidation string", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("intraday");
+    const r = await scanStocks("intraday", FIXTURE_NOW, FIXTURE_DEPS);
     for (const s of r.topOpportunities) {
       assert.ok(s.invalidation.length > 0, "Invalidation string must not be empty");
     }
@@ -280,7 +286,7 @@ describe("Scenario E — Stock: strong breakout setup", () => {
 
   it("SC-E-04: relativeStrength field is present (may be null when nifty data unavailable)", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("intraday");
+    const r = await scanStocks("intraday", FIXTURE_NOW, FIXTURE_DEPS);
     for (const s of r.topOpportunities) {
       assert.ok("relativeStrength" in s, "Missing relativeStrength field");
     }
@@ -292,14 +298,15 @@ describe("Scenario E — Stock: strong breakout setup", () => {
 describe("Scenario F — Stock: weak stock should rank low", () => {
   it("SF-01: swing scanner runs without error", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("swing");
+    const r = await scanStocks("swing", FIXTURE_NOW, FIXTURE_DEPS);
     assert.equal(r.kind, "swing");
-    assert.ok(Array.isArray(r.topOpportunities));
+    assert.ok(r.topOpportunities.length > 0, "fixture produces positional candidates");
+    assert.ok(r.topOpportunities.every((o) => o.grade === "REJECT"), "retired strategy is never graded actionable");
   });
 
   it("SF-02: all swing opportunities have setup type", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
-    const r = await scanStocks("swing");
+    const r = await scanStocks("swing", FIXTURE_NOW, FIXTURE_DEPS);
     for (const s of r.topOpportunities) {
       assert.ok(s.setup.length > 0, "Missing setup type");
     }

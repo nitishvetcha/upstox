@@ -1,5 +1,6 @@
 // Phase 14 — one-command Upstox login + live recommendation flow.
 // Network is never touched: fetch is injected, token files live in a temp dir.
+process.env.MARKET_DATA_PROVIDER = "upstox";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -13,7 +14,7 @@ import {
 import { withFallback, type FallbackDeps } from "./services/market.ts";
 import { normalizeChain, normalizeOptionContracts } from "./services/upstoxMarket.ts";
 import { UpstoxError } from "./services/errors.ts";
-import { mockSnapshot } from "./services/mock.ts";
+import { mockSnapshotTradeInputs as mockSnapshot } from "./testFixtures/mockSnapshotTradeInputs.ts";
 import { evaluateBoth, evaluateIndex, evaluationLines } from "./postLogin.ts";
 import { diagnose } from "./recommendationDiagnostic.ts";
 import { analyze, MIN_STRATEGY_SCORE } from "./engine/strategy.ts";
@@ -161,7 +162,7 @@ describe("AUTH — OAuth flow", () => {
     const f = tmp();
     assert.equal((await tokenStatus(new Date(), f)).status, "MISSING");
     await saveToken(tok(), f);
-    assert.equal((await tokenStatus(new Date("2026-10-07T10:00:00Z"), f)).status, "VALID");
+    assert.equal((await tokenStatus(new Date("2026-10-07T10:00:00Z"), f)).status, "CONFIGURED_UNVERIFIED");
     assert.equal((await tokenStatus(new Date("2026-10-08T00:00:00Z"), f)).status, "EXPIRED");
     fs.writeFileSync(f, "{not json");
     assert.equal((await tokenStatus(new Date(), f)).status, "UNKNOWN");
@@ -262,11 +263,10 @@ describe("RECOMMEND — post-login evaluation", () => {
     assert.deepEqual(e.map((x) => x.underlying), ["NIFTY", "BANKNIFTY"]);
     assert.ok(e.every((x) => x.analysis === "READY"));
   });
-  it("RECOMMEND-02. live NIFTY uses live sources, lot size and keys; production ₹1L config sizes it to zero lots", async () => {
+  it("RECOMMEND-02. live NIFTY uses live sources, lot size and keys; unconfigured capital preserves TRADE recommendation (Phase 1 policy)", async () => {
     const e = await evaluateIndex("nifty", (i) => Promise.resolve(live(i)), MIDDAY);
-    // Default risk: 1% of ₹1,00,000 = ₹1,000 per trade, below one NIFTY lot's stop risk → POSITION_SIZE_ZERO.
-    assert.equal(e.decision, "NO_TRADE");
-    assert.deepEqual(e.blockers, ["POSITION_SIZE_ZERO"]);
+    // Phase 1 decoupled policy: missing/unconfigured capital does not block trade recommendations
+    assert.equal(e.decision, "TRADE");
     assert.equal(e.spotSource, "LIVE");
     assert.equal(e.lotSize, 65);
     assert.equal(e.instrumentKeys, e.strikes * 2);
@@ -338,7 +338,8 @@ describe("SAFETY — mock, orders, secrets, strategy", () => {
     assert.deepEqual(hits, []);
   });
   it("SAFETY-03. the only POST to Upstox is the OAuth token exchange", () => {
-    const posting = files.filter((f) => /api\.upstox\.com/.test(read(f)) && /method:\s*"POST"/.test(read(f)));
+    // The Upstox host is referenced literally or through the shared UPSTOX_API_BASE constant (upstoxEndpoints.ts).
+    const posting = files.filter((f) => /api\.upstox\.com|UPSTOX_API_BASE/.test(read(f)) && /method:\s*"POST"/.test(read(f)));
     assert.deepEqual(posting.map((f) => path.basename(f)), ["upstoxAuth.ts"]);
   });
   it("SAFETY-04. secret never reaches the browser: no NEXT_PUBLIC_ Upstox vars, no client import of upstoxAuth", () => {
@@ -350,7 +351,8 @@ describe("SAFETY — mock, orders, secrets, strategy", () => {
   });
   it("SAFETY-05. auth routes and Upstox CLI scripts never return or print the access token", () => {
     const strict = files.filter((f) => f.includes(`${path.sep}app${path.sep}api${path.sep}auth`) || /upstox-(cli|login|status)\.mjs$|dev-upstox\.mjs$/.test(f));
-    assert.equal(strict.length, 9);
+    // 11 = auth routes (incl. upstox/start and change-pin added with the PIN sign-in) + CLI scripts.
+    assert.equal(strict.length, 11);
     for (const f of strict) assert.ok(!/accessToken\s*[:,}]|access_token|\.accessToken\b/.test(read(f).replace(/getAccessToken/g, "")), f);
     // Every script (incl. older verification tools) may use the token, but never log it.
     for (const f of files.filter((x) => x.includes(`${path.sep}scripts${path.sep}`)))

@@ -1,3 +1,6 @@
+import { assertCollectionAuthorized } from "./lib/collectionGuard.mjs";
+assertCollectionAuthorized("upstox-login.mjs", "upstox");
+
 // npm run upstox:login — with the dev server running, open the Upstox login once and wait for the callback.
 import { BASE, LOGIN_URL, fmtExpiry, openBrowser, serverUp, waitForLogin } from "./upstox-cli.mjs";
 

@@ -1,3 +1,5 @@
+// Network-gate setup: these tests stub fetch to exercise the live (upstox) code path. Without this the gate refuses.
+process.env.MARKET_DATA_PROVIDER = "upstox";
 // Run: npm test   (no Upstox account needed: fetch is stubbed with documented Upstox response shapes)
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
@@ -16,8 +18,8 @@ const NIFTY_EXP = "2026-10-06";
 const BANK_EXP = "2026-10-27";
 
 // --- Upstox-shaped fixtures ---
-const side = (ltp: number, oi: number, prevOi: number, iv: number, delta: number) => ({
-  instrument_key: "NSE_FO|1",
+const side = (instrumentKey: string, ltp: number, oi: number, prevOi: number, iv: number, delta: number) => ({
+  instrument_key: instrumentKey,
   market_data: { ltp, volume: oi * 2, oi, close_price: ltp, bid_price: ltp - 0.5, bid_qty: 75, ask_price: ltp + 0.5, ask_qty: 75, prev_oi: prevOi, last_trade_time: NOW.getTime() - 5_000 },
   option_greeks: { vega: 8.3, theta: -12.4, gamma: 0.002, delta, iv, pop: 50 },
 });
@@ -27,8 +29,8 @@ function chainRows(spot: number, step: number, expiry: string, key: string) {
     const strike = atm + (k - 10) * step;
     return {
       expiry, pcr: 1, strike_price: strike, underlying_key: key, underlying_spot_price: spot,
-      call_options: side(Math.max(1, spot - strike + 100), strike > spot ? 9000 : 3000, 8000, 14.1, 0.5),
-      put_options: side(Math.max(1, strike - spot + 100), strike < spot ? 11000 : 2000, 9000, 14.5, -0.5),
+      call_options: side(`NSE_FO|${key.includes("Bank") ? "BANK" : "NIFTY"}|${expiry}|${strike}|CE`, Math.max(1, spot - strike + 100), strike > spot ? 9000 : 3000, 8000, 14.1, 0.5),
+      put_options: side(`NSE_FO|${key.includes("Bank") ? "BANK" : "NIFTY"}|${expiry}|${strike}|PE`, Math.max(1, strike - spot + 100), strike < spot ? 11000 : 2000, 9000, 14.5, -0.5),
     };
   }).reverse(); // unsorted on purpose
 }
@@ -53,13 +55,30 @@ function stubUpstox(override: (path: string, q: URLSearchParams) => Response | n
     const nifty = key === "NSE_INDEX|Nifty 50";
     const ok = (data: unknown) => Response.json({ status: "success", data });
     if (url.pathname.endsWith("/market-quote/quotes")) {
+      if (key.startsWith("NSE_FO|")) {
+        const entries = Object.fromEntries(key.split(",").map((instrumentKey) => {
+          const [, symbol, expiry, strikeRaw, type] = instrumentKey.split("|");
+          const spot = symbol === "BANK" ? 56240 : 25137;
+          const strike = Number(strikeRaw);
+          const price = type === "CE" ? Math.max(1, spot - strike + 100) : Math.max(1, strike - spot + 100);
+          return [instrumentKey.replace("|", ":"), { instrument_token: instrumentKey, last_price: price, last_trade_time: NOW.getTime() - 5_000, timestamp: NOW.toISOString(), oi: 10_000, previous_oi: 9_000, volume: 2_000, depth: { buy: [{ price: Math.max(0.05, price - 0.5) }], sell: [{ price: price + 0.5 }] } }];
+        }));
+        return ok(entries);
+      }
       const base = nifty ? quoteData(key, 25137, 84.2) : quoteData(key, 56240, -170);
       const entry = Object.values(base)[0] as Record<string, unknown>;
       entry.last_trade_time = NOW.getTime() - 5_000; // 5 s old → LIVE
       return ok(base);
     }
-    if (url.pathname.endsWith("/option/contract"))
-      return ok((nifty ? ["2026-09-29", NIFTY_EXP, "2026-10-13"] : ["2026-09-29", BANK_EXP]).map((expiry) => ({ expiry, strike_price: 1, instrument_type: "CE", lot_size: 75 })));
+    if (url.pathname.endsWith("/option/contract")) {
+      const expiries = nifty ? ["2026-09-29", NIFTY_EXP, "2026-10-13"] : ["2026-09-29", BANK_EXP];
+      const spot = nifty ? 25137 : 56240;
+      const step = nifty ? 50 : 100;
+      return ok(expiries.flatMap((expiry) => chainRows(spot, step, expiry, key).flatMap((row) => [
+        { expiry, strike_price: row.strike_price, instrument_type: "CE", instrument_key: row.call_options.instrument_key, underlying_key: key, lot_size: 75 },
+        { expiry, strike_price: row.strike_price, instrument_type: "PE", instrument_key: row.put_options.instrument_key, underlying_key: key, lot_size: 75 },
+      ])));
+    }
     if (url.pathname.endsWith("/option/chain"))
       return ok(nifty ? chainRows(25137, 50, url.searchParams.get("expiry_date")!, key) : chainRows(56240, 100, url.searchParams.get("expiry_date")!, key));
     return new Response("not found", { status: 404 });
@@ -114,7 +133,7 @@ test("2. missing option fields become 0 (traded quantities) or null (quotes, IV,
     NIFTY_EXP,
   );
   const { call, put } = c.rows[0];
-  assert.deepEqual(call, { ltp: 5, bid: null, ask: null, oi: 0, chgOi: null, volume: 0, iv: null, delta: null, gamma: null, theta: null, vega: null, instrumentKey: null });
+  assert.deepEqual(call, { ltp: 5, bid: null, ask: null, oi: 0, chgOi: null, volume: 0, iv: null, delta: null, gamma: null, theta: null, vega: null, instrumentKey: null, lastTradeTime: null });
   assert.equal(put.ltp, 0);
   assert.equal(put.bid, null);
 });
@@ -299,4 +318,59 @@ test("16. Phase 6A.2 trade-time freshness logic", () => {
 
   // Missing trade timestamp -> UNAVAILABLE
   assert.equal(tradeFreshnessOf(null, closedTime).source, "UNAVAILABLE");
+});
+
+import { marketSummary, sourceMeta } from "./market.ts";
+import type { Snapshot } from "../types.ts";
+
+function makeSnap(marketSrc: string, chainSrc: string): Snapshot {
+  const src = (source: string) => ({ source: source as never, provider: null, fetchedAt: "2026-10-26T09:00:00Z" });
+  return {
+    index: "nifty" as never,
+    name: "NIFTY 50",
+    spot: 24000,
+    prevClose: 23900,
+    ivPercentile: null,
+    expiry: "2026-10-30",
+    strikeStep: 50,
+    lotSize: 75,
+    chain: [{ strike: 24000, call: { ltp: 100, bid: null, ask: null, oi: 1000, chgOi: null, volume: 200, iv: 15, delta: null, gamma: null, theta: null, vega: null, instrumentKey: "CE" }, put: { ltp: 100, bid: null, ask: null, oi: 1000, chgOi: null, volume: 200, iv: 15, delta: null, gamma: null, theta: null, vega: null, instrumentKey: "PE" } }],
+    indicators: null,
+    breadth: null,
+    news: { score: 0, bullishPct: 0, neutralPct: 1, bearishPct: 0, eventRisk: null },
+    technical: null,
+    fallbackReason: null,
+    sources: {
+      market: src(marketSrc),
+      optionChain: src(chainSrc),
+      technical: src("LIVE"),
+      news: src("LIVE"),
+      breadth: src("LIVE"),
+    },
+  };
+}
+
+test("marketSummary top-level source is worst subsystem, not only market", () => {
+  const now = new Date("2026-10-26T09:00:30Z");
+  // Market LIVE but chain STALE → overall should be STALE
+  const s1 = marketSummary(makeSnap("LIVE", "STALE"), now);
+  assert.equal(s1.source, "STALE", "stale chain makes top-level STALE");
+  assert.equal(s1.subsystems.market.source, "LIVE", "market subsystem unchanged");
+  assert.equal(s1.subsystems.optionChain.source, "STALE", "chain subsystem reflected");
+
+  // Both LIVE → overall LIVE
+  const s2 = marketSummary(makeSnap("LIVE", "LIVE"), now);
+  assert.equal(s2.source, "LIVE");
+
+  // Chain UNAVAILABLE beats STALE market
+  const s3 = marketSummary(makeSnap("STALE", "UNAVAILABLE"), now);
+  assert.equal(s3.source, "UNAVAILABLE");
+});
+
+test("sourceMeta freshness is fetch age, not market data age", () => {
+  const now = new Date("2026-10-26T09:02:00Z");
+  const info = { source: "LIVE" as never, provider: null, fetchedAt: "2026-10-26T09:00:00Z" };
+  const m = sourceMeta(info, now);
+  assert.equal(m.freshnessSeconds, 120, "fetch age is exactly 120 s");
+  assert.equal(m.freshness, "AGING");
 });

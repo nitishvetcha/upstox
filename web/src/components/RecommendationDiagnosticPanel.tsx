@@ -42,11 +42,11 @@ export function RecommendationDiagnosticPanel({ d }: { d: RecommendationDiagnost
         <div className="mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Why?</div>
         <ul className="space-y-0.5 font-mono text-xs">
           {d.checks.map((c) => (
-            <li key={c.stage} className="flex gap-2">
-              <span className={`w-3 ${COLOR[c.status]}`}>{ICON[c.status]}</span>
-              <span className="w-44 shrink-0 text-zinc-300">{c.name}</span>
-              <span className={`w-28 shrink-0 ${COLOR[c.status]}`}>{c.status}</span>
-              <span className="min-w-0 break-words text-zinc-500">{c.reason}</span>
+            <li key={c.stage} className="flex flex-wrap gap-x-2 gap-y-0.5 sm:flex-nowrap">
+              <span className={`w-3 shrink-0 ${COLOR[c.status]}`}>{ICON[c.status]}</span>
+              <span className="shrink-0 text-zinc-300 sm:w-44">{c.name}</span>
+              <span className={`shrink-0 sm:w-28 ${COLOR[c.status]}`}>{c.status}</span>
+              <span className="min-w-0 basis-full break-words text-zinc-500 sm:basis-auto sm:flex-1">{c.reason}</span>
             </li>
           ))}
         </ul>
@@ -63,6 +63,31 @@ export function RecommendationDiagnosticPanel({ d }: { d: RecommendationDiagnost
               </li>
             ))}
           </ol>
+        </div>
+      )}
+
+      {d.optionVerification?.window && (
+        <div className="rounded border border-zinc-800 p-3">
+          <div className="mb-1 text-[11px] uppercase tracking-wider text-zinc-400">
+            Option contracts verified in the candidate window (ATM ±{d.optionVerification.window.maxStrikesAtm} strikes, ATM {d.optionVerification.window.atmStrike})
+          </div>
+          <div className="text-sm text-zinc-300">
+            {d.optionVerification.window.verifiedContracts} verified · {d.optionVerification.window.eligibleContracts} eligible · {d.optionVerification.window.rejectedContracts} rejected · {d.optionVerification.window.outsideWindowContracts} outside the window
+          </div>
+          {Object.keys(d.optionVerification.window.rejectionReasons).length > 0 && (
+            <div className="mt-1 text-xs text-amber-300">
+              Rejected: {Object.entries(d.optionVerification.window.rejectionReasons).map(([k, v]) => `${v} × ${k}`).join(", ")}
+            </div>
+          )}
+          {d.optionVerification.legGuardApplicable && d.optionVerification.legChecks.length > 0 && (
+            <ul className="mt-2 space-y-0.5 text-xs">
+              {d.optionVerification.legChecks.map((v, i) => (
+                <li key={i} className={v.ok ? "text-emerald-400" : "text-red-300"}>
+                  {v.side} {v.type} {v.strike}: {v.ok ? "verified" : v.reason}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

@@ -1,0 +1,2221 @@
+{
+  "status": "COMPLETE",
+  "checkedAt": "2026-11-12T06:47:56.921Z",
+  "requestsUsed": 102,
+  "maxRequests": 102,
+  "stopped": null,
+  "scope": "Historical coverage only. Not strategy, profitability or execution-quality evidence.",
+  "note": "metadata only; no token, no raw candles",
+  "requestLog": [
+    {
+      "seq": 1,
+      "startedAt": "2026-11-12T06:47:47.415Z",
+      "endpoint": "/v2/expired-instruments/expiries",
+      "httpStatus": 200,
+      "latencyMs": 119,
+      "outcome": "ok"
+    },
+    {
+      "seq": 2,
+      "startedAt": "2026-11-12T06:47:47.537Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 233,
+      "outcome": "ok"
+    },
+    {
+      "seq": 3,
+      "startedAt": "2026-11-12T06:47:47.773Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%2050/days/1/2026-11-09/2026-11-02",
+      "httpStatus": 200,
+      "latencyMs": 47,
+      "outcome": "ok"
+    },
+    {
+      "seq": 4,
+      "startedAt": "2026-11-12T06:47:47.821Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C40039%7C09-11-2026/30minute/2026-11-09/2026-10-26",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 5,
+      "startedAt": "2026-11-12T06:47:47.864Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C40040%7C09-11-2026/30minute/2026-11-09/2026-10-26",
+      "httpStatus": 200,
+      "latencyMs": 45,
+      "outcome": "ok"
+    },
+    {
+      "seq": 6,
+      "startedAt": "2026-11-12T06:47:47.911Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C40020%7C09-11-2026/30minute/2026-11-09/2026-10-26",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 7,
+      "startedAt": "2026-11-12T06:47:47.955Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C40045%7C09-11-2026/30minute/2026-11-09/2026-10-26",
+      "httpStatus": 200,
+      "latencyMs": 57,
+      "outcome": "ok"
+    },
+    {
+      "seq": 8,
+      "startedAt": "2026-11-12T06:47:48.014Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C40046%7C09-11-2026/30minute/2026-11-09/2026-10-26",
+      "httpStatus": 200,
+      "latencyMs": 43,
+      "outcome": "ok"
+    },
+    {
+      "seq": 9,
+      "startedAt": "2026-11-12T06:47:48.058Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C40021%7C09-11-2026/30minute/2026-11-09/2026-10-26",
+      "httpStatus": 200,
+      "latencyMs": 55,
+      "outcome": "ok"
+    },
+    {
+      "seq": 10,
+      "startedAt": "2026-11-12T06:47:48.114Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 180,
+      "outcome": "ok"
+    },
+    {
+      "seq": 11,
+      "startedAt": "2026-11-12T06:47:48.295Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%2050/days/1/2026-05-12/2026-05-05",
+      "httpStatus": 200,
+      "latencyMs": 38,
+      "outcome": "ok"
+    },
+    {
+      "seq": 12,
+      "startedAt": "2026-11-12T06:47:48.334Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C41722%7C12-05-2026/30minute/2026-05-12/2026-04-28",
+      "httpStatus": 200,
+      "latencyMs": 45,
+      "outcome": "ok"
+    },
+    {
+      "seq": 13,
+      "startedAt": "2026-11-12T06:47:48.380Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C41723%7C12-05-2026/30minute/2026-05-12/2026-04-28",
+      "httpStatus": 200,
+      "latencyMs": 43,
+      "outcome": "ok"
+    },
+    {
+      "seq": 14,
+      "startedAt": "2026-11-12T06:47:48.425Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 46,
+      "outcome": "ok"
+    },
+    {
+      "seq": 15,
+      "startedAt": "2026-11-12T06:47:48.472Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%2050/days/1/2024-10-03/2024-09-26",
+      "httpStatus": 200,
+      "latencyMs": 36,
+      "outcome": "ok"
+    },
+    {
+      "seq": 16,
+      "startedAt": "2026-11-12T06:47:48.509Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C58522%7C03-10-2024/30minute/2024-10-03/2024-09-19",
+      "httpStatus": 200,
+      "latencyMs": 45,
+      "outcome": "ok"
+    },
+    {
+      "seq": 17,
+      "startedAt": "2026-11-12T06:47:48.559Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C58523%7C03-10-2024/30minute/2024-10-03/2024-09-19",
+      "httpStatus": 200,
+      "latencyMs": 257,
+      "outcome": "ok"
+    },
+    {
+      "seq": 18,
+      "startedAt": "2026-11-12T06:47:48.820Z",
+      "endpoint": "/v2/expired-instruments/expiries",
+      "httpStatus": 200,
+      "latencyMs": 55,
+      "outcome": "ok"
+    },
+    {
+      "seq": 19,
+      "startedAt": "2026-11-12T06:47:48.876Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 49,
+      "outcome": "ok"
+    },
+    {
+      "seq": 20,
+      "startedAt": "2026-11-12T06:47:48.926Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%20Bank/days/1/2026-10-27/2026-10-20",
+      "httpStatus": 200,
+      "latencyMs": 37,
+      "outcome": "ok"
+    },
+    {
+      "seq": 21,
+      "startedAt": "2026-11-12T06:47:48.964Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C49415%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 45,
+      "outcome": "ok"
+    },
+    {
+      "seq": 22,
+      "startedAt": "2026-11-12T06:47:49.010Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C49416%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 60,
+      "outcome": "ok"
+    },
+    {
+      "seq": 23,
+      "startedAt": "2026-11-12T06:47:49.071Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C49409%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 38,
+      "outcome": "ok"
+    },
+    {
+      "seq": 24,
+      "startedAt": "2026-11-12T06:47:49.110Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C49421%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 58,
+      "outcome": "ok"
+    },
+    {
+      "seq": 25,
+      "startedAt": "2026-11-12T06:47:49.170Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C49422%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 172,
+      "outcome": "ok"
+    },
+    {
+      "seq": 26,
+      "startedAt": "2026-11-12T06:47:49.344Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C49410%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 45,
+      "outcome": "ok"
+    },
+    {
+      "seq": 27,
+      "startedAt": "2026-11-12T06:47:49.391Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 50,
+      "outcome": "ok"
+    },
+    {
+      "seq": 28,
+      "startedAt": "2026-11-12T06:47:49.445Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%20Bank/days/1/2026-05-26/2026-05-19",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 29,
+      "startedAt": "2026-11-12T06:47:49.489Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C67263%7C26-05-2026/30minute/2026-05-26/2026-05-12",
+      "httpStatus": 200,
+      "latencyMs": 68,
+      "outcome": "ok"
+    },
+    {
+      "seq": 30,
+      "startedAt": "2026-11-12T06:47:49.561Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C67264%7C26-05-2026/30minute/2026-05-26/2026-05-12",
+      "httpStatus": 200,
+      "latencyMs": 45,
+      "outcome": "ok"
+    },
+    {
+      "seq": 31,
+      "startedAt": "2026-11-12T06:47:49.608Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 259,
+      "outcome": "ok"
+    },
+    {
+      "seq": 32,
+      "startedAt": "2026-11-12T06:47:49.868Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%20Bank/days/1/2024-10-01/2024-09-24",
+      "httpStatus": 200,
+      "latencyMs": 61,
+      "outcome": "ok"
+    },
+    {
+      "seq": 33,
+      "startedAt": "2026-11-12T06:47:49.930Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C59176%7C01-10-2024/30minute/2024-10-01/2024-09-17",
+      "httpStatus": 200,
+      "latencyMs": 41,
+      "outcome": "ok"
+    },
+    {
+      "seq": 34,
+      "startedAt": "2026-11-12T06:47:49.972Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C59177%7C01-10-2024/30minute/2024-10-01/2024-09-17",
+      "httpStatus": 200,
+      "latencyMs": 43,
+      "outcome": "ok"
+    },
+    {
+      "seq": 35,
+      "startedAt": "2026-11-12T06:47:50.017Z",
+      "endpoint": "/v2/expired-instruments/expiries",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 36,
+      "startedAt": "2026-11-12T06:47:50.061Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 46,
+      "outcome": "ok"
+    },
+    {
+      "seq": 37,
+      "startedAt": "2026-11-12T06:47:50.111Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%20Fin%20Service/days/1/2026-10-27/2026-10-20",
+      "httpStatus": 200,
+      "latencyMs": 54,
+      "outcome": "ok"
+    },
+    {
+      "seq": 38,
+      "startedAt": "2026-11-12T06:47:50.166Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C50287%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 225,
+      "outcome": "ok"
+    },
+    {
+      "seq": 39,
+      "startedAt": "2026-11-12T06:47:50.392Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C50288%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 40,
+      "startedAt": "2026-11-12T06:47:50.435Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C60365%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 55,
+      "outcome": "ok"
+    },
+    {
+      "seq": 41,
+      "startedAt": "2026-11-12T06:47:50.492Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C60373%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 46,
+      "outcome": "ok"
+    },
+    {
+      "seq": 42,
+      "startedAt": "2026-11-12T06:47:50.540Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C60374%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 43,
+      "startedAt": "2026-11-12T06:47:50.584Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C60366%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 44,
+      "startedAt": "2026-11-12T06:47:50.628Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 56,
+      "outcome": "ok"
+    },
+    {
+      "seq": 45,
+      "startedAt": "2026-11-12T06:47:50.687Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%20Fin%20Service/days/1/2026-05-26/2026-05-19",
+      "httpStatus": 200,
+      "latencyMs": 228,
+      "outcome": "ok"
+    },
+    {
+      "seq": 46,
+      "startedAt": "2026-11-12T06:47:50.918Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C62485%7C26-05-2026/30minute/2026-05-26/2026-05-12",
+      "httpStatus": 200,
+      "latencyMs": 45,
+      "outcome": "ok"
+    },
+    {
+      "seq": 47,
+      "startedAt": "2026-11-12T06:47:50.964Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C62486%7C26-05-2026/30minute/2026-05-26/2026-05-12",
+      "httpStatus": 200,
+      "latencyMs": 40,
+      "outcome": "ok"
+    },
+    {
+      "seq": 48,
+      "startedAt": "2026-11-12T06:47:51.006Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 49,
+      "startedAt": "2026-11-12T06:47:51.050Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%20Fin%20Service/days/1/2024-10-01/2024-09-24",
+      "httpStatus": 200,
+      "latencyMs": 39,
+      "outcome": "ok"
+    },
+    {
+      "seq": 50,
+      "startedAt": "2026-11-12T06:47:51.090Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C57444%7C01-10-2024/30minute/2024-10-01/2024-09-17",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 51,
+      "startedAt": "2026-11-12T06:47:51.133Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C57445%7C01-10-2024/30minute/2024-10-01/2024-09-17",
+      "httpStatus": 200,
+      "latencyMs": 52,
+      "outcome": "ok"
+    },
+    {
+      "seq": 52,
+      "startedAt": "2026-11-12T06:47:51.186Z",
+      "endpoint": "/v2/expired-instruments/expiries",
+      "httpStatus": 200,
+      "latencyMs": 39,
+      "outcome": "ok"
+    },
+    {
+      "seq": 53,
+      "startedAt": "2026-11-12T06:47:51.226Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 213,
+      "outcome": "ok"
+    },
+    {
+      "seq": 54,
+      "startedAt": "2026-11-12T06:47:51.480Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNIFTY%20MID%20SELECT/days/1/2026-10-27/2026-10-20",
+      "httpStatus": 200,
+      "latencyMs": 37,
+      "outcome": "ok"
+    },
+    {
+      "seq": 55,
+      "startedAt": "2026-11-12T06:47:51.519Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C50661%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 56,
+      "startedAt": "2026-11-12T06:47:51.564Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C50662%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 43,
+      "outcome": "ok"
+    },
+    {
+      "seq": 57,
+      "startedAt": "2026-11-12T06:47:51.609Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C50655%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 43,
+      "outcome": "ok"
+    },
+    {
+      "seq": 58,
+      "startedAt": "2026-11-12T06:47:51.654Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C50669%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 45,
+      "outcome": "ok"
+    },
+    {
+      "seq": 59,
+      "startedAt": "2026-11-12T06:47:51.702Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C50670%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 262,
+      "outcome": "ok"
+    },
+    {
+      "seq": 60,
+      "startedAt": "2026-11-12T06:47:51.966Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C50656%7C27-10-2026/30minute/2026-10-27/2026-10-13",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 61,
+      "startedAt": "2026-11-12T06:47:52.012Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 477,
+      "outcome": "ok"
+    },
+    {
+      "seq": 62,
+      "startedAt": "2026-11-12T06:47:52.493Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNIFTY%20MID%20SELECT/days/1/2026-05-26/2026-05-19",
+      "httpStatus": 200,
+      "latencyMs": 39,
+      "outcome": "ok"
+    },
+    {
+      "seq": 63,
+      "startedAt": "2026-11-12T06:47:52.534Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C70974%7C26-05-2026/30minute/2026-05-26/2026-05-12",
+      "httpStatus": 200,
+      "latencyMs": 55,
+      "outcome": "ok"
+    },
+    {
+      "seq": 64,
+      "startedAt": "2026-11-12T06:47:52.592Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C70975%7C26-05-2026/30minute/2026-05-26/2026-05-12",
+      "httpStatus": 200,
+      "latencyMs": 61,
+      "outcome": "ok"
+    },
+    {
+      "seq": 65,
+      "startedAt": "2026-11-12T06:47:52.656Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 69,
+      "outcome": "ok"
+    },
+    {
+      "seq": 66,
+      "startedAt": "2026-11-12T06:47:52.730Z",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNIFTY%20MID%20SELECT/days/1/2024-09-30/2024-09-23",
+      "httpStatus": 200,
+      "latencyMs": 45,
+      "outcome": "ok"
+    },
+    {
+      "seq": 67,
+      "startedAt": "2026-11-12T06:47:52.778Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C86908%7C30-09-2024/30minute/2024-09-30/2024-09-16",
+      "httpStatus": 200,
+      "latencyMs": 235,
+      "outcome": "ok"
+    },
+    {
+      "seq": 68,
+      "startedAt": "2026-11-12T06:47:53.015Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/NSE_FO%7C86909%7C30-09-2024/30minute/2024-09-30/2024-09-16",
+      "httpStatus": 200,
+      "latencyMs": 39,
+      "outcome": "ok"
+    },
+    {
+      "seq": 69,
+      "startedAt": "2026-11-12T06:47:53.056Z",
+      "endpoint": "/v2/expired-instruments/expiries",
+      "httpStatus": 200,
+      "latencyMs": 39,
+      "outcome": "ok"
+    },
+    {
+      "seq": 70,
+      "startedAt": "2026-11-12T06:47:53.098Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 48,
+      "outcome": "ok"
+    },
+    {
+      "seq": 71,
+      "startedAt": "2026-11-12T06:47:53.150Z",
+      "endpoint": "/v3/historical-candle/BSE_INDEX%7CSENSEX/days/1/2026-11-05/2026-10-29",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 72,
+      "startedAt": "2026-11-12T06:47:53.195Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C1134391%7C05-11-2026/30minute/2026-11-05/2026-10-22",
+      "httpStatus": 200,
+      "latencyMs": 41,
+      "outcome": "ok"
+    },
+    {
+      "seq": 73,
+      "startedAt": "2026-11-12T06:47:53.239Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C1134281%7C05-11-2026/30minute/2026-11-05/2026-10-22",
+      "httpStatus": 200,
+      "latencyMs": 42,
+      "outcome": "ok"
+    },
+    {
+      "seq": 74,
+      "startedAt": "2026-11-12T06:47:53.284Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C1134266%7C05-11-2026/30minute/2026-11-05/2026-10-22",
+      "httpStatus": 200,
+      "latencyMs": 52,
+      "outcome": "ok"
+    },
+    {
+      "seq": 75,
+      "startedAt": "2026-11-12T06:47:53.340Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C1134331%7C05-11-2026/30minute/2026-11-05/2026-10-22",
+      "httpStatus": 200,
+      "latencyMs": 197,
+      "outcome": "ok"
+    },
+    {
+      "seq": 76,
+      "startedAt": "2026-11-12T06:47:53.539Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C1134403%7C05-11-2026/30minute/2026-11-05/2026-10-22",
+      "httpStatus": 200,
+      "latencyMs": 41,
+      "outcome": "ok"
+    },
+    {
+      "seq": 77,
+      "startedAt": "2026-11-12T06:47:53.582Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C1134342%7C05-11-2026/30minute/2026-11-05/2026-10-22",
+      "httpStatus": 200,
+      "latencyMs": 41,
+      "outcome": "ok"
+    },
+    {
+      "seq": 78,
+      "startedAt": "2026-11-12T06:47:53.627Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 45,
+      "outcome": "ok"
+    },
+    {
+      "seq": 79,
+      "startedAt": "2026-11-12T06:47:54.065Z",
+      "endpoint": "/v3/historical-candle/BSE_INDEX%7CSENSEX/days/1/2026-05-14/2026-05-07",
+      "httpStatus": 200,
+      "latencyMs": 41,
+      "outcome": "ok"
+    },
+    {
+      "seq": 80,
+      "startedAt": "2026-11-12T06:47:54.108Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C1108984%7C14-05-2026/30minute/2026-05-14/2026-04-30",
+      "httpStatus": 200,
+      "latencyMs": 50,
+      "outcome": "ok"
+    },
+    {
+      "seq": 81,
+      "startedAt": "2026-11-12T06:47:54.161Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C1110442%7C14-05-2026/30minute/2026-05-14/2026-04-30",
+      "httpStatus": 200,
+      "latencyMs": 45,
+      "outcome": "ok"
+    },
+    {
+      "seq": 82,
+      "startedAt": "2026-11-12T06:47:54.210Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 48,
+      "outcome": "ok"
+    },
+    {
+      "seq": 83,
+      "startedAt": "2026-11-12T06:47:54.260Z",
+      "endpoint": "/v3/historical-candle/BSE_INDEX%7CSENSEX/days/1/2024-10-04/2024-09-27",
+      "httpStatus": 200,
+      "latencyMs": 43,
+      "outcome": "ok"
+    },
+    {
+      "seq": 84,
+      "startedAt": "2026-11-12T06:47:54.305Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C1121561%7C04-10-2024/30minute/2024-10-04/2024-09-20",
+      "httpStatus": 200,
+      "latencyMs": 58,
+      "outcome": "ok"
+    },
+    {
+      "seq": 85,
+      "startedAt": "2026-11-12T06:47:54.366Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C1121533%7C04-10-2024/30minute/2024-10-04/2024-09-20",
+      "httpStatus": 200,
+      "latencyMs": 47,
+      "outcome": "ok"
+    },
+    {
+      "seq": 86,
+      "startedAt": "2026-11-12T06:47:54.416Z",
+      "endpoint": "/v2/expired-instruments/expiries",
+      "httpStatus": 200,
+      "latencyMs": 220,
+      "outcome": "ok"
+    },
+    {
+      "seq": 87,
+      "startedAt": "2026-11-12T06:47:54.639Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 471,
+      "outcome": "ok"
+    },
+    {
+      "seq": 88,
+      "startedAt": "2026-11-12T06:47:55.114Z",
+      "endpoint": "/v3/historical-candle/BSE_INDEX%7CBANKEX/days/1/2026-10-29/2026-10-22",
+      "httpStatus": 200,
+      "latencyMs": 49,
+      "outcome": "ok"
+    },
+    {
+      "seq": 89,
+      "startedAt": "2026-11-12T06:47:55.166Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C865522%7C29-10-2026/30minute/2026-10-29/2026-10-15",
+      "httpStatus": 200,
+      "latencyMs": 44,
+      "outcome": "ok"
+    },
+    {
+      "seq": 90,
+      "startedAt": "2026-11-12T06:47:55.213Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C867303%7C29-10-2026/30minute/2026-10-29/2026-10-15",
+      "httpStatus": 200,
+      "latencyMs": 40,
+      "outcome": "ok"
+    },
+    {
+      "seq": 91,
+      "startedAt": "2026-11-12T06:47:55.257Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C867025%7C29-10-2026/30minute/2026-10-29/2026-10-15",
+      "httpStatus": 200,
+      "latencyMs": 66,
+      "outcome": "ok"
+    },
+    {
+      "seq": 92,
+      "startedAt": "2026-11-12T06:47:55.327Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C862659%7C29-10-2026/30minute/2026-10-29/2026-10-15",
+      "httpStatus": 200,
+      "latencyMs": 55,
+      "outcome": "ok"
+    },
+    {
+      "seq": 93,
+      "startedAt": "2026-11-12T06:47:55.386Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C864336%7C29-10-2026/30minute/2026-10-29/2026-10-15",
+      "httpStatus": 200,
+      "latencyMs": 41,
+      "outcome": "ok"
+    },
+    {
+      "seq": 94,
+      "startedAt": "2026-11-12T06:47:55.432Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C871018%7C29-10-2026/30minute/2026-10-29/2026-10-15",
+      "httpStatus": 200,
+      "latencyMs": 203,
+      "outcome": "ok"
+    },
+    {
+      "seq": 95,
+      "startedAt": "2026-11-12T06:47:55.638Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 521,
+      "outcome": "ok"
+    },
+    {
+      "seq": 96,
+      "startedAt": "2026-11-12T06:47:56.162Z",
+      "endpoint": "/v3/historical-candle/BSE_INDEX%7CBANKEX/days/1/2026-05-27/2026-05-20",
+      "httpStatus": 200,
+      "latencyMs": 52,
+      "outcome": "ok"
+    },
+    {
+      "seq": 97,
+      "startedAt": "2026-11-12T06:47:56.216Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C872593%7C27-05-2026/30minute/2026-05-27/2026-05-13",
+      "httpStatus": 200,
+      "latencyMs": 44,
+      "outcome": "ok"
+    },
+    {
+      "seq": 98,
+      "startedAt": "2026-11-12T06:47:56.264Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C874236%7C27-05-2026/30minute/2026-05-27/2026-05-13",
+      "httpStatus": 200,
+      "latencyMs": 43,
+      "outcome": "ok"
+    },
+    {
+      "seq": 99,
+      "startedAt": "2026-11-12T06:47:56.309Z",
+      "endpoint": "/v2/expired-instruments/option/contract",
+      "httpStatus": 200,
+      "latencyMs": 374,
+      "outcome": "ok"
+    },
+    {
+      "seq": 100,
+      "startedAt": "2026-11-12T06:47:56.762Z",
+      "endpoint": "/v3/historical-candle/BSE_INDEX%7CBANKEX/days/1/2024-09-30/2024-09-23",
+      "httpStatus": 200,
+      "latencyMs": 54,
+      "outcome": "ok"
+    },
+    {
+      "seq": 101,
+      "startedAt": "2026-11-12T06:47:56.820Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C845797%7C30-09-2024/30minute/2024-09-30/2024-09-16",
+      "httpStatus": 200,
+      "latencyMs": 39,
+      "outcome": "ok"
+    },
+    {
+      "seq": 102,
+      "startedAt": "2026-11-12T06:47:56.863Z",
+      "endpoint": "/v2/expired-instruments/historical-candle/BSE_FO%7C845892%7C30-09-2024/30minute/2024-09-30/2024-09-16",
+      "httpStatus": 200,
+      "latencyMs": 55,
+      "outcome": "ok"
+    }
+  ],
+  "indices": [
+    {
+      "index": "NIFTY",
+      "underlyingKey": "NSE_INDEX|Nifty 50",
+      "expiries": [
+        {
+          "expiry": "2026-11-09",
+          "isLatest": true,
+          "contractRows": 294,
+          "strikesListed": 147,
+          "spotDate": "2026-11-09",
+          "spotClose": 25044.65,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 25050,
+          "strikeStep": 50,
+          "stepIntervalAbove": 50,
+          "stepIntervalBelow": 50,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 25050,
+              "listedStrike": 25050,
+              "expiredInstrumentKey": "NSE_FO|40039|09-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 124,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-09T15:15:00+05:30",
+                "lastTimestamp": "2026-10-26T09:15:00+05:30",
+                "volumePresent": 124,
+                "oiPresent": 124,
+                "oiNonZero": 124
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 25050,
+              "listedStrike": 25050,
+              "expiredInstrumentKey": "NSE_FO|40040|09-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 53,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-09T15:15:00+05:30",
+                "lastTimestamp": "2026-10-29T09:15:00+05:30",
+                "volumePresent": 53,
+                "oiPresent": 53,
+                "oiNonZero": 51
+              }
+            },
+            {
+              "label": "ITM_CE",
+              "type": "CE",
+              "requestedStrike": 24900,
+              "listedStrike": 24900,
+              "expiredInstrumentKey": "NSE_FO|40020|09-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 146,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-09T15:15:00+05:30",
+                "lastTimestamp": "2026-10-26T09:15:00+05:30",
+                "volumePresent": 146,
+                "oiPresent": 146,
+                "oiNonZero": 146
+              }
+            },
+            {
+              "label": "OTM_CE",
+              "type": "CE",
+              "requestedStrike": 25200,
+              "listedStrike": 25200,
+              "expiredInstrumentKey": "NSE_FO|40045|09-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 146,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-09T15:15:00+05:30",
+                "lastTimestamp": "2026-10-26T09:15:00+05:30",
+                "volumePresent": 146,
+                "oiPresent": 146,
+                "oiNonZero": 146
+              }
+            },
+            {
+              "label": "ITM_PE",
+              "type": "PE",
+              "requestedStrike": 25200,
+              "listedStrike": 25200,
+              "expiredInstrumentKey": "NSE_FO|40046|09-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 103,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-09T15:15:00+05:30",
+                "lastTimestamp": "2026-10-29T09:45:00+05:30",
+                "volumePresent": 103,
+                "oiPresent": 103,
+                "oiNonZero": 95
+              }
+            },
+            {
+              "label": "OTM_PE",
+              "type": "PE",
+              "requestedStrike": 24900,
+              "listedStrike": 24900,
+              "expiredInstrumentKey": "NSE_FO|40021|09-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 67,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-09T15:15:00+05:30",
+                "lastTimestamp": "2026-11-03T09:45:00+05:30",
+                "volumePresent": 67,
+                "oiPresent": 67,
+                "oiNonZero": 56
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2026-05-12",
+          "isLatest": false,
+          "contractRows": 216,
+          "strikesListed": 108,
+          "spotDate": "2026-05-12",
+          "spotClose": 23379.55,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 23400,
+          "strikeStep": 50,
+          "stepIntervalAbove": 50,
+          "stepIntervalBelow": 50,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 23400,
+              "listedStrike": 23400,
+              "expiredInstrumentKey": "NSE_FO|41722|12-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 129,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-12T15:15:00+05:30",
+                "lastTimestamp": "2026-04-28T09:15:00+05:30",
+                "volumePresent": 129,
+                "oiPresent": 129,
+                "oiNonZero": 129
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 23400,
+              "listedStrike": 23400,
+              "expiredInstrumentKey": "NSE_FO|41723|12-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 130,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-12T15:15:00+05:30",
+                "lastTimestamp": "2026-04-28T09:15:00+05:30",
+                "volumePresent": 130,
+                "oiPresent": 130,
+                "oiNonZero": 130
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2024-10-03",
+          "isLatest": false,
+          "contractRows": 198,
+          "strikesListed": 99,
+          "spotDate": "2024-10-03",
+          "spotClose": 25250.1,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 25250,
+          "strikeStep": 50,
+          "stepIntervalAbove": 50,
+          "stepIntervalBelow": 50,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 25250,
+              "listedStrike": 25250,
+              "expiredInstrumentKey": "NSE_FO|58522|03-10-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 128,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2024-10-03T15:15:00+05:30",
+                "lastTimestamp": "2024-09-19T09:15:00+05:30",
+                "volumePresent": 128,
+                "oiPresent": 128,
+                "oiNonZero": 35
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 25250,
+              "listedStrike": 25250,
+              "expiredInstrumentKey": "NSE_FO|58523|03-10-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 130,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2024-10-03T15:15:00+05:30",
+                "lastTimestamp": "2024-09-19T09:15:00+05:30",
+                "volumePresent": 130,
+                "oiPresent": 130,
+                "oiNonZero": 114
+              }
+            }
+          ]
+        }
+      ],
+      "expiriesListed": 111,
+      "oldestExpiryListed": "2024-10-03",
+      "latestExpiryListed": "2026-11-09",
+      "expiriesChosen": [
+        "2026-11-09",
+        "2026-05-12",
+        "2024-10-03"
+      ]
+    },
+    {
+      "index": "BANKNIFTY",
+      "underlyingKey": "NSE_INDEX|Nifty Bank",
+      "expiries": [
+        {
+          "expiry": "2026-10-27",
+          "isLatest": true,
+          "contractRows": 322,
+          "strikesListed": 161,
+          "spotDate": "2026-10-27",
+          "spotClose": 53974.9,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 54000,
+          "strikeStep": 100,
+          "stepIntervalAbove": 100,
+          "stepIntervalBelow": 100,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 54000,
+              "listedStrike": 54000,
+              "expiredInstrumentKey": "NSE_FO|49415|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 130,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 130,
+                "oiPresent": 130,
+                "oiNonZero": 130
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 54000,
+              "listedStrike": 54000,
+              "expiredInstrumentKey": "NSE_FO|49416|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 130,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 130,
+                "oiPresent": 130,
+                "oiNonZero": 130
+              }
+            },
+            {
+              "label": "ITM_CE",
+              "type": "CE",
+              "requestedStrike": 53700,
+              "listedStrike": 53700,
+              "expiredInstrumentKey": "NSE_FO|49409|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 123,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 123,
+                "oiPresent": 123,
+                "oiNonZero": 123
+              }
+            },
+            {
+              "label": "OTM_CE",
+              "type": "CE",
+              "requestedStrike": 54300,
+              "listedStrike": 54300,
+              "expiredInstrumentKey": "NSE_FO|49421|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 130,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 130,
+                "oiPresent": 130,
+                "oiNonZero": 130
+              }
+            },
+            {
+              "label": "ITM_PE",
+              "type": "PE",
+              "requestedStrike": 54300,
+              "listedStrike": 54300,
+              "expiredInstrumentKey": "NSE_FO|49422|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 130,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 130,
+                "oiPresent": 130,
+                "oiNonZero": 130
+              }
+            },
+            {
+              "label": "OTM_PE",
+              "type": "PE",
+              "requestedStrike": 53700,
+              "listedStrike": 53700,
+              "expiredInstrumentKey": "NSE_FO|49410|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 130,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 130,
+                "oiPresent": 130,
+                "oiNonZero": 130
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2026-05-26",
+          "isLatest": false,
+          "contractRows": 440,
+          "strikesListed": 220,
+          "spotDate": "2026-05-26",
+          "spotClose": 55092.9,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 55100,
+          "strikeStep": 100,
+          "stepIntervalAbove": 100,
+          "stepIntervalBelow": 100,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 55100,
+              "listedStrike": 55100,
+              "expiredInstrumentKey": "NSE_FO|67263|26-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 143,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-26T15:15:00+05:30",
+                "lastTimestamp": "2026-05-12T09:15:00+05:30",
+                "volumePresent": 143,
+                "oiPresent": 143,
+                "oiNonZero": 143
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 55100,
+              "listedStrike": 55100,
+              "expiredInstrumentKey": "NSE_FO|67264|26-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 143,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-26T15:15:00+05:30",
+                "lastTimestamp": "2026-05-12T09:15:00+05:30",
+                "volumePresent": 143,
+                "oiPresent": 143,
+                "oiNonZero": 143
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2024-10-01",
+          "isLatest": false,
+          "contractRows": 238,
+          "strikesListed": 119,
+          "spotDate": "2024-10-01",
+          "spotClose": 52922.6,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 52900,
+          "strikeStep": 100,
+          "stepIntervalAbove": 100,
+          "stepIntervalBelow": 100,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 52900,
+              "listedStrike": 52900,
+              "expiredInstrumentKey": "NSE_FO|59176|01-10-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 0,
+                "fieldsPerCandle": null,
+                "firstTimestamp": null,
+                "lastTimestamp": null,
+                "volumePresent": 0,
+                "oiPresent": 0,
+                "oiNonZero": 0
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 52900,
+              "listedStrike": 52900,
+              "expiredInstrumentKey": "NSE_FO|59177|01-10-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 0,
+                "fieldsPerCandle": null,
+                "firstTimestamp": null,
+                "lastTimestamp": null,
+                "volumePresent": 0,
+                "oiPresent": 0,
+                "oiNonZero": 0
+              }
+            }
+          ]
+        }
+      ],
+      "expiriesListed": 31,
+      "oldestExpiryListed": "2024-10-01",
+      "latestExpiryListed": "2026-10-27",
+      "expiriesChosen": [
+        "2026-10-27",
+        "2026-05-26",
+        "2024-10-01"
+      ]
+    },
+    {
+      "index": "FINNIFTY",
+      "underlyingKey": "NSE_INDEX|Nifty Fin Service",
+      "expiries": [
+        {
+          "expiry": "2026-10-27",
+          "isLatest": true,
+          "contractRows": 270,
+          "strikesListed": 135,
+          "spotDate": "2026-10-27",
+          "spotClose": 24303.75,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 24300,
+          "strikeStep": 50,
+          "stepIntervalAbove": 50,
+          "stepIntervalBelow": 50,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 24300,
+              "listedStrike": 24300,
+              "expiredInstrumentKey": "NSE_FO|50287|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 59,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-21T12:15:00+05:30",
+                "volumePresent": 59,
+                "oiPresent": 59,
+                "oiNonZero": 59
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 24300,
+              "listedStrike": 24300,
+              "expiredInstrumentKey": "NSE_FO|50288|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 130,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 130,
+                "oiPresent": 130,
+                "oiNonZero": 130
+              }
+            },
+            {
+              "label": "ITM_CE",
+              "type": "CE",
+              "requestedStrike": 24150,
+              "listedStrike": 24150,
+              "expiredInstrumentKey": "NSE_FO|60365|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 48,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-21T10:15:00+05:30",
+                "volumePresent": 48,
+                "oiPresent": 48,
+                "oiNonZero": 48
+              }
+            },
+            {
+              "label": "OTM_CE",
+              "type": "CE",
+              "requestedStrike": 24450,
+              "listedStrike": 24450,
+              "expiredInstrumentKey": "NSE_FO|60373|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 54,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-21T14:45:00+05:30",
+                "volumePresent": 54,
+                "oiPresent": 54,
+                "oiNonZero": 54
+              }
+            },
+            {
+              "label": "ITM_PE",
+              "type": "PE",
+              "requestedStrike": 24450,
+              "listedStrike": 24450,
+              "expiredInstrumentKey": "NSE_FO|60374|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 117,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 117,
+                "oiPresent": 117,
+                "oiNonZero": 117
+              }
+            },
+            {
+              "label": "OTM_PE",
+              "type": "PE",
+              "requestedStrike": 24150,
+              "listedStrike": 24150,
+              "expiredInstrumentKey": "NSE_FO|60366|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 108,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 108,
+                "oiPresent": 108,
+                "oiNonZero": 108
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2026-05-26",
+          "isLatest": false,
+          "contractRows": 320,
+          "strikesListed": 160,
+          "spotDate": "2026-05-26",
+          "spotClose": 25932.25,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 25950,
+          "strikeStep": 50,
+          "stepIntervalAbove": 50,
+          "stepIntervalBelow": 50,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 25950,
+              "listedStrike": 25950,
+              "expiredInstrumentKey": "NSE_FO|62485|26-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 120,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-26T15:15:00+05:30",
+                "lastTimestamp": "2026-05-12T15:15:00+05:30",
+                "volumePresent": 120,
+                "oiPresent": 120,
+                "oiNonZero": 120
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 25950,
+              "listedStrike": 25950,
+              "expiredInstrumentKey": "NSE_FO|62486|26-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 55,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-26T15:15:00+05:30",
+                "lastTimestamp": "2026-05-18T11:15:00+05:30",
+                "volumePresent": 55,
+                "oiPresent": 55,
+                "oiNonZero": 55
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2024-10-01",
+          "isLatest": false,
+          "contractRows": 234,
+          "strikesListed": 117,
+          "spotDate": "2024-10-01",
+          "spotClose": 24477.45,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 24500,
+          "strikeStep": 50,
+          "stepIntervalAbove": 50,
+          "stepIntervalBelow": 50,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 24500,
+              "listedStrike": 24500,
+              "expiredInstrumentKey": "NSE_FO|57444|01-10-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 0,
+                "fieldsPerCandle": null,
+                "firstTimestamp": null,
+                "lastTimestamp": null,
+                "volumePresent": 0,
+                "oiPresent": 0,
+                "oiNonZero": 0
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 24500,
+              "listedStrike": 24500,
+              "expiredInstrumentKey": "NSE_FO|57445|01-10-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 0,
+                "fieldsPerCandle": null,
+                "firstTimestamp": null,
+                "lastTimestamp": null,
+                "volumePresent": 0,
+                "oiPresent": 0,
+                "oiNonZero": 0
+              }
+            }
+          ]
+        }
+      ],
+      "expiriesListed": 32,
+      "oldestExpiryListed": "2024-10-01",
+      "latestExpiryListed": "2026-10-27",
+      "expiriesChosen": [
+        "2026-10-27",
+        "2026-05-26",
+        "2024-10-01"
+      ]
+    },
+    {
+      "index": "MIDCPNIFTY",
+      "underlyingKey": "NSE_INDEX|NIFTY MID SELECT",
+      "expiries": [
+        {
+          "expiry": "2026-10-27",
+          "isLatest": true,
+          "contractRows": 358,
+          "strikesListed": 179,
+          "spotDate": "2026-10-27",
+          "spotClose": 13220.05,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 13225,
+          "strikeStep": 25,
+          "stepIntervalAbove": 25,
+          "stepIntervalBelow": 25,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 13225,
+              "listedStrike": 13225,
+              "expiredInstrumentKey": "NSE_FO|50661|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 71,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T13:15:00+05:30",
+                "volumePresent": 71,
+                "oiPresent": 71,
+                "oiNonZero": 71
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 13225,
+              "listedStrike": 13225,
+              "expiredInstrumentKey": "NSE_FO|50662|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 128,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 128,
+                "oiPresent": 128,
+                "oiNonZero": 128
+              }
+            },
+            {
+              "label": "ITM_CE",
+              "type": "CE",
+              "requestedStrike": 13150,
+              "listedStrike": 13150,
+              "expiredInstrumentKey": "NSE_FO|50655|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 62,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-21T10:45:00+05:30",
+                "volumePresent": 62,
+                "oiPresent": 62,
+                "oiNonZero": 62
+              }
+            },
+            {
+              "label": "OTM_CE",
+              "type": "CE",
+              "requestedStrike": 13300,
+              "listedStrike": 13300,
+              "expiredInstrumentKey": "NSE_FO|50669|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 129,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 129,
+                "oiPresent": 129,
+                "oiNonZero": 129
+              }
+            },
+            {
+              "label": "ITM_PE",
+              "type": "PE",
+              "requestedStrike": 13300,
+              "listedStrike": 13300,
+              "expiredInstrumentKey": "NSE_FO|50670|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 130,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 130,
+                "oiPresent": 130,
+                "oiNonZero": 130
+              }
+            },
+            {
+              "label": "OTM_PE",
+              "type": "PE",
+              "requestedStrike": 13150,
+              "listedStrike": 13150,
+              "expiredInstrumentKey": "NSE_FO|50656|27-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 130,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-27T15:15:00+05:30",
+                "lastTimestamp": "2026-10-13T09:15:00+05:30",
+                "volumePresent": 130,
+                "oiPresent": 130,
+                "oiNonZero": 130
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2026-05-26",
+          "isLatest": false,
+          "contractRows": 418,
+          "strikesListed": 209,
+          "spotDate": "2026-05-26",
+          "spotClose": 14675.6,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 14675,
+          "strikeStep": 25,
+          "stepIntervalAbove": 25,
+          "stepIntervalBelow": 25,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 14675,
+              "listedStrike": 14675,
+              "expiredInstrumentKey": "NSE_FO|70974|26-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 143,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-26T15:15:00+05:30",
+                "lastTimestamp": "2026-05-12T09:15:00+05:30",
+                "volumePresent": 143,
+                "oiPresent": 143,
+                "oiNonZero": 143
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 14675,
+              "listedStrike": 14675,
+              "expiredInstrumentKey": "NSE_FO|70975|26-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 59,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-26T15:15:00+05:30",
+                "lastTimestamp": "2026-05-13T15:15:00+05:30",
+                "volumePresent": 59,
+                "oiPresent": 59,
+                "oiNonZero": 59
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2024-09-30",
+          "isLatest": false,
+          "contractRows": 244,
+          "strikesListed": 122,
+          "spotDate": "2024-09-30",
+          "spotClose": 13223.35,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 13225,
+          "strikeStep": 25,
+          "stepIntervalAbove": 25,
+          "stepIntervalBelow": 25,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 13225,
+              "listedStrike": 13225,
+              "expiredInstrumentKey": "NSE_FO|86908|30-09-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 0,
+                "fieldsPerCandle": null,
+                "firstTimestamp": null,
+                "lastTimestamp": null,
+                "volumePresent": 0,
+                "oiPresent": 0,
+                "oiNonZero": 0
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 13225,
+              "listedStrike": 13225,
+              "expiredInstrumentKey": "NSE_FO|86909|30-09-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 0,
+                "fieldsPerCandle": null,
+                "firstTimestamp": null,
+                "lastTimestamp": null,
+                "volumePresent": 0,
+                "oiPresent": 0,
+                "oiNonZero": 0
+              }
+            }
+          ]
+        }
+      ],
+      "expiriesListed": 32,
+      "oldestExpiryListed": "2024-09-30",
+      "latestExpiryListed": "2026-10-27",
+      "expiriesChosen": [
+        "2026-10-27",
+        "2026-05-26",
+        "2024-09-30"
+      ]
+    },
+    {
+      "index": "SENSEX",
+      "underlyingKey": "BSE_INDEX|SENSEX",
+      "expiries": [
+        {
+          "expiry": "2026-11-05",
+          "isLatest": true,
+          "contractRows": 364,
+          "strikesListed": 182,
+          "spotDate": "2026-11-05",
+          "spotClose": 79310.01,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 79300,
+          "strikeStep": 100,
+          "stepIntervalAbove": 100,
+          "stepIntervalBelow": 100,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 79300,
+              "listedStrike": 79300,
+              "expiredInstrumentKey": "BSE_FO|1134391|05-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 65,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-05T15:15:00+05:30",
+                "lastTimestamp": "2026-10-30T09:15:00+05:30",
+                "volumePresent": 65,
+                "oiPresent": 65,
+                "oiNonZero": 65
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 79300,
+              "listedStrike": 79300,
+              "expiredInstrumentKey": "BSE_FO|1134281|05-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 14,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-05T15:15:00+05:30",
+                "lastTimestamp": "2026-11-04T15:15:00+05:30",
+                "volumePresent": 14,
+                "oiPresent": 14,
+                "oiNonZero": 14
+              }
+            },
+            {
+              "label": "ITM_CE",
+              "type": "CE",
+              "requestedStrike": 79000,
+              "listedStrike": 79000,
+              "expiredInstrumentKey": "BSE_FO|1134266|05-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 91,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-05T15:15:00+05:30",
+                "lastTimestamp": "2026-10-28T09:15:00+05:30",
+                "volumePresent": 91,
+                "oiPresent": 91,
+                "oiNonZero": 91
+              }
+            },
+            {
+              "label": "OTM_CE",
+              "type": "CE",
+              "requestedStrike": 79600,
+              "listedStrike": 79600,
+              "expiredInstrumentKey": "BSE_FO|1134331|05-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 63,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-05T15:15:00+05:30",
+                "lastTimestamp": "2026-10-30T09:45:00+05:30",
+                "volumePresent": 63,
+                "oiPresent": 63,
+                "oiNonZero": 63
+              }
+            },
+            {
+              "label": "ITM_PE",
+              "type": "PE",
+              "requestedStrike": 79600,
+              "listedStrike": 79600,
+              "expiredInstrumentKey": "BSE_FO|1134403|05-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 13,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-05T15:15:00+05:30",
+                "lastTimestamp": "2026-11-05T09:15:00+05:30",
+                "volumePresent": 13,
+                "oiPresent": 13,
+                "oiNonZero": 13
+              }
+            },
+            {
+              "label": "OTM_PE",
+              "type": "PE",
+              "requestedStrike": 79000,
+              "listedStrike": 79000,
+              "expiredInstrumentKey": "BSE_FO|1134342|05-11-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 49,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-11-05T15:15:00+05:30",
+                "lastTimestamp": "2026-10-28T11:45:00+05:30",
+                "volumePresent": 49,
+                "oiPresent": 49,
+                "oiNonZero": 48
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2026-05-14",
+          "isLatest": false,
+          "contractRows": 410,
+          "strikesListed": 205,
+          "spotDate": "2026-05-14",
+          "spotClose": 75398.72,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 75400,
+          "strikeStep": 100,
+          "stepIntervalAbove": 100,
+          "stepIntervalBelow": 100,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 75400,
+              "listedStrike": 75400,
+              "expiredInstrumentKey": "BSE_FO|1108984|14-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 50,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-14T15:15:00+05:30",
+                "lastTimestamp": "2026-05-11T10:15:00+05:30",
+                "volumePresent": 50,
+                "oiPresent": 50,
+                "oiNonZero": 50
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 75400,
+              "listedStrike": 75400,
+              "expiredInstrumentKey": "BSE_FO|1110442|14-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 101,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-14T15:15:00+05:30",
+                "lastTimestamp": "2026-05-04T14:15:00+05:30",
+                "volumePresent": 101,
+                "oiPresent": 101,
+                "oiNonZero": 101
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2024-10-04",
+          "isLatest": false,
+          "contractRows": 270,
+          "strikesListed": 135,
+          "spotDate": "2024-10-04",
+          "spotClose": 81688.45,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 81700,
+          "strikeStep": 100,
+          "stepIntervalAbove": 100,
+          "stepIntervalBelow": 100,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 81700,
+              "listedStrike": 81700,
+              "expiredInstrumentKey": "BSE_FO|1121561|04-10-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 31,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2024-10-04T15:15:00+05:30",
+                "lastTimestamp": "2024-09-23T13:15:00+05:30",
+                "volumePresent": 31,
+                "oiPresent": 31,
+                "oiNonZero": 12
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 81700,
+              "listedStrike": 81700,
+              "expiredInstrumentKey": "BSE_FO|1121533|04-10-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 39,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2024-10-04T15:15:00+05:30",
+                "lastTimestamp": "2024-10-01T09:15:00+05:30",
+                "volumePresent": 39,
+                "oiPresent": 39,
+                "oiNonZero": 33
+              }
+            }
+          ]
+        }
+      ],
+      "expiriesListed": 109,
+      "oldestExpiryListed": "2024-10-04",
+      "latestExpiryListed": "2026-11-05",
+      "expiriesChosen": [
+        "2026-11-05",
+        "2026-05-14",
+        "2024-10-04"
+      ]
+    },
+    {
+      "index": "BANKEX",
+      "underlyingKey": "BSE_INDEX|BANKEX",
+      "expiries": [
+        {
+          "expiry": "2026-10-29",
+          "isLatest": true,
+          "contractRows": 316,
+          "strikesListed": 158,
+          "spotDate": "2026-10-29",
+          "spotClose": 61718.48,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 61700,
+          "strikeStep": 100,
+          "stepIntervalAbove": 100,
+          "stepIntervalBelow": 100,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 61700,
+              "listedStrike": 61700,
+              "expiredInstrumentKey": "BSE_FO|865522|29-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 74,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-29T15:15:00+05:30",
+                "lastTimestamp": "2026-10-21T11:15:00+05:30",
+                "volumePresent": 74,
+                "oiPresent": 74,
+                "oiNonZero": 74
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 61700,
+              "listedStrike": 61700,
+              "expiredInstrumentKey": "BSE_FO|867303|29-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 62,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-29T15:15:00+05:30",
+                "lastTimestamp": "2026-10-22T09:15:00+05:30",
+                "volumePresent": 62,
+                "oiPresent": 62,
+                "oiNonZero": 62
+              }
+            },
+            {
+              "label": "ITM_CE",
+              "type": "CE",
+              "requestedStrike": 61400,
+              "listedStrike": 61400,
+              "expiredInstrumentKey": "BSE_FO|867025|29-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 55,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-29T15:15:00+05:30",
+                "lastTimestamp": "2026-10-21T12:15:00+05:30",
+                "volumePresent": 55,
+                "oiPresent": 55,
+                "oiNonZero": 55
+              }
+            },
+            {
+              "label": "OTM_CE",
+              "type": "CE",
+              "requestedStrike": 62000,
+              "listedStrike": 62000,
+              "expiredInstrumentKey": "BSE_FO|862659|29-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 113,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-29T15:15:00+05:30",
+                "lastTimestamp": "2026-10-15T09:15:00+05:30",
+                "volumePresent": 113,
+                "oiPresent": 113,
+                "oiNonZero": 113
+              }
+            },
+            {
+              "label": "ITM_PE",
+              "type": "PE",
+              "requestedStrike": 62000,
+              "listedStrike": 62000,
+              "expiredInstrumentKey": "BSE_FO|864336|29-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 115,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-29T15:15:00+05:30",
+                "lastTimestamp": "2026-10-15T09:15:00+05:30",
+                "volumePresent": 115,
+                "oiPresent": 115,
+                "oiNonZero": 115
+              }
+            },
+            {
+              "label": "OTM_PE",
+              "type": "PE",
+              "requestedStrike": 61400,
+              "listedStrike": 61400,
+              "expiredInstrumentKey": "BSE_FO|871018|29-10-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 57,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-10-29T15:15:00+05:30",
+                "lastTimestamp": "2026-10-23T09:45:00+05:30",
+                "volumePresent": 57,
+                "oiPresent": 57,
+                "oiNonZero": 54
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2026-05-27",
+          "isLatest": false,
+          "contractRows": 576,
+          "strikesListed": 288,
+          "spotDate": "2026-05-27",
+          "spotClose": 61796.59,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 61800,
+          "strikeStep": 100,
+          "stepIntervalAbove": 100,
+          "stepIntervalBelow": 100,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 61800,
+              "listedStrike": 61800,
+              "expiredInstrumentKey": "BSE_FO|872593|27-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 61,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-27T15:15:00+05:30",
+                "lastTimestamp": "2026-05-15T10:15:00+05:30",
+                "volumePresent": 61,
+                "oiPresent": 61,
+                "oiNonZero": 61
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 61800,
+              "listedStrike": 61800,
+              "expiredInstrumentKey": "BSE_FO|874236|27-05-2026",
+              "expiryVerified": true,
+              "candles": {
+                "count": 48,
+                "fieldsPerCandle": 7,
+                "firstTimestamp": "2026-05-27T15:15:00+05:30",
+                "lastTimestamp": "2026-05-14T11:45:00+05:30",
+                "volumePresent": 48,
+                "oiPresent": 48,
+                "oiNonZero": 48
+              }
+            }
+          ]
+        },
+        {
+          "expiry": "2024-09-30",
+          "isLatest": false,
+          "contractRows": 266,
+          "strikesListed": 133,
+          "spotDate": "2024-09-30",
+          "spotClose": 60038.09,
+          "spotWithinStrikeGrid": true,
+          "atmStrike": 60000,
+          "strikeStep": 100,
+          "stepIntervalAbove": 100,
+          "stepIntervalBelow": 100,
+          "stepIntervalsAgree": true,
+          "legs": [
+            {
+              "label": "ATM_CE",
+              "type": "CE",
+              "requestedStrike": 60000,
+              "listedStrike": 60000,
+              "expiredInstrumentKey": "BSE_FO|845797|30-09-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 0,
+                "fieldsPerCandle": null,
+                "firstTimestamp": null,
+                "lastTimestamp": null,
+                "volumePresent": 0,
+                "oiPresent": 0,
+                "oiNonZero": 0
+              }
+            },
+            {
+              "label": "ATM_PE",
+              "type": "PE",
+              "requestedStrike": 60000,
+              "listedStrike": 60000,
+              "expiredInstrumentKey": "BSE_FO|845892|30-09-2024",
+              "expiryVerified": true,
+              "candles": {
+                "count": 0,
+                "fieldsPerCandle": null,
+                "firstTimestamp": null,
+                "lastTimestamp": null,
+                "volumePresent": 0,
+                "oiPresent": 0,
+                "oiNonZero": 0
+              }
+            }
+          ]
+        }
+      ],
+      "expiriesListed": 32,
+      "oldestExpiryListed": "2024-09-30",
+      "latestExpiryListed": "2026-10-29",
+      "expiriesChosen": [
+        "2026-10-29",
+        "2026-05-27",
+        "2024-09-30"
+      ]
+    }
+  ]
+}

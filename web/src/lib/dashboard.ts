@@ -15,6 +15,8 @@ export interface DashboardView {
     change: number | null;
     changePercent: number | null;
     status: MarketStatus;
+    /** G2: the actual market source (LIVE, MOCK, END_OF_DAY, STALE, UNAVAILABLE), shown verbatim. */
+    source: DataSource;
     freshness: Freshness;
     fetchedAt: string | null;
     lastTradeTime: string | null;
@@ -78,6 +80,7 @@ export function toDashboardView(a: Analysis, limits: RiskConfig, generatedAt: st
   // Risk: the recommended plan's assessment, else the top candidate's (labeled), else not evaluated.
   const assessed = plan ?? a.candidates[0] ?? null;
   const r = assessed?.risk ?? null;
+  const actionableSizing = a.status === "TRADE" && plan !== null;
   const newsF = a.factors.find((f) => f.key === "news");
   return {
     index: s.index,
@@ -87,6 +90,7 @@ export function toDashboardView(a: Analysis, limits: RiskConfig, generatedAt: st
       change,
       changePercent: change === null || !s.prevClose ? null : (change / s.prevClose) * 100,
       status: marketStatus(now),
+      source: s.sources.market.source,
       freshness: q(s.sources.market.source),
       fetchedAt: s.sources.market.fetchedAt,
       lastTradeTime: s.sources.market.lastTradeTime ?? null,
@@ -103,7 +107,8 @@ export function toDashboardView(a: Analysis, limits: RiskConfig, generatedAt: st
     },
     technicals: {
       rsi: t?.rsi ?? i?.rsi ?? null,
-      vwap: t?.vwap ?? i?.vwap ?? null,
+      // Spot VWAP only from the analysis. The snapshot indicators.vwap has no verified provenance (mock literal) and is not shown.
+      vwap: t?.vwap ?? null,
       futuresVwap: t?.futuresVwap?.vwap ?? null,
       atr15m: t?.atr ?? null,
       atrDaily: t?.dailyAtr ?? i?.atr ?? null,
@@ -145,29 +150,33 @@ export function toDashboardView(a: Analysis, limits: RiskConfig, generatedAt: st
       status: a.status,
       strategy: plan?.strategy ?? null,
       confidence: plan?.score ?? a.total,
-      entry: plan?.entry ?? null,
-      stopLoss: plan?.stop ?? null,
-      target1: plan?.target1 ?? null,
-      target2: plan?.target2 ?? null,
-      riskReward: plan?.rr ?? null,
-      maxLoss: plan?.maxLoss ?? null,
-      maxProfit: plan?.maxProfit ?? null,
-      breakevens: plan?.breakevens ?? [],
+      // Entry, stop and targets are shown ONLY for TRADE. A WAIT or NO TRADE status must never display price levels
+      // that look like an actionable plan (e.g. the opening-window plan that analyze() returns with status WAIT).
+      entry: a.status === "TRADE" ? (plan?.entry ?? null) : null,
+      stopLoss: a.status === "TRADE" ? (plan?.stop ?? null) : null,
+      target1: a.status === "TRADE" ? (plan?.target1 ?? null) : null,
+      target2: a.status === "TRADE" ? (plan?.target2 ?? null) : null,
+      riskReward: a.status === "TRADE" ? (plan?.rr ?? null) : null,
+      maxLoss: a.status === "TRADE" ? (plan?.maxLoss ?? null) : null,
+      maxProfit: a.status === "TRADE" ? (plan?.maxProfit ?? null) : null,
+      breakevens: a.status === "TRADE" ? (plan?.breakevens ?? []) : [],
       reasons: a.blockers,
       risks: a.risks,
       executable: a.status === "TRADE" && !!plan && s.sources.market.source === "LIVE",
-      noPlanMessage: plan ? null : "No executable trade plan is available.",
+      noPlanMessage: a.status === "TRADE" && plan ? null : "No executable trade plan is available.",
     },
     factors: a.factors.map((f) => ({ key: f.key, label: f.label, score: f.score, max: f.max, available: f.available })),
     risk: {
       approval: !r ? "NOT EVALUATED" : r.allowed ? "RISK APPROVED" : "RISK BLOCKED",
       basis: plan ? `Recommended plan (${plan.strategy})` : assessed ? `Top candidate (${assessed.strategy}), not recommended` : "No strategy candidate was built",
       reasons: r?.humanReasons ?? [],
-      lots: r?.lots ?? null,
-      quantity: r?.quantity ?? null,
-      totalRisk: r?.totalRisk ?? null,
-      riskPercent: r?.riskPercent ?? null,
-      capitalRequired: r?.capitalRequired ?? null,
+      // Sizing is shown only for a recommended TRADE. A WAIT or NO TRADE candidate keeps its approval status and reasons,
+      // but not lot counts, quantities or capital figures that would read as an order to place.
+      lots: actionableSizing ? (r?.lots ?? null) : null,
+      quantity: actionableSizing ? (r?.quantity ?? null) : null,
+      totalRisk: actionableSizing ? (r?.totalRisk ?? null) : null,
+      riskPercent: actionableSizing ? (r?.riskPercent ?? null) : null,
+      capitalRequired: actionableSizing ? (r?.capitalRequired ?? null) : null,
       limits,
     },
     dataQuality: {

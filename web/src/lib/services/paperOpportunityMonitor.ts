@@ -7,6 +7,7 @@ import type {
   PaperOpportunityEvent,
   PaperStatus,
   DataSourceState,
+  Provenance,
 } from "./paperOpportunityStore.ts";
 import {
   TERMINAL_STATES,
@@ -14,6 +15,7 @@ import {
   listPaperOpportunities,
   savePaperOpportunity,
 } from "./paperOpportunityStore.ts";
+import { expiryInstant } from "../paperMath.ts";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -66,9 +68,15 @@ function isStopHit(opp: PaperOpportunity, price: number): boolean {
   return price >= opp.stop;
 }
 
-function isExpired(opp: PaperOpportunity): boolean {
+// Instant at which a contract's expiry is reached. A date-only value (YYYY-MM-DD, as supplied by the option chain)
+// means the contract trades until the 15:30 IST close of that day; new Date("YYYY-MM-DD") would be 05:30 IST,
+// which expired positions at the open of expiry day. Full ISO timestamps are used as given.
+export { expiryInstant };
+
+// Judged at the evaluation time, the same clock that stamps closedAt.
+function isExpired(opp: PaperOpportunity, at: string): boolean {
   if (!opp.expiry) return false;
-  return new Date() >= new Date(opp.expiry);
+  return new Date(at) >= expiryInstant(opp.expiry);
 }
 
 function calcMfe(opp: PaperOpportunity, price: number): number {
@@ -164,9 +172,11 @@ export function applyEndOfDay(opp: PaperOpportunity, now = new Date()): EvalResu
 // ── Main evaluate ─────────────────────────────────────────────────────────────
 
 export function evaluatePaperOpportunity(
-  opp: PaperOpportunity,
+  given: PaperOpportunity,
   input: EvalInput,
 ): EvalResult {
+  // The stored record is the truth: a caller holding a stale OPEN copy must not close a trade twice.
+  const opp = getPaperOpportunity(given.id) ?? given;
   if (TERMINAL_STATES.includes(opp.status)) {
     return { transitioned: false, toStatus: null, reason: "already terminal", mfe: opp.mfe ?? 0, mae: opp.mae ?? 0 };
   }
@@ -193,7 +203,7 @@ export function evaluatePaperOpportunity(
   let toStatus: PaperStatus | null = null;
   let reason = "";
 
-  if (isExpired(opp)) {
+  if (isExpired(opp, timestamp)) {
     toStatus = "EXPIRED";
     reason = `expired at ${opp.expiry}`;
   } else {
@@ -215,7 +225,7 @@ export function evaluatePaperOpportunity(
   const maeR = opp.riskPerUnit > 0 ? r2(newMae / opp.riskPerUnit) : null;
 
   if (toStatus !== null) {
-    const exitPrice = toStatus === "EXPIRED" ? currentPrice : currentPrice;
+    const exitPrice = currentPrice;
     const realizedPnl = r2(pnlPerUnit(opp, exitPrice));
     const realizedR = opp.riskPerUnit > 0 ? r2(realizedPnl / opp.riskPerUnit) : 0;
     const closedAt = timestamp;
@@ -325,7 +335,7 @@ interface CreatePaperOpportunityInput {
   reasonCodes?: string[];
   strategyVersion: string;
   source: DataSourceState;
-  provenance?: "LIVE_COLLECTOR" | "FIXTURE";
+  provenance?: Provenance;
 }
 
 export function createPaperOpportunity(
@@ -335,7 +345,10 @@ export function createPaperOpportunity(
   const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   // Risk/reward are measured in the trade's favourable direction (short stock: stop above entry).
   const short = isShortStock(input);
-  const riskPerUnit = r2(Math.max(short ? input.stop - input.entry : input.entry - input.stop, 0.01));
+  const rawRisk = short ? input.stop - input.entry : input.entry - input.stop;
+  // A stop on the wrong side of entry would make every R meaningless (was silently 0.01 → ±1000R).
+  if (!(rawRisk > 0)) throw new Error(`Invalid paper trade: stop ${input.stop} is not on the risk side of entry ${input.entry}`);
+  const riskPerUnit = r2(rawRisk);
   const rewardToTarget1 = r2(short ? input.entry - input.target1 : input.target1 - input.entry);
   const rewardToTarget2 = r2(short ? input.entry - input.target2 : input.target2 - input.entry);
   const rrTarget1 = r2(rewardToTarget1 / riskPerUnit);

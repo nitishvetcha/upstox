@@ -1,0 +1,2 @@
+G2b-ledger-failure.patch: new file web/src/lib/integration/openRouteLedgerFailure.integration.ts
+NOTE: package.json test:integration script line also changed; that tracked file has pre-existing changes and needs hunk review, so it is NOT in this patch.

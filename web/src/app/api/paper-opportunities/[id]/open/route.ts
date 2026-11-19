@@ -3,11 +3,17 @@ export const dynamic = "force-dynamic";
 // Opens a stored paper opportunity. Every gate runs on the server, against a FRESH snapshot.
 // The opportunity's stored price is never used as an execution price.
 import { requireOperator } from "../../../../../lib/operatorSession.ts";
-import { getPaperOpportunity, updatePaperOpportunity } from "@/lib/services/paperOpportunityStore";
+import {
+  claimOpportunityOpening,
+  getPaperOpportunity,
+  releaseOpportunityOpening,
+  updatePaperOpportunity,
+  type PaperOpportunity,
+} from "@/lib/services/paperOpportunityStore";
 import { openDeps } from "@/lib/services/paperOpenDeps";
 import { isIndexId } from "@/lib/services/instrumentRegistry";
 import { serverProvenance } from "@/lib/services/paperOpportunityProvenance";
-import { decideOpen, publicEngineReason, type OpenFacts } from "@/lib/services/paperOpportunityOpen";
+import { decideOpen, publicEngineReason, type OpenDecision, type OpenFacts } from "@/lib/services/paperOpportunityOpen";
 import { getPaperTradingEngine } from "@/lib/services/paperStore";
 import { analyze } from "@/lib/engine/strategy";
 import { logEvent } from "@/lib/ops/structuredLog";
@@ -24,8 +30,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const pre = early.code === "NOT_FOUND" || early.code === "ALREADY_OPENED" || early.code === "NOT_OPEN" || early.code === "UNSUPPORTED";
   if (pre) return finish(id, early);
 
-  const index = (opp!.underlying ?? "").toLowerCase();
-  if (!isIndexId(index)) return finish(id, decideOpen({ ...earlyFacts, opp: { ...opp!, instrumentType: "UNSUPPORTED" } }));
+  // Claim before the first await: a concurrent request is refused here, not run in parallel. Always released below.
+  const claim = claimOpportunityOpening(id, openDeps.now());
+  if (!claim) return finish(id, ALREADY_OPEN);
+  try {
+    return await attemptOpen(id, opp!, earlyFacts);
+  } finally {
+    releaseOpportunityOpening(id, claim);
+  }
+}
+
+async function attemptOpen(id: string, opp: PaperOpportunity, earlyFacts: OpenFacts) {
+  const index = (opp.underlying ?? "").toLowerCase();
+  if (!isIndexId(index)) return finish(id, decideOpen({ ...earlyFacts, opp: { ...opp, instrumentType: "UNSUPPORTED" } }));
 
   // Fresh server-side snapshot, provenance and strategy analysis.
   const now = openDeps.now();
@@ -41,6 +58,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!plan || planRejected) return finish(id, decideOpen({ ...earlyFacts, provenance, hasPlan: !!plan, planRejected, detail }));
 
   // The paper engine re-checks freshness, position limits, sizing, the 1% risk assessment and fills.
+  // Last check, in the same synchronous step as the engine call: a link written while the snapshot loaded wins.
+  if (getPaperOpportunity(id)?.openedPaperTradeId) return finish(id, ALREADY_OPEN);
   const engine = getPaperTradingEngine();
   const result = engine.processRecommendation(analysis, now);
   const facts: OpenFacts = {
@@ -52,6 +71,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   };
   return finish(id, decideOpen(facts), result.trade?.id ?? null);
 }
+
+// Same answer whether the opportunity is already linked or another request holds its claim.
+const ALREADY_OPEN: OpenDecision = { code: "ALREADY_OPENED", ok: false, status: 409, reasons: ["already opened, or being opened by another request"] };
 
 // Records the attempt on the opportunity (audit) and links the trade only when opening succeeded.
 function finish(id: string, d: ReturnType<typeof decideOpen>, tradeId: string | null = null) {

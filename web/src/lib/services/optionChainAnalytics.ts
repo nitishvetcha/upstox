@@ -29,8 +29,15 @@ export function validExpiries(expiries: string[], now: Date): string[] {
   const today = istToday(now);
   const closed = istMinutes(now).minutes >= 15 * 60 + 30;
   return [...new Set(expiries)]
-    .filter((e) => /^\d{4}-\d{2}-\d{2}$/.test(e) && (e > today || (e === today && !closed)))
+    .filter((e) => isCalendarDate(e) && (e > today || (e === today && !closed)))
     .sort();
+}
+
+// A real calendar date, not just the YYYY-MM-DD shape: 2026-13-40 must never be selected as the nearest expiry.
+function isCalendarDate(e: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(e)) return false;
+  const d = new Date(`${e}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === e;
 }
 
 export function chainMetrics(

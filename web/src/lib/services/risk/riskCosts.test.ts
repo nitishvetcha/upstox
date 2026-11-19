@@ -77,12 +77,16 @@ test("TC-4. the stop-gap allowance worsens the stop fill; zero gap leaves only t
   assert.ok((noGap.netRiskPerLot ?? 0) < (withGap.netRiskPerLot ?? 0), "a smaller gap allowance gives a smaller worst-case risk");
 });
 
-test("TC-5. the net reward-to-risk check blocks a trade whose gross ratio passes but whose net ratio does not", () => {
-  // Gross 1.5 : 1 clears the 1.2 minimum. After 1% slippage, a 2% gap and charges it does not.
+test("TC-5. net reward-to-risk is reported as an economic diagnostic and does not independently reject a recommendation clearing gross R:R", () => {
+  // Gross 1.5 : 1 clears the 1.2 debit minimum. After 1% slippage, a 2% gap and charges, net R:R is lower.
+  // Recommendation must remain allowed (Strategy 11.4 gross R:R rule), while net R:R is preserved in diagnostics.
   const r = evaluateTradeRisk(plan({ entry: 10, stop: 9, target1: 11.5, rr: 1.5 }), snap(), undefined, cfg(), NOW);
-  assert.equal(r.allowed, false);
-  assert.ok(r.reasons.includes("INSUFFICIENT_RR"));
-  assert.ok(r.humanReasons.some((h) => /Net risk\/reward after slippage and charges/.test(h)));
+  assert.equal(r.allowed, true, "Candidate clearing gross 1.2 R:R must remain approved");
+  assert.equal(r.status, "APPROVED");
+  assert.ok(!r.reasons.includes("INSUFFICIENT_RR"), "Net R:R must not independently reject the trade");
+  assert.ok(r.netRewardRatio !== null, "Net R:R must be calculated");
+  assert.ok(r.netRewardRatio !== null && r.netRewardRatio !== undefined && r.netRewardRatio < 1.2, "Net R:R is below 1.2 due to charges and slippage");
+  assert.ok(r.warnings.some((w) => /Economic diagnostic: Net risk\/reward/i.test(w)), "Warning records net R:R diagnostic");
 });
 
 test("TC-6. assumptions are stated on every assessment, and a zero brokerage rate is flagged as understated", () => {
@@ -115,17 +119,17 @@ test("TC-8. validateRiskConfig rejects a negative charge rate", () => {
   assert.throws(() => validateRiskConfig({ ...DEFAULT_RISK_CONFIG, costs: { ...DEFAULT_RISK_CONFIG.costs, stampDutyRate: -0.1 } }), /stampDutyRate/);
 });
 
-test("TC-9. position-size-zero rejection when 1 lot exceeds the 1% risk budget", () => {
+test("TC-9. position-size-zero when 1 lot exceeds the 1% risk budget does not reject valid trade recommendation", () => {
   // Account capital: 10,000 INR -> 1% risk budget = 100 INR.
   // Fixed charges (70.80) + 1 lot net risk (~200) = ~270.80 > 100 INR.
-  // Engine must reject with ZERO_LOTS and allowed = false.
+  // Engine allocates 0 lots, but trade recommendation remains approved (allowed = true).
   const r = evaluateTradeRisk(plan(), snap(), undefined, cfg({ accountCapital: 10_000 }), NOW);
-  assert.equal(r.allowed, false);
+  assert.equal(r.allowed, true);
   assert.equal(r.lots, 0);
   assert.equal(r.quantity, 0);
   assert.equal(r.totalRisk, 0);
-  assert.ok(r.reasons.includes("ZERO_LOTS"));
-  assert.ok(r.humanReasons.some((h) => /Position size rounds to 0 lots/.test(h)));
+  assert.ok(!r.reasons.includes("ZERO_LOTS"));
+  assert.ok(r.portfolioReasons?.includes("ZERO_LOTS"));
 });
 
 test("TC-10. 1% per-trade risk limit is strictly preserved: total risk never exceeds 1% of capital", () => {

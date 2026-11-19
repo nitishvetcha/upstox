@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { sourceMeta, withFallback } from "@/lib/services/market";
+import { sourceMeta, technicalMeta, withFallback } from "@/lib/services/market";
 import { INSTRUMENTS, isIndexId } from "@/lib/services/instrumentRegistry";
 import { DEFAULT_TIMEFRAME, TIMEFRAMES, isTimeframe } from "@/lib/services/candles";
 import { chartSeries } from "@/lib/services/technicalAnalysis";
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/technical/[i
     return { tech, series };
   });
   const t = data.tech.analysis;
-  const meta = sourceMeta(data.tech.source, new Date(), 2.5);
+  const meta = technicalMeta(data.tech.source, new Date());
   return Response.json({
     index: INSTRUMENTS[index].symbol,
     timeframe: tf,

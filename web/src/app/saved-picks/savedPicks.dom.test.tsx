@@ -202,3 +202,61 @@ test("401 on retry still redirects to login (navigation attempted)", async () =>
   assert.doesNotMatch(container.textContent ?? "", /NIFTY 22000 CE/);
   await act(async () => root.unmount());
 });
+
+test("clicking Delete issues DELETE request with pick id and reloads", async () => {
+  let deleteRequested = false;
+  let deleteUrl = "";
+  let deleteMethod = "";
+  let listCalls = 0;
+
+  g.fetch = async (url: string | URL, init?: RequestInit) => {
+    const urlStr = String(url);
+    if (init?.method === "DELETE") {
+      deleteRequested = true;
+      deleteUrl = urlStr;
+      deleteMethod = init.method;
+      return new Response(JSON.stringify({ deleted: "p1" }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    listCalls++;
+    const picks = deleteRequested ? [] : [pick];
+    return new Response(JSON.stringify({ picks }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  const { container, root } = await mount();
+  await settle();
+  assert.match(container.textContent ?? "", /NIFTY 22000 CE/);
+
+  const deleteBtn = clickButton(container, /Delete/);
+  assert.ok(deleteBtn, "Delete button is present on the pick row");
+  await click(deleteBtn!);
+  await settle();
+
+  assert.ok(deleteRequested, "DELETE request was triggered");
+  assert.equal(deleteMethod, "DELETE");
+  assert.match(deleteUrl, /\/api\/saved-picks\?id=p1/);
+  assert.match(container.textContent ?? "", /No saved picks yet\./, "empty state displayed after deletion");
+  await act(async () => root.unmount());
+});
+
+test("a failed Delete displays explicit error message", async () => {
+  g.fetch = async (url: string | URL, init?: RequestInit) => {
+    if (init?.method === "DELETE") {
+      return new Response(JSON.stringify({ error: "failed" }), { status: 500, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ picks: [pick] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  const { container, root } = await mount();
+  await settle();
+
+  const deleteBtn = clickButton(container, /Delete/);
+  assert.ok(deleteBtn);
+  await click(deleteBtn!);
+  await settle();
+
+  const alert = container.querySelector("[role=alert]");
+  assert.ok(alert, "error alert is shown");
+  assert.match(alert?.textContent ?? "", /Could not delete the pick/);
+  assert.match(container.textContent ?? "", /NIFTY 22000 CE/, "pick remains visible after failed delete");
+  await act(async () => root.unmount());
+});

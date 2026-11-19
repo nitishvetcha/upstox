@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { analyze, MIN_STRATEGY_SCORE } from "./engine/strategy.ts";
-import { mockSnapshot } from "./services/mock.ts";
+import { mockSnapshotTradeInputs as mockSnapshot } from "./testFixtures/mockSnapshotTradeInputs.ts";
 import type { Analysis, Snapshot } from "./types.ts";
 import { classifyEngineBlocker, diagnose, isRecommendationEligible, type RecommendationDiagnostic } from "./recommendationDiagnostic.ts";
 import { chartPoints, HISTORY_INTERVALS, HISTORY_RANGES, loadHistory, planHistoryChunks, PROVIDER_PLAN, rangeStart, type HistoryChunk } from "./marketHistory.ts";
@@ -80,28 +80,25 @@ describe("RECOMMEND — eligibility matrix (frozen engine)", () => {
     assert.ok(codes(d).includes("RISK_REWARD_TOO_LOW"));
   });
 
-  it("RECOMMEND-08. Position size zero → not TRADE, POSITION_SIZE_ZERO", () => {
+  it("RECOMMEND-08. Position size zero → preserves TRADE recommendation with unallocated sizing (Phase 1 policy)", () => {
     const d = run(live(), MIDDAY, undefined, { accountCapital: 1_000 });
-    assert.notEqual(d.finalDecision, "TRADE");
-    assert.ok(codes(d).some((c) => c === "POSITION_SIZE_ZERO" || c === "RISK_LIMIT_BLOCKED"), codes(d).join());
+    assert.equal(d.finalDecision, "TRADE");
+    assert.equal(d.eligible, true);
   });
 
-  it("RECOMMEND-09. Daily loss exceeded → NO_TRADE, DAILY_LOSS_LIMIT", () => {
+  it("RECOMMEND-09. Daily loss exceeded → portfolio warning, trade recommendation preserved (Phase 1 policy)", () => {
     const d = run(live(), MIDDAY, { realizedDailyLoss: 1_000_000 });
-    assert.equal(d.finalDecision, "NO_TRADE");
-    assert.ok(codes(d).includes("DAILY_LOSS_LIMIT"));
+    assert.equal(d.finalDecision, "TRADE");
   });
 
-  it("RECOMMEND-10. Open risk exceeded → not TRADE, OPEN_RISK_LIMIT", () => {
+  it("RECOMMEND-10. Open risk exceeded → portfolio warning, trade recommendation preserved (Phase 1 policy)", () => {
     const d = run(live(), MIDDAY, { existingOpenRisk: 1_000_000 });
-    assert.notEqual(d.finalDecision, "TRADE");
-    assert.ok(codes(d).includes("OPEN_RISK_LIMIT"));
+    assert.equal(d.finalDecision, "TRADE");
   });
 
-  it("RECOMMEND-11. Max concurrent positions → not TRADE, MAX_CONCURRENT_POSITIONS", () => {
+  it("RECOMMEND-11. Max concurrent positions → portfolio warning, trade recommendation preserved (Phase 1 policy)", () => {
     const d = run(live(), MIDDAY, { currentOpenPositions: 99 });
-    assert.notEqual(d.finalDecision, "TRADE");
-    assert.ok(codes(d).includes("MAX_CONCURRENT_POSITIONS"));
+    assert.equal(d.finalDecision, "TRADE");
   });
 
   it("RECOMMEND-12. No valid strategy candidate → not TRADE, NO_VALID_STRATEGY", () => {
@@ -234,7 +231,9 @@ describe("DEBUG — engine blocker classification", () => {
     ["Long Call: Risk/reward 1:0.9 below minimum 1:1.2", "RISK_REWARD_TOO_LOW"],
     ["Long Call: Lot size is unknown or unavailable from contract metadata", "LOT_SIZE_UNAVAILABLE"],
     ["OPTION_INSTRUMENT_ID_UNAVAILABLE: canonical Upstox contract identity not returned", "OPTION_INSTRUMENT_ID_UNAVAILABLE"],
-    ["Not enough comparable data to trade: News sentiment unavailable", "INSUFFICIENT_TECHNICAL_DATA"],
+    ["Not enough comparable data to trade: News sentiment unavailable", "INSUFFICIENT_FRESHNESS"],
+    ["Not enough comparable data to trade: Option chain / OI, Volatility / IV unavailable", "INSUFFICIENT_OPTION_CHAIN"],
+    ["Not enough comparable data to trade: Market trend, Price action unavailable", "INSUFFICIENT_TECHNICAL_DATA"],
     ["Something new the engine says", "UNCLASSIFIED"],
   ];
   for (const [text, code] of cases) it(`classify: ${code}`, () => assert.equal(classifyEngineBlocker(text), code));
@@ -404,7 +403,7 @@ describe("OPTIONS — live vs historical separation", () => {
     assert.equal(run(mockSnapshot("nifty", MIDDAY)).checks.find((x) => x.stage === 3)!.status, "BLOCKED");
   });
   it("OPTIONS-07. option-history page shows a blocker state, never a synthetic chart", () => {
-    const p = src("../app/option-history/page.tsx");
+    const p = src("../app/(dashboard)/option-history/page.tsx");
     assert.ok(p.includes("Historical Option Data Unavailable"));
     assert.ok(!/recharts|LineChart/.test(p));
   });

@@ -13,7 +13,7 @@ echo "[$(date -u)] [WRAPPER] Starting Upstox Paper Live Supervisor Wrapper (PID:
 # Ensure Next.js server is up
 if ! /opt/homebrew/bin/node -e '
   const http = require("http");
-  const req = http.get("http://localhost:3123/api/auth/status", (res) => {
+  const req = http.get("http://localhost:3123/api/auth/status?verify=1", (res) => {
     process.exit(res.statusCode === 200 ? 0 : 1);
   });
   req.on("error", () => process.exit(1));
@@ -27,7 +27,7 @@ if ! /opt/homebrew/bin/node -e '
   for i in {1..30}; do
     if /opt/homebrew/bin/node -e '
       const http = require("http");
-      const req = http.get("http://localhost:3123/api/auth/status", (res) => {
+      const req = http.get("http://localhost:3123/api/auth/status?verify=1", (res) => {
         process.exit(res.statusCode === 200 ? 0 : 1);
       });
       req.on("error", () => process.exit(1));

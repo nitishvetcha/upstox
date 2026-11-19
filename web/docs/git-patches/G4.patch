@@ -1,0 +1,859 @@
+diff --git a/tests/browser/chain-selection.probe.mjs b/tests/browser/chain-selection.probe.mjs
+new file mode 100644
+index 00000000..474ab51c
+--- /dev/null
++++ b/tests/browser/chain-selection.probe.mjs
+@@ -0,0 +1,33 @@
++// Probe: can a user select a strike or contract on the option-chain page? Loopback, synthetic token, mock data only.
++// Usage: node tests/browser/chain-selection.probe.cjs <base-url> <operator-token>
++import { chromium } from "playwright";
++// Connection and credential come from the environment only. Nothing is read from positional arguments.
++const BASE = "http://127.0.0.1:3150"; // local test server only
++const TOKEN = process.env.PAPER_OPERATOR_CREDENTIAL ?? ""; // operator PIN for the local app (never printed)
++
++(async () => {
++  const browser = await chromium.launch({ headless: true });
++  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
++  await ctx.route("**/*", (r) => (r.request().url().startsWith(BASE) || r.request().url().startsWith("data:")) ? r.continue() : r.abort());
++  const page = await ctx.newPage();
++  await page.goto(BASE + "/login", { waitUntil: "load", timeout: 120000 });
++  await page.fill("input[name=pin]", TOKEN);
++  await Promise.all([page.waitForURL((u) => !new URL(u).pathname.startsWith("/login"), { timeout: 60000 }), page.click("button[type=submit]")]);
++  await page.goto(BASE + "/option-chain", { waitUntil: "load", timeout: 120000 });
++  await page.waitForTimeout(2000);
++  const info = await page.evaluate(() => {
++    const rows = [...document.querySelectorAll("table tbody tr")];
++    const first = rows[0];
++    return {
++      rowCount: rows.length,
++      rowHasButton: rows.filter((r) => r.querySelector("button, a, [role=button], input[type=radio]")).length,
++      rowClickable: rows.filter((r) => r.onclick !== null || r.getAttribute("role") === "button").length,
++      selects: [...document.querySelectorAll("select")].map((s) => ({ name: s.name, options: [...s.options].map((o) => o.textContent.trim()).slice(0, 8) })),
++      tabs: [...document.querySelectorAll("button")].map((b) => b.textContent.trim()).filter((t) => /^(NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|BANKEX)$/.test(t)),
++      contractDetailPanel: /Contract details|Selected contract|lot size/i.test(document.body.innerText),
++      firstRowText: first ? first.innerText.replace(/\s+/g, " ").slice(0, 160) : null,
++    };
++  });
++  console.log("PROBE_RESULT " + JSON.stringify(info));
++  await browser.close();
++})().catch((e) => { console.error("PROBE_ERROR " + e.message.slice(0, 200)); process.exit(1); });
+diff --git a/tests/browser/contract-scenarios.check.mjs b/tests/browser/contract-scenarios.check.mjs
+new file mode 100644
+index 00000000..13523312
+--- /dev/null
++++ b/tests/browser/contract-scenarios.check.mjs
+@@ -0,0 +1,92 @@
++// Browser scenarios for informational contract selection: metadata, quantity, expiry reset, stale and error states.
++// Loopback only, MOCK data. The stale and error cases alter only the browser's copy of the response (route.fulfill), labelled below.
++// Usage: node tests/browser/contract-scenarios.check.cjs <base-url> <operator-token> <screenshot-dir>
++import { chromium } from "playwright";
++
++// Connection and credential come from the environment only. Nothing is read from positional arguments.
++const BASE = "http://127.0.0.1:3150"; // local test server only
++const TOKEN = process.env.PAPER_OPERATOR_CREDENTIAL ?? ""; // operator PIN for the local app (never printed)
++const SHOTS = process.env.BROWSER_SHOTS_DIR ?? ".";
++const results = [];
++const rec = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS " : "FAIL ") + name + (detail ? " :: " + detail : "")); };
++const panel = (page) => page.innerText("section[aria-label='Selected contract']");
++
++(async () => {
++  const browser = await chromium.launch({ headless: true });
++  for (const [label, w, h] of [["desktop", 1440, 900], ["mobile", 390, 844]]) {
++    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
++    await ctx.route("**/*", (r) => (r.request().url().startsWith(BASE) || r.request().url().startsWith("data:")) ? r.continue() : r.abort());
++    const page = await ctx.newPage();
++    const pageErrors = [];
++    page.on("pageerror", (e) => pageErrors.push(e.message.slice(0, 120)));
++    await page.goto(BASE + "/login", { waitUntil: "load", timeout: 120000 });
++    await page.fill("input[name=pin]", TOKEN);
++    await Promise.all([page.waitForURL((u) => !new URL(u).pathname.startsWith("/login"), { timeout: 60000 }), page.click("button[type=submit]")]);
++    await page.goto(BASE + "/option-chain?index=nifty", { waitUntil: "load", timeout: 120000 });
++    await page.waitForSelector("table[aria-label='Option chain'] tbody tr", { timeout: 60000 });
++    const tag = label;
++
++    // 1. Metadata: lot size from backend, instrument key from backend (not "Not provided").
++    await page.click("button[aria-label='Select CE 24850']");
++    let t = await panel(page);
++    rec(`${tag} lot size from backend snapshot shown`, /Lot size\s*65\b/.test(t), t.replace(/\s+/g, " ").slice(0, 200));
++    rec(`${tag} instrument key from backend shown`, /Instrument key\s*MOCK_FO\|/.test(t));
++
++    // 2. Quantity = lots x lot size, from backend lot size.
++    await page.fill("input[type=number]", "3");
++    t = await panel(page);
++    rec(`${tag} quantity = 3 x 65 = 195`, /Quantity:\s*195\b/.test(t));
++
++    // 3. Expiry change resets selection and loads the chosen expiry's chain.
++    const expiries = await page.$$eval("select[aria-label='Expiry'] option", (o) => o.map((x) => x.value));
++    rec(`${tag} two backend expiries offered`, expiries.length === 2, JSON.stringify(expiries));
++    const second = expiries[1];
++    await page.selectOption("select[aria-label='Expiry']", second);
++    await page.waitForFunction((e) => document.querySelector("select[aria-label='Expiry']").value === e, second, { timeout: 30000 });
++    await page.waitForFunction(() => !document.body.innerText.includes("Loading expiry"), null, { timeout: 30000 });
++    t = await panel(page);
++    rec(`${tag} expiry change clears contract selection`, /No contract selected/.test(t));
++    const pressed = await page.$$eval("button[aria-pressed=true]", (b) => b.length);
++    rec(`${tag} expiry change clears pressed state`, pressed === 0, "pressed=" + pressed);
++    const hdr = await page.$$eval("table[aria-label='Option chain'] tbody tr", (r) => r.length);
++    rec(`${tag} 31 rows after expiry change`, hdr === 31, "rows=" + hdr);
++
++    // 4. Selecting again on the new expiry shows the new expiry and the same lot size (backend-supplied).
++    await page.click("button[aria-label='Select PE 24850']");
++    t = await panel(page);
++    rec(`${tag} new expiry selection shows that expiry`, t.includes(second), t.replace(/\s+/g, " ").slice(0, 160));
++
++    // 5. Stale provenance: backend returns a fallback message for this expiry (browser-side copy of the response).
++    await page.route("**/api/option-chain/nifty?*", async (route) => {
++      const resp = await route.fetch();
++      const j = await resp.json();
++      j.source = "STALE";
++      j.fallbackMessage = "Option chain is stale (test fixture). Prices may be out of date.";
++      await route.fulfill({ response: resp, json: j });
++    });
++    await page.selectOption("select[aria-label='Expiry']", expiries[0]);
++    await page.waitForFunction(() => !document.body.innerText.includes("Loading expiry"), null, { timeout: 30000 });
++    const stale = await page.innerText("body");
++    rec(`${tag} stale fallback message shown`, /Option chain is stale/.test(stale));
++    await page.unroute("**/api/option-chain/nifty?*");
++
++    // 6. Error: backend fails for the next expiry; nothing is selected and the old chain stays.
++    await page.route("**/api/option-chain/nifty?*", (route) => route.fulfill({ status: 500, json: { error: "fixture failure" } }));
++    await page.selectOption("select[aria-label='Expiry']", expiries[1]);
++    await page.waitForSelector("[role=alert]", { timeout: 30000 });
++    const err = await page.innerText("[role=alert]");
++    rec(`${tag} error shown with nothing selected`, /Could not load expiry/.test(err) && /Nothing is selected/.test(err), err.slice(0, 120));
++    rec(`${tag} old chain kept after failed expiry load`, (await page.$$eval("table[aria-label='Option chain'] tbody tr", (r) => r.length)) === 31);
++    await page.unroute("**/api/option-chain/nifty?*");
++
++    if (label === "desktop") await page.screenshot({ path: `${SHOTS}/scenarios-desktop.png` });
++    else await page.screenshot({ path: `${SHOTS}/scenarios-mobile.png` });
++
++    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
++    rec(`${tag} no horizontal overflow`, overflow === 0, "overflowPx=" + overflow);
++    rec(`${tag} no page errors`, pageErrors.length === 0, pageErrors.join(" | "));
++    await ctx.close();
++  }
++  await browser.close();
++  console.log("SUMMARY", results.filter((r) => r.ok).length, "pass,", results.filter((r) => !r.ok).length, "fail");
++})().catch((e) => { console.error("HARNESS_ERROR", e.message.slice(0, 300)); process.exit(1); });
+diff --git a/tests/browser/contract-selection.check.mjs b/tests/browser/contract-selection.check.mjs
+new file mode 100644
+index 00000000..a1e8ed82
+--- /dev/null
++++ b/tests/browser/contract-selection.check.mjs
+@@ -0,0 +1,81 @@
++// Browser check: informational contract selection on the option-chain page. Loopback only, mock data, no orders.
++// Usage: node tests/browser/contract-selection.check.cjs <base-url> <operator-token> <screenshot-dir>
++import { chromium } from "playwright";
++
++// Connection and credential come from the environment only. Nothing is read from positional arguments.
++const BASE = "http://127.0.0.1:3150"; // local test server only
++const TOKEN = process.env.PAPER_OPERATOR_CREDENTIAL ?? ""; // operator PIN for the local app (never printed)
++const SHOTS = process.env.BROWSER_SHOTS_DIR ?? ".";
++const results = [];
++const rec = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS " : "FAIL ") + name + (detail ? " :: " + detail : "")); };
++
++(async () => {
++  const browser = await chromium.launch({ headless: true });
++  for (const [label, w, h] of [["desktop", 1440, 900], ["tablet", 768, 1024], ["mobile", 390, 844]]) {
++    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
++    await ctx.route("**/*", (r) => (r.request().url().startsWith(BASE) || r.request().url().startsWith("data:")) ? r.continue() : r.abort());
++    const page = await ctx.newPage();
++    const pageErrors = [];
++    page.on("pageerror", (e) => pageErrors.push(e.message.slice(0, 120)));
++    await page.goto(BASE + "/login", { waitUntil: "load", timeout: 120000 });
++    await page.fill("input[name=pin]", TOKEN);
++    await Promise.all([page.waitForURL((u) => !new URL(u).pathname.startsWith("/login"), { timeout: 60000 }), page.click("button[type=submit]")]);
++
++    for (const idx of ["nifty", "banknifty"]) {
++      await page.goto(BASE + "/option-chain?index=" + idx, { waitUntil: "load", timeout: 120000 });
++      await page.waitForSelector("table[aria-label='Option chain'] tbody tr", { timeout: 60000 });
++      const tag = `${label} ${idx}`;
++      const rowCount = await page.$$eval("table[aria-label='Option chain'] tbody tr", (r) => r.length);
++      rec(`${tag} 31-row display`, rowCount === 31, "rows=" + rowCount);
++
++      const panelBefore = await page.innerText("section[aria-label='Selected contract']");
++      rec(`${tag} no selection by default`, /No contract selected/.test(panelBefore));
++
++      // CE and PE at two different strikes; each click must change only its own side.
++      const strikes = await page.$$eval("table[aria-label='Option chain'] tbody tr", (rows) => rows.map((r) => r.querySelector("td.text-center").firstChild.textContent.trim()));
++      const s1 = strikes[10], s2 = strikes[20];
++      await page.click(`button[aria-label='Select CE ${s1.replace(/,/g, "")}']`);
++      let panel = await page.innerText("section[aria-label='Selected contract']");
++      rec(`${tag} CE selection shows CE`, /Option type\s*CE/.test(panel), panel.replace(/\s+/g, " ").slice(0, 140));
++      await page.click(`button[aria-label='Select PE ${s2.replace(/,/g, "")}']`);
++      panel = await page.innerText("section[aria-label='Selected contract']");
++      rec(`${tag} PE selection replaces it with PE`, /Option type\s*PE/.test(panel) && /Strike\s*\S+/.test(panel));
++      const pressed = await page.$$eval("button[aria-pressed=true]", (b) => b.length);
++      rec(`${tag} only one contract active`, pressed === 1, "pressed=" + pressed);
++
++      // Lots and quantity: quantity only when lot size is present in the backend data.
++      const lotText = await page.innerText("section[aria-label='Selected contract']");
++      const lotUnavailable = /Lot size\s*Unavailable/.test(lotText);
++      if (lotUnavailable) {
++        rec(`${tag} lot size unavailable is shown, quantity not invented`, /Quantity: Unavailable/.test(lotText));
++      } else {
++        const m = lotText.match(/Lot size\s*(\d+)/);
++        await page.fill("input[type=number]", "3");
++        const after = await page.innerText("section[aria-label='Selected contract']");
++        rec(`${tag} quantity = 3 x lot size`, m && new RegExp("Quantity: " + (3 * Number(m[1]))).test(after));
++      }
++      await page.fill("input[type=number]", "0");
++      const bad = await page.innerText("section[aria-label='Selected contract']");
++      rec(`${tag} invalid lots rejected`, /Lots must be a whole number/.test(bad));
++      await page.fill("input[type=number]", "1");
++
++      const expiryOpts = await page.$$eval("select[aria-label='Expiry'] option", (o) => o.map((x) => x.value));
++      rec(`${tag} expiry options from backend (>=1)`, expiryOpts.length >= 1, JSON.stringify(expiryOpts.slice(0, 4)));
++      if (expiryOpts.length > 1) {
++        await page.selectOption("select[aria-label='Expiry']", expiryOpts[1]);
++        await page.waitForFunction((e) => document.querySelector("select[aria-label='Expiry']").value === e, expiryOpts[1], { timeout: 30000 });
++        const reset = await page.innerText("section[aria-label='Selected contract']");
++        rec(`${tag} expiry change resets selection`, /No contract selected/.test(reset));
++      }
++      if (label === "desktop") await page.screenshot({ path: `${SHOTS}/contract-${idx}-desktop.png`, fullPage: false });
++      if (label === "mobile" && idx === "nifty") await page.screenshot({ path: `${SHOTS}/contract-${idx}-mobile.png`, fullPage: false });
++    }
++
++    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
++    rec(`${label} no page horizontal overflow`, overflow === 0, "overflowPx=" + overflow);
++    rec(`${label} no page errors`, pageErrors.length === 0, pageErrors.join(" | "));
++    await ctx.close();
++  }
++  await browser.close();
++  console.log("SUMMARY", results.filter((r) => r.ok).length, "pass,", results.filter((r) => !r.ok).length, "fail");
++})().catch((e) => { console.error("HARNESS_ERROR", e.message.slice(0, 300)); process.exit(1); });
+diff --git a/tests/browser/csp-measure.check.mjs b/tests/browser/csp-measure.check.mjs
+new file mode 100644
+index 00000000..e799df1e
+--- /dev/null
++++ b/tests/browser/csp-measure.check.mjs
+@@ -0,0 +1,41 @@
++// Measurement only: loads pages under the REPORT-ONLY nonce CSP and records every securitypolicyviolation event.
++// Enforcement is not enabled by this script. Mock server, loopback only.
++// Usage: node tests/browser/csp-measure.check.cjs <base-url> <pin> <screenshot-dir>
++import { chromium } from "playwright";
++// Connection and credential come from the environment only. Nothing is read from positional arguments.
++const BASE = "http://127.0.0.1:3150"; // local test server only
++const PIN = process.env.PAPER_OPERATOR_CREDENTIAL ?? ""; // operator PIN for the local app (never printed)
++const SHOTS = process.env.BROWSER_SHOTS_DIR ?? ".";
++const PAGES = ["/", "/saved-picks", "/option-chain?index=nifty", "/option-chain?index=banknifty", "/recommendations", "/strategies", "/change-pin", "/opportunities", "/stock-v2", "/options-research", "/market-history", "/strategy-evidence", "/performance"];
++
++(async () => {
++  const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || undefined });
++  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
++  await ctx.route("**/*", (r) => (r.request().url().startsWith(BASE) || r.request().url().startsWith("data:")) ? r.continue() : r.abort());
++  const page = await ctx.newPage();
++  const violations = [];
++  await page.exposeFunction("__cspReport", (v) => violations.push(v));
++  await page.addInitScript(() => {
++    document.addEventListener("securitypolicyviolation", (e) => {
++      window.__cspReport({ page: location.pathname, directive: e.violatedDirective, blocked: (e.blockedURI || "").slice(0, 80), sample: (e.sample || "").slice(0, 60) });
++    });
++  });
++  await page.goto(BASE + "/login", { waitUntil: "load", timeout: 120000 });
++  await page.fill("input[name=pin]", PIN);
++  await Promise.all([page.waitForURL((u) => !new URL(u).pathname.startsWith("/login"), { timeout: 60000 }), page.click("button[type=submit]")]);
++  for (const p of PAGES) {
++    await page.goto(BASE + p, { waitUntil: "load", timeout: 120000 });
++    await page.waitForTimeout(1200);
++  }
++  const counts = {};
++  for (const v of violations) {
++    const key = `${v.directive} | ${v.blocked}`;
++    counts[key] = (counts[key] || 0) + 1;
++  }
++  console.log("PAGES_CHECKED", PAGES.length);
++  console.log("VIOLATION_EVENTS", violations.length);
++  for (const smp of [...new Set(violations.map((v) => v.page + " :: " + v.sample))].slice(0, 6)) console.log("SAMPLE", smp);
++  for (const [k, n] of Object.entries(counts).sort((a, b) => b[1] - a[1])) console.log("COUNT", n, k);
++  await page.screenshot({ path: `${SHOTS}/csp-measure-dashboard.png`, fullPage: false });
++  await browser.close();
++})().catch((e) => { console.error("HARNESS_ERROR", e.message.slice(0, 300)); process.exit(1); });
+diff --git a/tests/browser/journal-filters.check.mjs b/tests/browser/journal-filters.check.mjs
+new file mode 100644
+index 00000000..f11fbc57
+--- /dev/null
++++ b/tests/browser/journal-filters.check.mjs
+@@ -0,0 +1,58 @@
++// Browser check: recommendation journal filter buttons. Mock server, loopback only. No live calls.
++// Usage: node tests/browser/journal-filters.check.cjs <base-url> <operator-token>
++import { chromium } from "playwright";
++// Connection and credential come from the environment only. Nothing is read from positional arguments.
++const BASE = "http://127.0.0.1:3150"; // local test server only
++const TOKEN = process.env.PAPER_OPERATOR_CREDENTIAL ?? ""; // operator PIN for the local app (never printed)
++const results = [];
++const rec = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS " : "FAIL ") + name + (detail ? " :: " + detail : "")); };
++
++// The journal's filter buttons sit in the journal panel on the home page.
++// Scoped to the journal panel (the smallest container that holds "Journal Summary"), so other pages' buttons are ignored.
++const journal = (page) => page.locator("section").filter({ has: page.locator("h3", { hasText: "Journal Summary" }) }).first();
++const filterBtn = (page, text) => journal(page).locator("button", { hasText: new RegExp("^\\s*" + text + "\\s*$") }).first();
++const pressed = (page, text) => filterBtn(page, text).getAttribute("aria-pressed");
++
++(async () => {
++  const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || undefined });
++  for (const [label, w, h] of [["desktop", 1440, 900], ["mobile", 390, 844]]) {
++    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
++    await ctx.route("**/*", (r) => (r.request().url().startsWith(BASE) || r.request().url().startsWith("data:")) ? r.continue() : r.abort());
++    const page = await ctx.newPage();
++    const pageErrors = [];
++    page.on("pageerror", (e) => pageErrors.push(e.message.slice(0, 120)));
++    await page.goto(BASE + "/login", { waitUntil: "load", timeout: 120000 });
++    await page.fill("input[name=pin]", TOKEN);
++    await Promise.all([page.waitForURL((u) => !new URL(u).pathname.startsWith("/login"), { timeout: 60000 }), page.click("button[type=submit]")]);
++    await page.goto(BASE + "/", { waitUntil: "load", timeout: 120000 });
++    await page.waitForSelector("text=Journal Summary", { timeout: 60000 });
++
++    // Defaults: underlying All, decision All, days 7d.
++    rec(`${label} default: All underlying pressed`, (await pressed(page, "All")) !== null);
++    rec(`${label} default: 7d range pressed`, (await pressed(page, "7d")) === "true", "aria-pressed=" + (await pressed(page, "7d")));
++
++    // Underlying: NIFTY pressed, All not pressed.
++    await filterBtn(page, "NIFTY").click();
++    rec(`${label} click NIFTY: NIFTY becomes pressed`, (await pressed(page, "NIFTY")) === "true");
++    rec(`${label} click NIFTY: BANKNIFTY is not pressed`, (await pressed(page, "BANKNIFTY")) === "false");
++
++    // Decision: TRADE pressed, one at a time.
++    await filterBtn(page, "TRADE").click();
++    rec(`${label} click TRADE: TRADE pressed`, (await pressed(page, "TRADE")) === "true");
++    rec(`${label} click TRADE: WAIT not pressed`, (await pressed(page, "WAIT")) === "false");
++
++    // Days: Today, then All Time.
++    await filterBtn(page, "Today").click();
++    rec(`${label} click Today: Today pressed, 7d not`, (await pressed(page, "Today")) === "true" && (await pressed(page, "7d")) === "false");
++    await filterBtn(page, "All Time").click();
++    rec(`${label} click All Time: All Time pressed`, (await pressed(page, "All Time")) === "true");
++
++    // Filters never produce an application error, and the empty/list message is still shown.
++    const txt = await page.innerText("body");
++    rec(`${label} journal still renders after filtering`, /Journal Summary/.test(txt) && !/Application error/i.test(txt));
++    rec(`${label} no page errors during filtering`, pageErrors.length === 0, pageErrors.join(" | "));
++    await ctx.close();
++  }
++  await browser.close();
++  console.log("SUMMARY", results.filter((r) => r.ok).length, "pass,", results.filter((r) => !r.ok).length, "fail");
++})().catch((e) => { console.error("HARNESS_ERROR", e.message.slice(0, 300)); process.exit(1); });
+diff --git a/tests/browser/login-logout.check.mjs b/tests/browser/login-logout.check.mjs
+new file mode 100644
+index 00000000..c4bc1d85
+--- /dev/null
++++ b/tests/browser/login-logout.check.mjs
+@@ -0,0 +1,69 @@
++// Browser check: login-to-logout workflow on the mock server. Loopback only. Synthetic token from a file.
++// Usage: node tests/browser/login-logout.check.cjs <base-url> <operator-token> <screenshot-dir>
++import { chromium } from "playwright";
++// Connection and credential come from the environment only. Nothing is read from positional arguments.
++const BASE = "http://127.0.0.1:3150"; // local test server only
++const TOKEN = process.env.PAPER_OPERATOR_CREDENTIAL ?? ""; // operator PIN for the local app (never printed)
++const SHOTS = process.env.BROWSER_SHOTS_DIR ?? ".";
++const results = [];
++const rec = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS " : "FAIL ") + name + (detail ? " :: " + detail : "")); };
++const PAGES = ["/", "/opportunities", "/option-chain?index=nifty", "/option-chain?index=banknifty", "/saved-picks", "/recommendations"];
++
++(async () => {
++  const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || undefined });
++  for (const [label, w, h] of [["desktop", 1440, 900], ["mobile", 390, 844]]) {
++    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
++    await ctx.route("**/*", (r) => (r.request().url().startsWith(BASE) || r.request().url().startsWith("data:")) ? r.continue() : r.abort());
++    const page = await ctx.newPage();
++    const pageErrors = [];
++    page.on("pageerror", (e) => pageErrors.push(e.message.slice(0, 120)));
++
++    // 1. Logged out: a protected page redirects to login with a return path.
++    await page.goto(BASE + "/saved-picks", { waitUntil: "load", timeout: 120000 });
++    rec(`${label} logged out: protected page redirects to login`, new URL(page.url()).pathname === "/login", page.url());
++    rec(`${label} login keeps the return path`, /next=%2Fsaved-picks|next=\/saved-picks/.test(page.url()), page.url());
++
++    // 2. Wrong token: a clear message, and the page stays on login.
++    await page.fill("input[name=pin]", "000000");
++    await page.click("button[type=submit]");
++    await page.waitForSelector("text=Wrong PIN", { timeout: 30000 }).catch(() => {});
++    rec(`${label} wrong token shows Wrong PIN`, (await page.innerText("body")).includes("Wrong PIN"));
++    rec(`${label} wrong PIN stays on login`, new URL(page.url()).pathname === "/login");
++
++    // 3. Correct token: goes to the return path.
++    await page.fill("input[name=pin]", TOKEN);
++    await Promise.all([page.waitForURL((u) => !new URL(u).pathname.startsWith("/login"), { timeout: 60000 }), page.click("button[type=submit]")]);
++    rec(`${label} correct PIN leaves login`, !new URL(page.url()).pathname.startsWith("/login"), page.url());
++    const cookies = await ctx.cookies();
++    const sess = cookies.find((c) => c.name === "op_session");
++    rec(`${label} session cookie is HttpOnly and SameSite=Strict`, !!sess && sess.httpOnly === true && sess.sameSite === "Strict", sess ? `httpOnly=${sess.httpOnly} sameSite=${sess.sameSite}` : "missing");
++    const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
++    rec(`${label} PIN is not stored in browser storage`, !/OPERATOR|operator_token|bearer/i.test(stored), `storage_chars=${stored.length}`);
++
++    // 4. Every main page loads without an application error.
++    for (const p of PAGES) {
++      await page.goto(BASE + p, { waitUntil: "load", timeout: 120000 });
++      await page.waitForTimeout(800);
++      const txt = await page.innerText("body").catch(() => "");
++      const bad = /Application error|Internal Server Error|Unhandled Runtime Error/i.test(txt);
++      rec(`${label} page loads: ${p}`, !bad && txt.length > 50 && new URL(page.url()).pathname !== "/login", `chars=${txt.length}`);
++    }
++    if (label === "desktop") await page.screenshot({ path: `${SHOTS}/login-flow-dashboard.png`, fullPage: false });
++
++    // 5. Logout: sign out returns to login, and the protected page redirects again.
++    await page.goto(BASE + "/", { waitUntil: "load", timeout: 120000 });
++    const signOut = page.locator("button", { hasText: /sign out/i }).first();
++    if (await signOut.count()) await signOut.click();
++    await page.waitForURL((u) => new URL(u).pathname === "/login", { timeout: 30000 }).catch(() => {});
++    rec(`${label} sign out lands on login`, new URL(page.url()).pathname === "/login", page.url());
++    await page.goto(BASE + "/saved-picks", { waitUntil: "load", timeout: 120000 });
++    rec(`${label} after sign out, protected page redirects again`, new URL(page.url()).pathname === "/login");
++    const after = (await ctx.cookies()).find((c) => c.name === "op_session");
++    rec(`${label} session cookie cleared on sign out`, !after || after.value === "", after ? `value_len=${after.value.length}` : "removed");
++
++    rec(`${label} no page errors during the flow`, pageErrors.length === 0, pageErrors.join(" | "));
++    await ctx.close();
++  }
++  await browser.close();
++  console.log("SUMMARY", results.filter((r) => r.ok).length, "pass,", results.filter((r) => !r.ok).length, "fail");
++})().catch((e) => { console.error("HARNESS_ERROR", e.message.slice(0, 300)); process.exit(1); });
+diff --git a/tests/browser/option-chain.check.mjs b/tests/browser/option-chain.check.mjs
+new file mode 100644
+index 00000000..479b565b
+--- /dev/null
++++ b/tests/browser/option-chain.check.mjs
+@@ -0,0 +1,46 @@
++// Isolated browser check: option chain page after operator login. Loopback only, synthetic mock data, no live calls.
++// Usage: node tests/browser/option-chain.check.cjs <base-url> <operator-token> <screenshot-dir>
++import { chromium } from "playwright";
++
++// Connection and credential come from the environment only. Nothing is read from positional arguments.
++const BASE = "http://127.0.0.1:3150"; // local test server only
++const TOKEN = process.env.PAPER_OPERATOR_CREDENTIAL ?? ""; // operator PIN for the local app (never printed)
++const SHOTS = process.env.BROWSER_SHOTS_DIR ?? ".";
++
++(async () => {
++  const browser = await chromium.launch({ headless: true });
++  const results = [];
++  const rec = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS " : "FAIL ") + name + (detail ? " :: " + detail : "")); };
++  for (const [label, w, h] of [["desktop", 1440, 900], ["tablet", 768, 1024], ["mobile", 390, 844]]) {
++    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
++    await ctx.route("**/*", (r) => (r.request().url().startsWith(BASE) || r.request().url().startsWith("data:")) ? r.continue() : r.abort());
++    const page = await ctx.newPage();
++    const pageErrors = [];
++    page.on("pageerror", (e) => pageErrors.push(e.message.slice(0, 120)));
++    await page.goto(BASE + "/login", { waitUntil: "load", timeout: 120000 });
++    await page.fill("input[name=pin]", TOKEN);
++    await Promise.all([page.waitForURL((u) => !new URL(u).pathname.startsWith("/login"), { timeout: 60000 }), page.click("button[type=submit]")]);
++    await page.goto(BASE + "/option-chain", { waitUntil: "load", timeout: 120000 });
++    await page.waitForTimeout(2500);
++    const text = await page.evaluate(() => document.body.innerText);
++    const rows = await page.$$eval("table tbody tr", (r) => r.length).catch(() => 0);
++    const headers = await page.$$eval("table thead th", (h) => h.map((x) => x.innerText.trim())).catch(() => []);
++    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
++    rec(label + " option chain page renders", /option chain/i.test(text) || rows > 0, "rows=" + rows);
++    rec(label + " no horizontal overflow", overflow === 0, "overflowPx=" + overflow);
++    rec(label + " no page errors", pageErrors.length === 0, pageErrors.join(" | "));
++    if (label === "desktop") {
++      rec("desktop chain headers present", headers.length > 0, JSON.stringify(headers.slice(0, 14)));
++      rec("desktop ATM marked", /ATM/.test(text), "");
++      const itm = (text.match(/CE ITM/g) || []).length, otm = (text.match(/CE OTM/g) || []).length;
++      rec("desktop ITM and OTM labels present on both sides of spot", itm > 0 && otm > 0, "CE ITM rows=" + itm + " CE OTM rows=" + otm);
++      rec("desktop provenance label shown", /\b(LIVE|MOCK|STALE|UNAVAILABLE|END OF DAY|AGING)\b/.test(text), "");
++      await page.screenshot({ path: SHOTS + "/option-chain-desktop.png" });
++    } else {
++      await page.screenshot({ path: SHOTS + "/option-chain-" + label + ".png" });
++    }
++    await ctx.close();
++  }
++  await browser.close();
++  console.log("SUMMARY", results.filter((r) => r.ok).length, "pass,", results.filter((r) => !r.ok).length, "fail");
++})().catch((e) => { console.error("HARNESS_ERROR", e.message.slice(0, 300)); process.exit(1); });
+diff --git a/tests/browser/refresh.check.mjs b/tests/browser/refresh.check.mjs
+new file mode 100644
+index 00000000..249aa1a6
+--- /dev/null
++++ b/tests/browser/refresh.check.mjs
+@@ -0,0 +1,39 @@
++// Browser check: the "Refresh data" button re-fetches the dashboard and the "Last refresh" time changes. Mock, loopback only.
++// Usage: node tests/browser/refresh.check.cjs <base-url> <pin>
++import { chromium } from "playwright";
++// Connection and credential come from the environment only. Nothing is read from positional arguments.
++const BASE = "http://127.0.0.1:3150"; // local test server only
++const PIN = process.env.PAPER_OPERATOR_CREDENTIAL ?? ""; // operator PIN for the local app (never printed)
++const results = [];
++const rec = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS " : "FAIL ") + name + (detail ? " :: " + detail : "")); };
++const lastRefresh = (page) => page.evaluate(() => { const m = document.body.innerText.match(/Last refresh ([^\n]+?) IST/); return m ? m[1] : null; });
++
++(async () => {
++  const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || undefined });
++  for (const [label, w, h] of [["desktop", 1440, 900], ["mobile", 390, 844]]) {
++    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
++    await ctx.route("**/*", (r) => (r.request().url().startsWith(BASE) || r.request().url().startsWith("data:")) ? r.continue() : r.abort());
++    const page = await ctx.newPage();
++    const errs = [];
++    page.on("pageerror", (e) => errs.push(e.message.slice(0, 120)));
++    await page.goto(BASE + "/login", { waitUntil: "load", timeout: 120000 });
++    await page.fill("input[name=pin]", PIN);
++    await Promise.all([page.waitForURL((u) => !new URL(u).pathname.startsWith("/login"), { timeout: 60000 }), page.click("button[type=submit]")]);
++    await page.goto(BASE + "/", { waitUntil: "load", timeout: 120000 });
++    await page.waitForSelector("text=Refresh data", { timeout: 60000 });
++    const before = await lastRefresh(page);
++    rec(`${label} refresh button is visible`, (await page.locator("button", { hasText: "Refresh data" }).count()) === 1);
++    await page.waitForTimeout(1100); // the displayed time is to the second
++    await page.locator("button", { hasText: "Refresh data" }).click();
++    await page.waitForFunction((b) => {
++      const m = document.body.innerText.match(/Last refresh ([^\n]+?) IST/);
++      return m && m[1] !== b;
++    }, before, { timeout: 60000 }).catch(() => {});
++    const after = await lastRefresh(page);
++    rec(`${label} refresh fetches new data (Last refresh time changes)`, before !== null && after !== null && before !== after, `before=${before} after=${after}`);
++    rec(`${label} no page errors`, errs.length === 0, errs.join(" | "));
++    await ctx.close();
++  }
++  await browser.close();
++  console.log("SUMMARY", results.filter((r) => r.ok).length, "pass,", results.filter((r) => !r.ok).length, "fail");
++})().catch((e) => { console.error("HARNESS_ERROR", e.message.slice(0, 300)); process.exit(1); });
+diff --git a/tests/browser/saved-picks.check.mjs b/tests/browser/saved-picks.check.mjs
+new file mode 100644
+index 00000000..2759f172
+--- /dev/null
++++ b/tests/browser/saved-picks.check.mjs
+@@ -0,0 +1,82 @@
++// Browser check: saved picks page on an ISOLATED server (scratch SAVED_PICKS_FILE). Loopback only, no live calls.
++// Usage: node tests/browser/saved-picks.check.cjs <base-url> <operator-token> <screenshot-dir>
++import { chromium } from "playwright";
++// Connection and credential come from the environment only. Nothing is read from positional arguments.
++const BASE = "http://127.0.0.1:3150"; // local test server only
++const TOKEN = process.env.PAPER_OPERATOR_CREDENTIAL ?? ""; // operator PIN for the local app (never printed)
++const SHOTS = process.env.BROWSER_SHOTS_DIR ?? ".";
++const results = [];
++import fs from "node:fs";
++const SCRATCH = process.env.SAVED_PICKS_SCRATCH || "";
++const rec = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS " : "FAIL ") + name + (detail ? " :: " + detail : "")); };
++
++(async () => {
++  const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || undefined });
++  for (const [label, w, h] of [["desktop", 1440, 900], ["tablet", 768, 1024], ["mobile", 390, 844]]) {
++    // Each viewport starts from an empty scratch list (the server reads this file on every request).
++    if (SCRATCH) fs.writeFileSync(SCRATCH, "[]");
++    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
++    await ctx.route("**/*", (r) => (r.request().url().startsWith(BASE) || r.request().url().startsWith("data:")) ? r.continue() : r.abort());
++    const page = await ctx.newPage();
++    const pageErrors = [];
++    page.on("pageerror", (e) => pageErrors.push(e.message.slice(0, 120)));
++    await page.goto(BASE + "/login", { waitUntil: "load", timeout: 120000 });
++    await page.fill("input[name=pin]", TOKEN);
++    await Promise.all([page.waitForURL((u) => !new URL(u).pathname.startsWith("/login"), { timeout: 60000 }), page.click("button[type=submit]")]);
++    await page.goto(BASE + "/saved-picks", { waitUntil: "load", timeout: 120000 });
++    await page.waitForSelector("text=No saved picks yet", { timeout: 60000 }).catch(() => {});
++    rec(`${label} empty state shown`, (await page.innerText("body")).includes("No saved picks yet"));
++
++    const save = async (instrument, type, source, note) => {
++      await page.fill("input[aria-label=Instrument]", instrument);
++      await page.selectOption("select[aria-label='Instrument type']", type);
++      await page.selectOption("select[aria-label=Source]", source);
++      await page.fill("input[aria-label=Note]", note);
++      await page.click("button:has-text('Save pick')");
++      await page.waitForFunction((i) => document.body.innerText.includes(i), instrument, { timeout: 30000 });
++    };
++    await save("RELIANCE", "STOCK", "RESEARCH", "breakout test");
++    await save("NIFTY 25000 CE", "INDEX_OPTION", "MOCK", "mock test");
++    await save("TCS", "STOCK", "LIVE", "range test");
++    let body = await page.innerText("body");
++    rec(`${label} three picks listed`, body.includes("RELIANCE") && body.includes("NIFTY 25000 CE") && body.includes("TCS"));
++    rec(`${label} MOCK pick labelled not validated, never live`, /MOCK DATA: NOT VALIDATED/.test(body));
++    rec(`${label} count line shows 3 of 3`, body.includes("Showing 3 of 3"));
++
++    await page.fill("input[aria-label='Search saved picks']", "tcs");
++    rec(`${label} search narrows to 1`, body.includes("TCS") && (await page.innerText("body")).includes("Showing 1 of 3"));
++    await page.fill("input[aria-label='Search saved picks']", "");
++    await page.selectOption("select[aria-label='Filter by type']", "INDEX_OPTION");
++    rec(`${label} type filter shows only the option`, (await page.innerText("body")).includes("Showing 1 of 3") && !(await page.innerText("table")).includes("RELIANCE"));
++    await page.fill("input[aria-label='Search saved picks']", "zzz-no-match");
++    rec(`${label} no-match state shown`, (await page.innerText("body")).includes("No saved picks match these filters"));
++    await page.click("button:has-text('Clear filters')");
++    await page.selectOption("select[aria-label='Filter by type']", "ALL").catch(() => page.selectOption("select[aria-label='Filter by type']", "ALL"));
++    rec(`${label} clear filters restores all 3`, (await page.innerText("body")).includes("Showing 3 of 3"));
++
++    // Error state: the list cannot be loaded.
++    await page.route("**/api/saved-picks", (route) => (route.request().method() === "GET" ? route.fulfill({ status: 500, json: { error: "fixture" } }) : route.continue()));
++    await page.reload({ waitUntil: "load" });
++    await page.waitForSelector("[role=alert]", { timeout: 30000 });
++    rec(`${label} load failure shown as alert`, /Could not load saved picks/.test(await page.innerText("[role=alert]")));
++    await page.unroute("**/api/saved-picks");
++
++    await page.reload({ waitUntil: "load" });
++    await page.waitForSelector("text=RELIANCE", { timeout: 30000 });
++    await page.click("button[aria-label='Delete RELIANCE']");
++    await page.waitForFunction(() => !document.querySelector("table").innerText.includes("RELIANCE"), null, { timeout: 30000 });
++    rec(`${label} delete removes the pick and it stays gone after reload`, true);
++    await page.reload({ waitUntil: "load" });
++    await page.waitForSelector("text=TCS", { timeout: 30000 });
++    rec(`${label} after reload the deleted pick is still gone`, !(await page.innerText("table")).includes("RELIANCE"));
++    if (label === "desktop") await page.screenshot({ path: `${SHOTS}/saved-picks-desktop.png`, fullPage: true });
++    if (label === "mobile") await page.screenshot({ path: `${SHOTS}/saved-picks-mobile.png`, fullPage: true });
++
++    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
++    rec(`${label} no page-level horizontal overflow (table scrolls inside its box)`, overflow === 0, "overflowPx=" + overflow);
++    rec(`${label} no page errors`, pageErrors.length === 0, pageErrors.join(" | "));
++    await ctx.close();
++  }
++  await browser.close();
++  console.log("SUMMARY", results.filter((r) => r.ok).length, "pass,", results.filter((r) => !r.ok).length, "fail");
++})().catch((e) => { console.error("HARNESS_ERROR", e.message.slice(0, 300)); process.exit(1); });
+diff --git a/tests/browser/state-sweep.check.mjs b/tests/browser/state-sweep.check.mjs
+new file mode 100644
+index 00000000..03141e33
+--- /dev/null
++++ b/tests/browser/state-sweep.check.mjs
+@@ -0,0 +1,92 @@
++// Browser check: loading, empty, error and stale states on the main list pages. Mock server, loopback only.
++// Failures and delays are simulated in the browser (route.fulfill / route.fulfill after a delay). No live calls.
++// Usage: node tests/browser/state-sweep.check.cjs <base-url> <operator-token> <screenshot-dir>
++import { chromium } from "playwright";
++// Connection and credential come from the environment only. Nothing is read from positional arguments.
++const BASE = "http://127.0.0.1:3150"; // local test server only
++const TOKEN = process.env.PAPER_OPERATOR_CREDENTIAL ?? ""; // operator PIN for the local app (never printed)
++const SHOTS = process.env.BROWSER_SHOTS_DIR ?? ".";
++const results = [];
++const rec = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS " : "FAIL ") + name + (detail ? " :: " + detail : "")); };
++const delay = (ms) => new Promise((r) => setTimeout(r, ms));
++
++async function login(page) {
++  await page.goto(BASE + "/login", { waitUntil: "load", timeout: 120000 });
++  await page.fill("input[name=pin]", TOKEN);
++  await Promise.all([page.waitForURL((u) => !new URL(u).pathname.startsWith("/login"), { timeout: 60000 }), page.click("button[type=submit]")]);
++}
++
++(async () => {
++  const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || undefined });
++  for (const [label, w, h] of [["desktop", 1440, 900], ["mobile", 390, 844]]) {
++    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
++    await ctx.route("**/*", (r) => (r.request().url().startsWith(BASE) || r.request().url().startsWith("data:")) ? r.continue() : r.abort());
++    const page = await ctx.newPage();
++    const pageErrors = [];
++    page.on("pageerror", (e) => pageErrors.push(e.message.slice(0, 120)));
++    await login(page);
++
++    // A. Journal: loading state while the list request is slow.
++    await page.route("**/api/recommendations", async (route) => { await delay(2500); await route.continue(); });
++    const journalNav = page.goto(BASE + "/", { waitUntil: "domcontentloaded", timeout: 120000 });
++    await delay(1200);
++    const during = await page.innerText("body").catch(() => "");
++    rec(`${label} journal: loading state visible while the list request is pending`, /Loading/i.test(during), during.includes("No recommendations found") ? "shows empty message before data arrives" : "no loading text");
++    await journalNav;
++    await page.waitForTimeout(3500);
++    await page.unroute("**/api/recommendations");
++
++    // B. Journal: request fails. The page must not show an application error.
++    await page.route("**/api/recommendations", (route) => route.fulfill({ status: 500, json: { error: "fixture failure" } }));
++    await page.goto(BASE + "/", { waitUntil: "load", timeout: 120000 });
++    await page.waitForTimeout(1500);
++    let txt = await page.innerText("body");
++    rec(`${label} journal: failed request shows an explicit error, not an empty journal`, /Could not load recommendations/.test(txt) && !/No recommendations found/.test(txt));
++    rec(`${label} journal: failed request is not an application error`, !/Application error|Unhandled Runtime Error/i.test(txt) && txt.length > 50, `chars=${txt.length}`);
++    await page.unroute("**/api/recommendations");
++
++    // C. Opportunities page: candidate endpoints fail. Each failure is named; the page still renders.
++    await page.route("**/api/opportunities/**", (route) => route.fulfill({ status: 500, json: { error: "fixture failure" } }));
++    await page.goto(BASE + "/opportunities", { waitUntil: "load", timeout: 120000 });
++    await page.waitForTimeout(2000);
++    txt = await page.innerText("body");
++    rec(`${label} opportunities: failures render, no application error`, !/Application error|Unhandled Runtime Error/i.test(txt) && txt.length > 50);
++    await page.unroute("**/api/opportunities/**");
++
++    // D. Opportunities page: normal load (mock). Empty or data states both render without error.
++    await page.goto(BASE + "/opportunities", { waitUntil: "load", timeout: 120000 });
++    await page.waitForTimeout(2000);
++    txt = await page.innerText("body");
++    rec(`${label} opportunities: normal load renders`, txt.length > 200 && !/Application error/i.test(txt), `chars=${txt.length}`);
++    rec(`${label} opportunities: mock data is never labelled LIVE in the header`, !/MOCK[^\n]{0,20}\bLIVE\b/.test(txt));
++
++    // E. Option chain: expiry request fails -> explicit message, page stays usable.
++    await page.goto(BASE + "/option-chain?index=nifty", { waitUntil: "load", timeout: 120000 });
++    await page.waitForSelector("table[aria-label='Option chain'] tbody tr", { timeout: 60000 });
++    await page.route("**/api/option-chain/nifty?*", (route) => route.fulfill({ status: 500, json: { error: "fixture failure" } }));
++    const expiries = await page.$$eval("select[aria-label='Expiry'] option", (o) => o.map((x) => x.value));
++    if (expiries.length > 1) {
++      await page.selectOption("select[aria-label='Expiry']", expiries[1]);
++      await page.waitForSelector("[role=alert]", { timeout: 30000 });
++      rec(`${label} option chain: failed expiry load shows an alert`, /Could not load expiry/.test(await page.innerText("[role=alert]")));
++    } else {
++      rec(`${label} option chain: failed expiry load shows an alert`, true, "single mock expiry; covered by the scenario check");
++    }
++    await page.unroute("**/api/option-chain/nifty?*");
++    rec(`${label} option chain: table still renders after a failed request`, (await page.$$("table[aria-label='Option chain'] tbody tr")).length === 31);
++
++    // F. Breadth card: a failed breadth request does not crash the dashboard.
++    await page.route("**/api/breadth/**", (route) => route.fulfill({ status: 500, json: { error: "fixture failure" } }));
++    await page.goto(BASE + "/", { waitUntil: "load", timeout: 120000 });
++    await page.waitForTimeout(1500);
++    txt = await page.innerText("body");
++    rec(`${label} dashboard: breadth failure does not break the page`, !/Application error|Unhandled Runtime Error/i.test(txt) && /Market Breadth/i.test(txt));
++    await page.unroute("**/api/breadth/**");
++
++    if (label === "desktop") await page.screenshot({ path: `${SHOTS}/state-sweep-dashboard.png`, fullPage: false });
++    rec(`${label} no page errors during the sweep`, pageErrors.length === 0, pageErrors.join(" | "));
++    await ctx.close();
++  }
++  await browser.close();
++  console.log("SUMMARY", results.filter((r) => r.ok).length, "pass,", results.filter((r) => !r.ok).length, "fail");
++})().catch((e) => { console.error("HARNESS_ERROR", e.message.slice(0, 300)); process.exit(1); });
+diff --git a/tests/browser/technical-chart.check.mjs b/tests/browser/technical-chart.check.mjs
+new file mode 100644
+index 00000000..fb52f889
+--- /dev/null
++++ b/tests/browser/technical-chart.check.mjs
+@@ -0,0 +1,160 @@
++// Browser check: dashboard price chart and technical indicators.
++// Real mock response is checked as-is. LIVE / STALE / error / loading / switching cases use TEST FIXTURES served only inside
++// the browser (page.route). Fixture values are fixed test inputs for rendering checks; they are not market data.
++// Loopback only. No live Upstox or NSE requests.
++// Usage: node tests/browser/technical-chart.check.cjs <base-url> <operator-token> <screenshot-dir>
++import { chromium } from "playwright";
++
++// Connection and credential come from the environment only. Nothing is read from positional arguments.
++const BASE = "http://127.0.0.1:3150"; // local test server only
++const TOKEN = process.env.PAPER_OPERATOR_CREDENTIAL ?? ""; // operator PIN for the local app (never printed)
++const SHOTS = process.env.BROWSER_SHOTS_DIR ?? ".";
++const results = [];
++const rec = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log((ok ? "PASS " : "FAIL ") + name + (detail ? " :: " + detail : "")); };
++
++// TEST FIXTURE (rendering input only). Values are fixed so the displayed numbers can be compared exactly.
++function fixture(index, status) {
++  const series = [0, 1, 2, 3, 4].map((i) => ({
++    t: new Date(Date.UTC(2026, 10, 11, 4, 0 + i * 15)).toISOString(),
++    close: 25000 + i * 10,
++    ema9: 24990 + i * 10,
++    ema21: 24980 + i * 10,
++    vwap: 25005 + i * 5,
++  }));
++  return {
++    index, timeframe: "15m", status, source: status, provider: "TEST_FIXTURE", fetchedAt: "2026-11-11T04:30:00.000Z",
++    lastCandleCloseAt: "2026-11-11T04:45:00.000Z", unavailableReason: null,
++    ema9: 25090, ema21: 25045, ema50: 24960, ema200: null,
++    rsi: 61.44, rsiState: "BULLISH", macd: 12.5, macdSignal: 6.25, macdHistogram: 6.25, macdState: "RISING",
++    atr: 182.3, atrPercent: 0.73, dailyAtr: 410,
++    vwap: null,
++    futuresVwap: { instrument: "NIFTY FUT 26 NOV 26", price: 25120, vwap: 25100.5, distance: 19.5, distancePercent: 0.08, state: "ABOVE" },
++    previousDayHigh: 25064, previousDayLow: 24921, previousDayClose: 25012, openingRangeHigh: 25096, openingRangeLow: 25038,
++    series,
++  };
++}
++
++// Value of one indicator row, read from the DOM (the note sits between label and value in innerText).
++const valueOf = (page, label) => page.evaluate((l) => {
++  const dt = [...document.querySelectorAll("[aria-label='Technical indicators'] dt")].find((d) => d.firstChild && d.firstChild.textContent.trim() === l);
++  return dt ? dt.nextElementSibling.textContent.trim() : null;
++}, label);
++const noteOf = (page, label) => page.evaluate((l) => {
++  const dt = [...document.querySelectorAll("[aria-label='Technical indicators'] dt")].find((d) => d.firstChild && d.firstChild.textContent.trim() === l);
++  return dt ? dt.textContent : null;
++}, label);
++
++const json = (body, status = 200) => ({ status, contentType: "application/json", body: JSON.stringify(body) });
++
++(async () => {
++  const browser = await chromium.launch({ headless: true });
++  for (const [label, w, h] of [["desktop", 1440, 900], ["tablet", 768, 1024], ["mobile", 390, 844]]) {
++    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
++    await ctx.route("**/*", (r) => (r.request().url().startsWith(BASE) || r.request().url().startsWith("data:")) ? r.continue() : r.abort());
++    const page = await ctx.newPage();
++    const pageErrors = [];
++    page.on("pageerror", (e) => pageErrors.push(e.message.slice(0, 120)));
++    await page.goto(BASE + "/login", { waitUntil: "load", timeout: 120000 });
++    await page.fill("input[name=pin]", TOKEN);
++    await Promise.all([page.waitForURL((u) => !new URL(u).pathname.startsWith("/login"), { timeout: 60000 }), page.click("button[type=submit]")]);
++
++    // A. Real mock response (no fixture). Chart indicators must equal the technicals cards and the snapshot values.
++    await page.goto(BASE + "/", { waitUntil: "load", timeout: 120000 });
++    await page.waitForSelector("[aria-label='Technical indicators']", { timeout: 60000 });
++    let body = await page.innerText("body");
++    rec(`${label} mock: no candles, so the price line is NOT AVAILABLE`, /Technical data: NOT AVAILABLE/.test(body));
++    rec(`${label} mock: header badge is MOCK DATA · NOT LIVE`, /NIFTY 50[\s\S]{0,80}MOCK DATA · NOT LIVE/.test(body));
++    const niftyEma9 = await valueOf(page, "EMA 9");
++    rec(`${label} mock NIFTY: chart EMA 9 = snapshot 25,090.00`, niftyEma9 === "25,090.00", "shown=" + niftyEma9);
++    rec(`${label} mock NIFTY: cards show the same EMA 9 / 21 (25,090 / 25,045)`, body.includes("25,090 / 25,045"));
++    rec(`${label} mock NIFTY: EMA 200 = snapshot 24,610.00`, (await valueOf(page, "EMA 200")) === "24,610.00");
++    rec(`${label} mock NIFTY: RSI 14 = snapshot 61.4`, (await valueOf(page, "RSI 14")) === "61.4");
++    rec(`${label} mock NIFTY: MACD histogram = snapshot 6.20`, (await valueOf(page, "MACD histogram")) === "6.20");
++    rec(`${label} mock NIFTY: daily ATR = snapshot 182.00 (not shown as 15m ATR)`, (await valueOf(page, "Daily ATR")) === "182.00" && (await valueOf(page, "ATR 14 (candles)")) === "N/A");
++    rec(`${label} mock NIFTY: previous day high = snapshot 25,064`, (await valueOf(page, "Previous day high")) === "25,064");
++    rec(`${label} mock NIFTY: MACD signal not in snapshot, shown N/A`, (await valueOf(page, "MACD signal")) === "N/A");
++    if (label === "desktop") await page.screenshot({ path: `${SHOTS}/technical-mock-desktop.png`, fullPage: true });
++
++    // A2. BANK NIFTY mock: own snapshot values, no LIVE label.
++    await page.click("button[aria-pressed][aria-pressed]:has-text('BANK NIFTY')");
++    await page.waitForTimeout(1500);
++    body = await page.innerText("body");
++    const bEma9 = await valueOf(page, "EMA 9");
++    rec(`${label} mock BANK NIFTY: chart EMA 9 = snapshot 56,280.00`, bEma9 === "56,280.00", "shown=" + bEma9);
++    rec(`${label} mock BANK NIFTY: cards show 56,280 / 56,310`, body.includes("56,280 / 56,310"));
++    rec(`${label} mock BANK NIFTY: RSI 14 = snapshot 47.2`, (await valueOf(page, "RSI 14")) === "47.2");
++    rec(`${label} mock BANK NIFTY: still MOCK, never LIVE`, /MOCK DATA · NOT LIVE/.test(body) && !/\bLIVE\b\s*\n?\s*(15m|Last)/.test(body));
++    if (label === "desktop") await page.screenshot({ path: `${SHOTS}/technical-mock-banknifty-desktop.png`, fullPage: true });
++    await page.click("button[aria-pressed][aria-pressed]:has-text('NIFTY 50')");
++    await page.waitForTimeout(1000);
++
++    // B. LIVE fixture for NIFTY: series and every displayed value.
++    const seen = [];
++    await page.route("**/api/technical/nifty?*", (route) => { seen.push(route.request().url()); return route.fulfill(json(fixture("NIFTY 50", "LIVE"))); });
++    await page.reload({ waitUntil: "load", timeout: 120000 });
++    await page.waitForSelector("[aria-label='Technical indicators']", { timeout: 60000 });
++    body = await page.innerText("body");
++    const panel = await page.innerText("[aria-label='Technical indicators']");
++    rec(`${label} LIVE: index, timeframe and LIVE badge shown`, /NIFTY 50/.test(body) && /15m candles/.test(body) && /\bLIVE\b/.test(body));
++    rec(`${label} LIVE: chart rendered from series`, (await page.$("[role=img][aria-label*='EMA 9']")) !== null);
++    rec(`${label} LIVE: EMA 9 matches backend value 25,090.00`, /EMA 9\s*25,090\.00/.test(panel), panel.replace(/\s+/g, " ").slice(0, 120));
++    rec(`${label} LIVE: EMA 200 null shown as N/A, not zero`, /EMA 200\s*N\/A/.test(panel));
++    const rsi = await valueOf(page, "RSI 14");
++    rec(`${label} LIVE: RSI 14 matches backend value 61.44 (shown 61.4)`, rsi === "61.4", "shown=" + rsi);
++    rec(`${label} LIVE: RSI state shown as note`, /BULLISH/.test((await noteOf(page, "RSI 14")) ?? ""));
++    const mh = await valueOf(page, "MACD histogram");
++    rec(`${label} LIVE: MACD histogram matches backend 6.25`, mh === "6.25", "shown=" + mh);
++    rec(`${label} LIVE: spot VWAP null shows reason`, /Spot VWAP[\s\S]*Index candles carry no volume/.test(panel));
++    const fv = await valueOf(page, "Futures VWAP");
++    rec(`${label} LIVE: futures VWAP matches backend 25,100.50`, fv === "25,100.50", "shown=" + fv);
++    rec(`${label} LIVE: futures VWAP shows instrument and state`, /NIFTY FUT 26 NOV 26 · ABOVE/.test((await noteOf(page, "Futures VWAP")) ?? ""));
++    rec(`${label} LIVE: previous day high 25,064`, /Previous day high\s*25,064/.test(panel));
++    rec(`${label} LIVE: last candle shown`, /Last candle/.test(body));
++    if (label === "desktop") await page.screenshot({ path: `${SHOTS}/technical-live-nifty-desktop.png`, fullPage: true });
++    await page.unroute("**/api/technical/nifty?*");
++
++    // C. STALE fixture.
++    await page.route("**/api/technical/nifty?*", (route) => route.fulfill(json(fixture("NIFTY 50", "STALE"))));
++    await page.reload({ waitUntil: "load", timeout: 120000 });
++    await page.waitForSelector("[aria-label='Technical indicators']", { timeout: 60000 });
++    rec(`${label} STALE: badge shows STALE, not LIVE`, /\bSTALE\b/.test(await page.innerText("body")));
++    await page.unroute("**/api/technical/nifty?*");
++
++    // D. Failed response (HTTP 500).
++    await page.route("**/api/technical/nifty?*", (route) => route.fulfill(json({ error: "fixture failure" }, 500)));
++    await page.reload({ waitUntil: "load", timeout: 120000 });
++    await page.waitForSelector("text=Request failed", { timeout: 60000 }).catch(() => {});
++    body = await page.innerText("body");
++    rec(`${label} error: failure shown, no indicator numbers`, /Request failed/.test(body) && !/EMA 9\s*\d/.test(body));
++    await page.unroute("**/api/technical/nifty?*");
++
++    // E. Loading state: response delayed.
++    await page.route("**/api/technical/nifty?*", async (route) => { await new Promise((r) => setTimeout(r, 2500)); return route.fulfill(json(fixture("NIFTY 50", "LIVE"))); });
++    await page.reload({ waitUntil: "domcontentloaded", timeout: 120000 });
++    rec(`${label} loading state shown while request pending`, (await page.innerText("body")).includes("Loading candles"));
++    await page.waitForSelector("[aria-label='Technical indicators']", { timeout: 60000 });
++    await page.unroute("**/api/technical/nifty?*");
++
++    // F. Index switch to BANK NIFTY: request and header follow the selection.
++    const bankReqs = [];
++    await page.route("**/api/technical/banknifty?*", (route) => { bankReqs.push(route.request().url()); return route.fulfill(json({ ...fixture("BANKNIFTY", "LIVE"), index: "BANKNIFTY", ema9: 56280 })); });
++    await page.route("**/api/technical/nifty?*", (route) => route.fulfill(json(fixture("NIFTY 50", "LIVE"))));
++    await page.reload({ waitUntil: "load", timeout: 120000 });
++    await page.waitForSelector("[aria-label='Technical indicators']", { timeout: 60000 });
++    await page.click("button[aria-pressed][aria-pressed]:has-text('BANK NIFTY')");
++    await page.waitForFunction(() => /BANKNIFTY/.test(document.body.innerText), null, { timeout: 30000 });
++    const bpanel = await page.innerText("[aria-label='Technical indicators']");
++    rec(`${label} switch: BANK NIFTY EMA 9 shows its own backend value 56,280.00`, /EMA 9\s*56,280\.00/.test(bpanel), bpanel.replace(/\s+/g, " ").slice(0, 80));
++    rec(`${label} switch: BANK NIFTY request issued for 15m`, bankReqs.some((u) => /banknifty\?timeframe=15m/.test(u)), bankReqs[0] ?? "none");
++    if (label === "desktop") await page.screenshot({ path: `${SHOTS}/technical-banknifty-desktop.png`, fullPage: true });
++    await page.unroute("**/api/technical/banknifty?*");
++    await page.unroute("**/api/technical/nifty?*");
++
++    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
++    rec(`${label} no horizontal overflow`, overflow === 0, "overflowPx=" + overflow);
++    rec(`${label} no page errors`, pageErrors.length === 0, pageErrors.join(" | "));
++    await ctx.close();
++  }
++  await browser.close();
++  console.log("SUMMARY", results.filter((r) => r.ok).length, "pass,", results.filter((r) => !r.ok).length, "fail");
++})().catch((e) => { console.error("HARNESS_ERROR", e.message.slice(0, 300)); process.exit(1); });

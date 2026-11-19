@@ -1,20 +1,26 @@
 export const dynamic = "force-dynamic";
 
-import { listPaperOpportunities, savePaperOpportunity } from "@/lib/services/paperOpportunityStore";
-import { createPaperOpportunity } from "@/lib/services/paperOpportunityMonitor";
-import type { DataSourceState } from "@/lib/services/paperOpportunityStore";
-import { OPPORTUNITY_ENGINE_VERSION } from "@/lib/engine/opportunityEngine";
+import { requireOperator } from "../../../lib/operatorSession.ts";
+import { listPaperOpportunities, savePaperOpportunity } from "../../../lib/services/paperOpportunityStore.ts";
+import { createPaperOpportunity } from "../../../lib/services/paperOpportunityMonitor.ts";
+import type { DataSourceState } from "../../../lib/services/paperOpportunityStore.ts";
+import { OPPORTUNITY_ENGINE_VERSION } from "../../../lib/engine/opportunityEngine.ts";
+import type { OpportunityGrade } from "../../../lib/engine/opportunityEngine.ts";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const refused = requireOperator(req);
+  if (refused) return refused;
   const records = listPaperOpportunities();
   return Response.json({ total: records.length, records });
 }
 
 export async function POST(req: Request) {
+  const refused = requireOperator(req);
+  if (refused) return refused;
   try {
     const body = await req.json() as Record<string, unknown>;
 
-    // Source validation — refuse MOCK/STALE/EOD/UNAVAILABLE sources
+    // Source validation — refuse MOCK/STALE/EOD/UNAVAILABLE labels sent by the client.
     const sources = body.dataQuality as Record<string, string> | null;
     const sourceValues = sources ? Object.values(sources) : [];
     const hasNonLive = sourceValues.some((s) => s !== "LIVE");
@@ -24,7 +30,9 @@ export async function POST(req: Request) {
         { status: 422 },
       );
     }
-    const dataSource: DataSourceState = sourceValues.length > 0 && !hasNonLive ? "LIVE" : "UNAVAILABLE";
+    // Manual UI entries are never verified LIVE evidence. Client labels can reject a record, but they can never grant LIVE.
+    // Verified LIVE opportunities come only from the server collector (LIVE_COLLECTOR), which checks its own snapshot.
+    const dataSource: DataSourceState = "UNAVAILABLE";
 
     const instrumentType = (body.instrumentType as string) ?? (body.optionType ? "OPTION" : "STOCK");
 
@@ -51,7 +59,7 @@ export async function POST(req: Request) {
       atr: null,
       score: (body.opportunityScore as number) ?? (body.score as number) ?? 0,
       confidence: (body.confidence as number) ?? 0,
-      grade: (body.grade as import("@/lib/engine/opportunityEngine").OpportunityGrade) ?? "C",
+      grade: (body.grade as OpportunityGrade) ?? "C",
       signalAgreement: body.signalAgreement as number,
       regime: (body.regime as string) ?? "UNKNOWN",
       eventRisk: body.eventRisk as string | null,
@@ -59,6 +67,7 @@ export async function POST(req: Request) {
       reasonCodes: [],
       strategyVersion: (body.strategyVersion as string) ?? OPPORTUNITY_ENGINE_VERSION,
       source: dataSource,
+      provenance: "MANUAL_UI",
     });
 
     if (!opp.entry || !opp.stop || !opp.target1) {

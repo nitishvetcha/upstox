@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { INDICES as INDEX_IDS, INSTRUMENTS } from "@/lib/services/instrumentRegistry";
 import type { ReactNode } from "react";
 import type { DashboardView } from "@/lib/dashboard";
 import { fmtIst } from "@/lib/time";
+import { freshnessDisplayLabel } from "@/lib/freshnessLabel";
 import { Badge, Card, Stat, num, signed } from "./ui";
 
 // Display only: every value comes from DashboardView (the backend analysis). null → "N/A", never 0.
@@ -22,10 +24,12 @@ function Panel({ title, children, right }: { title: string; children: ReactNode;
 const Grid = ({ children }: { children: ReactNode }) => <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">{children}</div>;
 
 export function IndexSwitch({ index, base }: { index: string; base: string }) {
+  // Index list comes from the instrument registry (single source of truth).
+  const ALL = INDEX_IDS.map((id) => [id, INSTRUMENTS[id].symbol] as const);
   return (
-    <div className="flex gap-2 text-xs">
-      {[["nifty", "NIFTY"], ["banknifty", "BANK NIFTY"]].map(([id, label]) => (
-        <Link key={id} href={`${base}?index=${id}`} className={`rounded border px-3 py-1 font-semibold ${index === id ? "border-zinc-500 bg-zinc-800 text-zinc-100" : "border-zinc-800 text-zinc-400 hover:bg-zinc-900"}`}>
+    <div className="flex flex-wrap gap-1.5 text-xs">
+      {ALL.map(([id, label]) => (
+        <Link key={id} href={`${base}?index=${id}`} className={`rounded border px-2.5 py-1 font-semibold ${index === id ? "border-zinc-500 bg-zinc-800 text-zinc-100" : "border-zinc-800 text-zinc-400 hover:bg-zinc-900"}`}>
           {label}
         </Link>
       ))}
@@ -36,7 +40,7 @@ export function IndexSwitch({ index, base }: { index: string; base: string }) {
 export function MarketPanel({ v }: { v: DashboardView }) {
   const m = v.market;
   return (
-    <Panel title={`Market · ${v.name}`} right={<div className="flex gap-1"><Badge>{`MARKET ${m.status}`}</Badge><Badge tone={m.freshness === "LIVE" ? "neutral" : "warn"}>{`DATA ${m.freshness}`}</Badge></div>}>
+    <Panel title={`Market · ${v.name}`} right={<div className="flex gap-1"><Badge>{`MARKET ${m.status}`}</Badge><Badge tone={m.source === "LIVE" ? "neutral" : "warn"}>{`DATA ${freshnessDisplayLabel(m.source)}`}</Badge></div>}>
       <div className="flex flex-wrap items-baseline gap-3">
         <span className="font-mono text-3xl font-semibold tabular-nums text-zinc-50">{na(m.spot)}</span>
         <span className={`font-mono text-sm ${m.change === null ? "text-zinc-500" : m.change >= 0 ? "text-emerald-400" : "text-red-400"}`}>
@@ -166,7 +170,7 @@ export function RecommendationSummary({ v }: { v: DashboardView }) {
         <span className="text-xs text-zinc-500">Confidence {r.confidence}% (model confidence, not probability of profit)</span>
       </div>
       {r.noPlanMessage && <p className="mt-1 text-sm text-zinc-400">{r.noPlanMessage}</p>}
-      {!r.executable && r.strategy && <p className="mt-1 text-xs text-amber-400">Execution disabled: {r.status !== "TRADE" ? `status is ${r.status}` : `market data is ${v.market.freshness}`}.</p>}
+      {!r.executable && r.strategy && <p className="mt-1 text-xs text-amber-400">Execution disabled: {r.status !== "TRADE" ? `status is ${r.status}` : `market data is ${freshnessDisplayLabel(v.market.source)}`}.</p>}
       <div className="mt-3"><Grid>
         <Stat label="Entry" value={dash(r.entry)} />
         <Stat label="Stop loss" value={dash(r.stopLoss)} />

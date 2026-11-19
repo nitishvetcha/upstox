@@ -225,9 +225,10 @@ test("24. intrabar path is deterministic (bullish O→L→H→C, bearish O→H�
 });
 test("24b. intrabar losses are bounded by the stop level except where a gap is recorded", () => {
   for (const t of intra.trades.filter((x) => x.exitReason === "STOP_LOSS" && !x.exitGap)) {
-    // At the stop level the only extra loss is exit slippage (1%) on the position value.
+    // At the stop level the only extra loss is exit slippage (1%) on the position value, plus one exchange tick of
+    // rounding on the exit fill (executable prices are tick-aligned and adverse).
     const stopLoss = (t.entryPrice - t.stopLoss) * t.quantity;
-    assert.ok(-t.realizedPnL <= stopLoss + Math.abs(t.stopLoss) * t.quantity * 0.011 + 1, `${t.tradeId}: ${t.realizedPnL} vs planned ${-stopLoss}`);
+    assert.ok(-t.realizedPnL <= stopLoss + Math.abs(t.stopLoss) * t.quantity * 0.011 + 0.05 * t.quantity + 1, `${t.tradeId}: ${t.realizedPnL} vs planned ${-stopLoss}`);
   }
 });
 

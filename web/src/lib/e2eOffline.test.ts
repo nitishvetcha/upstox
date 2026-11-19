@@ -57,11 +57,11 @@ test("E2E-2. labelled-LIVE inputs: diagnostic and paper engine agree, the positi
   assert.deepEqual(reconcileLedger(engine.getTrades(), engine.getEvents()).issues, []);
 });
 
-test("E2E-3. the net reward-to-risk gate reaches the operator: a gross-passing candidate is refused, and the diagnostic names the reason", () => {
+test("E2E-3. the net reward-to-risk economic diagnostic reaches the operator as a diagnostic warning", () => {
   const snap = labelled("banknifty", WED, "LIVE");
   const a = analyze(snap, WED);
   const d = diagnose(a, WED);
-  assert.notEqual(d.finalDecision, "TRADE");
-  const reasons = d.blockers.map((b) => b.message).join(" | ");
-  assert.match(reasons, /Net risk\/reward after slippage and charge/, "the net ratio is visible to the operator");
+  // Net R:R is an economic diagnostic metric, preserved in warnings per approved Turn 7 policy
+  const diagnosticWarnings = d.warnings.map((w) => w.message).join(" | ");
+  assert.match(diagnosticWarnings, /Net risk\/reward after slippage and charge/, "the net ratio is visible to the operator as a diagnostic metric");
 });

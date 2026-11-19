@@ -64,20 +64,23 @@ export function autoSquareOffPenalty(plan: UpstoxAccountPlan): AutoSquareOffResu
 }
 
 // Account plan resolver:
-// - BASIC: ₹20/order
-// - PLUS: ₹30/order
-// - UNKNOWN: owner confirmation required. Never silently assumed as BASIC.
-//   Conservative research fallback uses PLUS rates (₹30), clearly labelled CONSERVATIVE_RESEARCH_FALLBACK.
+// Upstox official Help Center confirms two active plans:
+// - BASIC: ₹20 per executed order
+// - UPSTOX PLUS: ₹30 per executed order
+// When an account plan has not been confirmed by the account owner, it resolves to UNKNOWN.
+// The engine never assumes the user has either plan without confirmation.
+// For conservative pre-trade risk research modeling, UNKNOWN applies the Plus rate (₹30),
+// explicitly labeled CONSERVATIVE_RESEARCH_FALLBACK.
 export function resolveAccountPlan(configuredPlan?: string | null): {
   plan: UpstoxAccountPlan;
   brokeragePerOrder: number;
   status: PlanStatus;
 } {
   const p = (configuredPlan ?? (typeof process !== "undefined" ? process.env?.UPSTOX_ACCOUNT_PLAN : undefined) ?? "UNKNOWN").toUpperCase();
-  if (p === "BASIC") {
+  if (p === "BASIC" || p === "STANDARD") {
     return { plan: "BASIC", brokeragePerOrder: 20, status: "CONFIRMED" };
   }
-  if (p === "PLUS") {
+  if (p === "PLUS" || p === "UPSTOX_PLUS") {
     return { plan: "PLUS", brokeragePerOrder: 30, status: "CONFIRMED" };
   }
   return { plan: "UNKNOWN", brokeragePerOrder: 30, status: "CONSERVATIVE_RESEARCH_FALLBACK" };
@@ -85,24 +88,30 @@ export function resolveAccountPlan(configuredPlan?: string | null): {
 
 // Default rates:
 // - Account Plan: UNKNOWN (requires owner confirmation; Plus ₹30 used only as conservative research fallback)
-// - STT: 0.15% on sell-side option premium (effective 2026-04-01)
-// - NSE options combined charges: 0.03553% (₹3,553.00 per crore) based on official NSE Circular NSE/FA/73061
-//   (Exchange transaction charge ₹3,552.99/cr + NSE IPFT contribution ₹0.01/cr = ₹3,553.00/cr).
+// - STT: 0.15% on sell-side option premium (effective 2026-04-01 per Finance Act)
+// - NSE options combined charges: 0.03553% (₹3,553.00 per crore per side) based on revised NSE Circular NSE/FA/73061
+//   Decomposition (effective 1 March 2026):
+//     * NSE transaction fee: ₹3,552.99 per crore per side (0.0355299%, decimal multiplier: 0.000355299)
+//     * NSE IPFT contribution: ₹0.01 per crore per side (0.0000001%, decimal multiplier: 0.000000001)
+//     * Combined rate: ₹3,553.00 per crore per side (0.03553%, decimal multiplier: 0.0003553).
 //   IPFT is already included in 0.0003553: NEVER add it separately.
-// - GST: 18% on (brokerage + exchange charges/IPFT). Excludes SEBI turnover fee and stamp duty per published Upstox schedule.
+// - GST: 18% on (brokerage + exchange charges/IPFT + SEBI charges).
+//   * Published Calculator alignment: Upstox's online brokerage calculator explicitly computes GST on (brokerage + exchange + SEBI).
+//   * Published Charges page: Upstox's brokerage charges schedule states GST is on (brokerage + transaction + IPFT) without mentioning SEBI.
+//   * Implementation policy: Uses the calculator-aligned (SEBI-inclusive) base. Contract-note level identicality cannot be conclusively claimed without physical contract note inspection.
 // - SEBI turnover fee: ₹10 per crore (0.000001).
 // - Stamp duty: 0.003% (0.00003) on buyer-side premium.
 export const DEFAULT_TRANSACTION_COSTS: TransactionCostConfig = {
   version: "nse-options-2026-03",
   plan: "UNKNOWN",
   planStatus: "CONSERVATIVE_RESEARCH_FALLBACK",
-  brokeragePerOrder: 30, // Conservative research fallback (Plus plan rate: ₹30/order)
+  brokeragePerOrder: 30, // Conservative research fallback (Upstox Plus rate: ₹30/order)
   sttRate: 0.0015,
-  exchangeTxnRate: 0.0003553,
+  exchangeTxnRate: 0.0003553, // ₹3,553.00/cr (₹3,552.99 exch + ₹0.01 IPFT)
   gstRate: 0.18,
   sebiRate: 0.000001,
   stampDutyRate: 0.00003,
-  source: "NSE Circular NSE/FA/73061 (0.03553% effective 2026-03-01: ₹3,552.99 exch + ₹0.01 IPFT/cr); Finance Act 2024/2026 STT (0.15% on sell); Upstox published schedule (Plus fallback ₹30, Basic ₹20; GST on brokerage + exchange/IPFT).",
+  source: "NSE Circular NSE/FA/73061 (0.03553% effective 2026-03-01: ₹3,552.99 exch + ₹0.01 IPFT/cr); Finance Act 2024/2026 STT (0.15% on sell); Upstox Help Center (Basic ₹20, Plus ₹30); Upstox Calculator (GST on brokerage + exchange/IPFT + SEBI).",
 };
 
 export const BASIC_PLAN_COSTS: TransactionCostConfig = {
@@ -148,33 +157,61 @@ export interface TradeCosts {
   totalCosts: number;
 }
 
-export const ZERO_COSTS: TradeCosts = { brokerage: 0, stt: 0, exchangeCharges: 0, gst: 0, sebiCharges: 0, stampDuty: 0, totalCosts: 0 };
+export const ZERO_COSTS: TradeCosts = {
+  brokerage: 0,
+  stt: 0,
+  exchangeCharges: 0,
+  gst: 0,
+  sebiCharges: 0,
+  stampDuty: 0,
+  totalCosts: 0,
+};
 
 // Deterministic two-decimal half-up monetary rounding.
 // Does not claim to exactly match an individual broker contract note where intermediate rounding rules may vary.
 export const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-// One fill = one executed order: side + premium per unit + quantity (units).
+// One fill = one execution record (full or partial fill).
+// If an order executes in multiple partial fills, they share the same orderId.
 export interface Fill {
   side: "BUY" | "SELL";
   price: number;
   quantity: number;
+  orderId?: string; // Optional: identifies the executed order to prevent double-charging brokerage across partial fills
 }
 
-export function costsFor(fills: Fill[], cfg: TransactionCostConfig = DEFAULT_TRANSACTION_COSTS): TradeCosts {
+export function costsFor(
+  fills: Fill[],
+  cfg: TransactionCostConfig = DEFAULT_TRANSACTION_COSTS,
+  orderCountOverride?: number,
+): TradeCosts {
   let buy = 0, sell = 0;
   for (const f of fills) {
     if (f.side === "BUY") buy += f.price * f.quantity;
     else sell += f.price * f.quantity;
   }
   const turnover = buy + sell;
-  const brokerage = cfg.brokeragePerOrder * fills.length;
+  // Brokerage is charged per executed order, not per partial fill.
+  // 1. If explicit orderCountOverride is supplied, use it.
+  // 2. If fills specify orderId, count distinct executed orders.
+  // 3. Otherwise, assume one order per fill.
+  const distinctOrders = orderCountOverride !== undefined
+    ? orderCountOverride
+    : fills.some((f) => f.orderId !== undefined)
+      ? new Set(fills.map((f, i) => f.orderId ?? `__fill_${i}`)).size
+      : fills.length;
+
+  const brokerage = cfg.brokeragePerOrder * distinctOrders;
   const stt = sell * cfg.sttRate;
   const exchangeCharges = turnover * cfg.exchangeTxnRate;
   const sebiCharges = turnover * cfg.sebiRate;
-  // Published Upstox options GST base: Brokerage + Exchange Transaction charges (which includes IPFT).
-  // Excludes SEBI turnover fee and stamp duty.
-  const gst = (brokerage + exchangeCharges) * cfg.gstRate;
+  // Upstox published options brokerage calculator GST base:
+  // 18% on (Brokerage + Exchange Transaction charges/IPFT + SEBI turnover charges).
+  // Note on statutory interpretation vs published calculator:
+  // While certain statutory interpretations consider SEBI regulatory fees exempt under Notification 12/2017,
+  // Upstox's published brokerage calculator explicitly applies 18% GST to (Brokerage + Exchange Charges + SEBI Charges).
+  // Stamp duty and STT are sovereign taxes and strictly excluded from the GST base.
+  const gst = (brokerage + exchangeCharges + sebiCharges) * cfg.gstRate;
   const stampDuty = buy * cfg.stampDutyRate;
   const parts = {
     brokerage: r2(brokerage),
@@ -184,5 +221,8 @@ export function costsFor(fills: Fill[], cfg: TransactionCostConfig = DEFAULT_TRA
     sebiCharges: r2(sebiCharges),
     stampDuty: r2(stampDuty),
   };
-  return { ...parts, totalCosts: r2(Object.values(parts).reduce((a, b) => a + b, 0)) };
+  return {
+    ...parts,
+    totalCosts: r2(Object.values(parts).reduce((a, b) => a + b, 0)),
+  };
 }

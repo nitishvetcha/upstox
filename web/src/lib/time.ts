@@ -127,6 +127,9 @@ export function latestTradingSessionDate(now: Date): string {
   return todayYmd;
 }
 
+export const MIN_LTT_EPOCH_MS = 1_577_836_800_000; // 2020-01-01T00:00:00.000Z
+export const FUTURE_TIMESTAMP_TOLERANCE_MS = 5_000; // 5 seconds allowable future clock skew
+
 export interface TradeFreshnessResult {
   freshnessSeconds: number | null;
   freshness: "LIVE" | "AGING" | "END_OF_DAY" | "STALE";
@@ -138,15 +141,37 @@ export function tradeFreshnessOf(
   now: Date,
   slow = 1,
 ): TradeFreshnessResult {
+  if (!now || !(now instanceof Date) || !Number.isFinite(now.getTime())) {
+    return { freshnessSeconds: null, freshness: "STALE", source: "UNAVAILABLE" };
+  }
   if (!lastTradeTime) {
     return { freshnessSeconds: null, freshness: "STALE", source: "UNAVAILABLE" };
   }
-  const tradeDate = typeof lastTradeTime === "string" ? new Date(lastTradeTime) : lastTradeTime;
-  if (isNaN(tradeDate.getTime())) {
+  let tradeDate: Date;
+  if (typeof lastTradeTime === "string" || typeof lastTradeTime === "number") {
+    tradeDate = new Date(lastTradeTime);
+  } else if (lastTradeTime instanceof Date) {
+    tradeDate = lastTradeTime;
+  } else {
+    return { freshnessSeconds: null, freshness: "STALE", source: "UNAVAILABLE" };
+  }
+  const timeMs = tradeDate.getTime();
+  if (!Number.isFinite(timeMs) || timeMs < MIN_LTT_EPOCH_MS) {
     return { freshnessSeconds: null, freshness: "STALE", source: "UNAVAILABLE" };
   }
 
-  const ageSeconds = Math.max(0, Math.round((now.getTime() - tradeDate.getTime()) / 1000));
+  const nowMs = now.getTime();
+  const futureDiffMs = timeMs - nowMs;
+
+  // Future-timestamp guard: a timestamp more than 5 seconds ahead of now must not be classified as LIVE.
+  // Fail-closed: return UNAVAILABLE / STALE.
+  if (futureDiffMs > FUTURE_TIMESTAMP_TOLERANCE_MS) {
+    return { freshnessSeconds: null, freshness: "STALE", source: "UNAVAILABLE" };
+  }
+
+  // Elapsed seconds: within 5s allowable future skew (0 < futureDiffMs <= 5000), age is 0s.
+  // Otherwise, elapsed time is (nowMs - timeMs) / 1000.
+  const ageSeconds = futureDiffMs > 0 ? 0 : Math.round((nowMs - timeMs) / 1000);
   const status = marketStatus(now);
 
   if (status === "OPEN" || status === "PRE-OPEN") {
@@ -167,3 +192,4 @@ export function tradeFreshnessOf(
 
   return { freshnessSeconds: ageSeconds, freshness: "STALE", source: "STALE" };
 }
+

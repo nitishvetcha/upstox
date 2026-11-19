@@ -1,0 +1,45 @@
+{
+  "note": "metadata only; no token or account data",
+  "results": [
+    {
+      "underlying": "NIFTY",
+      "expiry": "2026-11-17",
+      "atmStrike": 25300,
+      "spot": 25296.65,
+      "retrievedAt": "2026-11-12T05:50:01.715Z",
+      "sourceEndpoint": "/v2/option/chain",
+      "httpStatus": 200,
+      "latencyMs": 129,
+      "legs": [
+        {
+          "optionType": "CE",
+          "instrumentKey": "NSE_FO|45402"
+        },
+        {
+          "optionType": "PE",
+          "instrumentKey": "NSE_FO|45403"
+        }
+      ]
+    },
+    {
+      "underlying": "BANKNIFTY",
+      "expiry": "2026-11-23",
+      "atmStrike": 61200,
+      "spot": 61204.05,
+      "retrievedAt": "2026-11-12T05:50:01.775Z",
+      "sourceEndpoint": "/v2/option/chain",
+      "httpStatus": 200,
+      "latencyMs": 50,
+      "legs": [
+        {
+          "optionType": "CE",
+          "instrumentKey": "NSE_FO|62339"
+        },
+        {
+          "optionType": "PE",
+          "instrumentKey": "NSE_FO|62340"
+        }
+      ]
+    }
+  ]
+}

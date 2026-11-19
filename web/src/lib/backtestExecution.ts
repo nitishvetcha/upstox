@@ -60,3 +60,13 @@ export function evaluateIntrabarExit(
   }
   return { exit: { reason: useStop ? "STOP_LOSS" : "TARGET", fillSpot: hi, gap: false, bothTouched: firstStop >= 0 && firstTarget >= 0 }, optionOHLC };
 }
+
+// Exchange tick for listed options (₹0.05). Executable prices (fills and exits) are tick-aligned and adverse; marks
+// used for valuation keep two decimals. A premium cannot trade below the tick, so a sell at the floor gets no
+// discount, but a buy at the floor pays one tick above it: a round trip at the floor is never free.
+export const OPTION_TICK = 0.05;
+export function adverseFill(side: "BUY" | "SELL", mid: number, slip: number): number {
+  const raw = side === "BUY" ? mid * (1 + slip) : mid * (1 - slip);
+  const ticks = side === "BUY" ? Math.ceil(raw / OPTION_TICK - 1e-9) : Math.floor(raw / OPTION_TICK + 1e-9);
+  return Math.max(OPTION_TICK, Math.round(ticks * OPTION_TICK * 100) / 100);
+}

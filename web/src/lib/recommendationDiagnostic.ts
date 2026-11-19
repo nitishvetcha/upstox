@@ -8,6 +8,8 @@ import { MIN_STRATEGY_SCORE } from "./engine/strategy.ts";
 import { buildRecommendationResponse } from "./recommendationEnricher.ts";
 import { marketStatus } from "./time.ts";
 import { STRATEGY_VERSION } from "./journalTypes.ts";
+import type { OptionWindowSummary } from "./services/optionPriceVerification.ts";
+import type { LegVerdict } from "./services/optionLegGuard.ts";
 
 export type BlockerCode =
   | "MARKET_CLOSED" | "END_OF_DAY" | "STALE_MARKET_DATA" | "UNAVAILABLE_MARKET_DATA" | "UPSTOX_NOT_CONNECTED"
@@ -16,7 +18,7 @@ export type BlockerCode =
   | "OPEN_RISK_LIMIT" | "MAX_CONCURRENT_POSITIONS" | "POSITION_SIZE_ZERO" | "LOT_SIZE_UNAVAILABLE"
   | "RISK_REWARD_TOO_LOW" | "LOW_CONFIDENCE" | "SIGNAL_CONFLICT" | "NO_VALID_STRATEGY" | "NO_VALID_OPTION"
   | "INSUFFICIENT_LIQUIDITY" | "WIDE_BID_ASK" | "INSUFFICIENT_SCORE" | "MARKET_REGIME_BLOCKED" | "OPENING_WINDOW"
-  | "UNCLASSIFIED";
+  | "NO_INTRADAY_CANDLES" | "UNCLASSIFIED";
 
 export interface RecommendationBlocker {
   code: BlockerCode;
@@ -61,7 +63,7 @@ export interface CandidatePreview {
 export type FinalDecision = "TRADE" | "WAIT" | "NO_TRADE";
 
 export interface RecommendationDiagnostic {
-  underlying: "NIFTY" | "BANKNIFTY";
+  underlying: string;
   evaluatedAt: string;
   strategyVersion: string;
   marketStatus: string;
@@ -79,6 +81,12 @@ export interface RecommendationDiagnostic {
   candidateSummary: string;
   requiredScore: number;
   eventRisk: { level: string; reason: string | null; articles: number | null; blocking: boolean };
+  /** Option-chain verification at the candidate window (B3/B7): what was verified, what was rejected, and why. */
+  optionVerification: {
+    window: OptionWindowSummary | null;
+    legChecks: LegVerdict[];
+    legGuardApplicable: boolean;
+  };
   historicalDataBlocksLive: false;
   summary: string;
 }
@@ -111,6 +119,7 @@ const TITLES: Record<BlockerCode, string> = {
   INSUFFICIENT_SCORE: "Score below threshold",
   MARKET_REGIME_BLOCKED: "Market regime",
   OPENING_WINDOW: "Opening window",
+  NO_INTRADAY_CANDLES: "No completed intraday candle yet",
   UNCLASSIFIED: "Other engine blocker",
 };
 
@@ -129,19 +138,58 @@ const RISK_CODE: Record<RiskRejectionReason, BlockerCode> = {
   UNKNOWN_MAX_LOSS: "RISK_LIMIT_BLOCKED",
   INSUFFICIENT_CAPITAL: "RISK_LIMIT_BLOCKED",
   STALE_PRICE: "STALE_MARKET_DATA",
+  END_OF_DAY_DATA: "END_OF_DAY",
   WIDE_BID_ASK: "WIDE_BID_ASK",
   EXTREME_EVENT_RISK: "HIGH_EVENT_RISK",
   VOLATILITY_RESTRICTION: "MARKET_REGIME_BLOCKED",
 };
 
+// Which category each unavailable factor indicates. Labels are the ones analysis.ts gives its factor rows.
+// Used only for the combined "Not enough comparable data" blocker, which names every factor that could not be
+// used because its data source did not match the market source.
+const UNAVAILABLE_FACTOR_CODE: Record<string, BlockerCode> = {
+  "Market trend": "INSUFFICIENT_TECHNICAL_DATA",
+  "Price action": "INSUFFICIENT_TECHNICAL_DATA",
+  "Technical indicators": "INSUFFICIENT_TECHNICAL_DATA",
+  "Option chain / OI": "INSUFFICIENT_OPTION_CHAIN",
+  "Volatility / IV": "INSUFFICIENT_OPTION_CHAIN",
+  "News sentiment": "INSUFFICIENT_FRESHNESS",
+  "Breadth / confirmation": "INSUFFICIENT_FRESHNESS",
+};
+const COMPARABLE_PREFIX = "Not enough comparable data to trade: ";
+const COMPARABLE_SUFFIX = " unavailable";
+
+// Splits the combined blocker into one part per category, keeping the factor names in each part's message.
+// Returns null for any other text. A label the map does not know becomes UNCLASSIFIED rather than being dropped.
+function comparableDataParts(text: string): { code: BlockerCode; message: string }[] | null {
+  if (!text.toLowerCase().startsWith(COMPARABLE_PREFIX.toLowerCase()) || !text.endsWith(COMPARABLE_SUFFIX)) return null;
+  const labels = text.slice(COMPARABLE_PREFIX.length, -COMPARABLE_SUFFIX.length).split(", ");
+  const byCode = new Map<BlockerCode, string[]>();
+  for (const label of labels) {
+    const code = UNAVAILABLE_FACTOR_CODE[label] ?? "UNCLASSIFIED";
+    byCode.set(code, [...(byCode.get(code) ?? []), label]);
+  }
+  return [...byCode].map(([code, group]) => ({ code, message: `${COMPARABLE_PREFIX}${group.join(", ")}${COMPARABLE_SUFFIX}` }));
+}
+
+// One entry per category the engine text names. Use this wherever a single text can name several categories.
+export function classifyEngineBlockers(text: string): { code: BlockerCode; message: string }[] {
+  return comparableDataParts(text) ?? [{ code: classifyEngineBlocker(text), message: text }];
+}
+
 // Codes for the engine's own free-text blockers (strategy.ts / enricher). Unknown text → UNCLASSIFIED, never dropped.
+// For a combined "Not enough comparable data" text this returns only the first category; use classifyEngineBlockers.
 export function classifyEngineBlocker(text: string): BlockerCode {
   const t = text.toLowerCase();
+  if (t.startsWith("no_valid_option:")) return "NO_VALID_OPTION"; // per-leg verification guard (B3/B7)
   if (t.startsWith("option_instrument_id_unavailable")) return "OPTION_INSTRUMENT_ID_UNAVAILABLE";
   if (t.includes("end_of_day") || t.startsWith("market closed")) return "END_OF_DAY";
   if (t.includes("market data is stale") || t.includes("option chain is stale") || t.includes("futures vwap data is stale")) return "STALE_MARKET_DATA";
   if (t.includes("is stale")) return "INSUFFICIENT_FRESHNESS";
-  if (t.includes("not enough comparable data") || t.includes("requires live news")) return "INSUFFICIENT_TECHNICAL_DATA";
+  if (t.includes("requires live news")) return "INSUFFICIENT_FRESHNESS";
+  const parts = comparableDataParts(text);
+  if (parts) return parts[0].code;
+  if (t.includes("not enough comparable data")) return "UNCLASSIFIED";
   if (t.startsWith("opening 15 minutes")) return "OPENING_WINDOW";
   if (t.startsWith("event risk")) return "EVENT_RISK";
   if (t.includes("range-bound")) return "MARKET_REGIME_BLOCKED";
@@ -185,6 +233,9 @@ export function diagnose(a: Analysis, now = new Date()): RecommendationDiagnosti
   const mkt = marketStatus(now);
   const src = s.sources;
   const isMock = src.market.source === "MOCK" || s.fallbackReason !== null;
+  // Any simulated subsystem, even with a live market, makes the recommendation non-executable and the overall label not LIVE.
+  const mockInputs = (Object.keys(src) as (keyof typeof src)[]).filter((k) => src[k].source === "MOCK");
+  const hasMockInput = isMock || mockInputs.length > 0;
   const isEod = src.market.source === "END_OF_DAY" || s.breadth?.status === "END_OF_DAY";
 
   const blockers: RecommendationBlocker[] = [];
@@ -203,14 +254,29 @@ export function diagnose(a: Analysis, now = new Date()): RecommendationDiagnosti
       : upstox === "API_ERROR" ? `Upstox API error (${s.fallbackReason})` : "MARKET_DATA_PROVIDER is mock";
     add("UPSTOX_NOT_CONNECTED", `${why}: running on MOCK data, which is never executable. Connect Upstox at /api/auth/login.`, "provider");
   }
+  if (!isMock && mockInputs.length > 0) {
+    add("INSUFFICIENT_FRESHNESS", `${mockInputs.join(", ")} ${mockInputs.length > 1 ? "are" : "is"} simulated (MOCK) while the rest may be live: not executable.`, "provider");
+  }
   if (mkt === "CLOSED") add("MARKET_CLOSED", "NSE session is closed. Last-session data is shown as END_OF_DAY and is not executable.", "market-clock");
   if (src.market.source === "UNAVAILABLE") add("UNAVAILABLE_MARKET_DATA", "Spot quote unavailable.", "market");
   if (src.optionChain.source === "UNAVAILABLE" || s.chain.length < 5) add("INSUFFICIENT_OPTION_CHAIN", `Option chain has ${s.chain.length} strikes.`, "optionChain");
+  // Technical candle gate (B5): explicit, so eligibility does not rest on the engine's wording alone.
+  // Completed candles only; a stale, end-of-day or unavailable series never supports a live recommendation.
+  const techSource = src.technical.source;
+  if (techSource === "UNAVAILABLE" && s.technicalReasonCode) {
+    const code: BlockerCode = s.technicalReasonCode === "NO_INTRADAY_CANDLES" || s.technicalReasonCode === "PRE_OPEN" ? "NO_INTRADAY_CANDLES"
+      : s.technicalReasonCode === "STALE_CANDLE" ? "INSUFFICIENT_FRESHNESS" : "INSUFFICIENT_TECHNICAL_DATA";
+    add(code, s.technicalReason ?? "Technical candles are unavailable.", "technical");
+  } else if (techSource === "STALE") {
+    add("INSUFFICIENT_FRESHNESS", s.technicalReason ?? "Technical candles are stale.", "technical");
+  } else if (techSource === "END_OF_DAY" && !isMock) {
+    add("END_OF_DAY", "Technical candles are end-of-day (last completed session), not live: not eligible for a live recommendation.", "technical");
+  }
 
   // Engine blockers (analysis.blockers + enricher fail-close), each with a code.
   for (const b of rec.blockers) {
     const cand = a.candidates.find((c) => b.startsWith(`${c.strategy}: `));
-    add(classifyEngineBlocker(b), b, cand ? `candidate: ${cand.strategy}` : "engine");
+    for (const part of classifyEngineBlockers(b)) add(part.code, part.message, cand ? `candidate: ${cand.strategy}` : "engine");
   }
   for (const c of a.candidates) for (const code of candidateCodes(c)) {
     if (blockers.some((b) => b.code === code && b.source === `candidate: ${c.strategy}`)) continue;
@@ -222,12 +288,22 @@ export function diagnose(a: Analysis, now = new Date()): RecommendationDiagnosti
   if (!a.candidates.length && engineDecision !== "TRADE") add("NO_VALID_STRATEGY", `Regime ${a.regime} produced no strategy candidate.`, "strategy");
 
   // Only ever stricter than the engine: a closed market or mock data is never actionable.
-  const finalDecision: FinalDecision = mkt === "CLOSED" || isMock ? "NO_TRADE" : engineDecision;
+  const finalDecision: FinalDecision = mkt === "CLOSED" || hasMockInput ? "NO_TRADE" : engineDecision;
   // A TRADE from the engine carries no blockers of its own; keep only the eligibility gates that downgraded it.
   const finalBlockers = finalDecision === "TRADE" ? [] : blockers;
 
   const warnings: RecommendationWarning[] = [...HISTORICAL_WARNINGS];
   for (const r of a.risks) warnings.push({ code: "ENGINE_RISK_NOTE", title: "Risk note", severity: "WARNING", message: r, source: "engine" });
+  for (const w of a.plan?.risk?.warnings ?? []) {
+    warnings.push({ code: "ECONOMIC_DIAGNOSTIC", title: "Economic diagnostic", severity: "WARNING", message: w, source: "risk" });
+  }
+  for (const c of a.candidates) {
+    for (const w of c.risk?.warnings ?? []) {
+      if (!warnings.some((existing) => existing.message === w)) {
+        warnings.push({ code: "ECONOMIC_DIAGNOSTIC", title: "Economic diagnostic", severity: "WARNING", message: w, source: "risk" });
+      }
+    }
+  }
 
   const factor = (k: string): Factor | undefined => a.factors.find((f) => f.key === k);
   const fCheck = (stage: number, name: string, k: string): RecommendationCheck => {
@@ -250,7 +326,7 @@ export function diagnose(a: Analysis, now = new Date()): RecommendationDiagnosti
     gate(1, "Market status", ["MARKET_CLOSED", "END_OF_DAY", "OPENING_WINDOW"], mkt),
     gate(2, "Live spot", ["UPSTOX_NOT_CONNECTED", "UNAVAILABLE_MARKET_DATA", "STALE_MARKET_DATA"], src.market.source),
     gate(3, "Live option chain", ["UPSTOX_NOT_CONNECTED", "INSUFFICIENT_OPTION_CHAIN"],`${src.optionChain.source} · ${s.chain.length} strikes`),
-    gate(4, "Technical warmup", ["INSUFFICIENT_TECHNICAL_DATA", "INSUFFICIENT_FRESHNESS"], s.indicators ? "indicators ready" : null),
+    gate(4, "Technical warmup", ["INSUFFICIENT_TECHNICAL_DATA", "INSUFFICIENT_FRESHNESS", "NO_INTRADAY_CANDLES"], s.indicators ? "indicators ready" : null),
     fCheck(5, "Technical analysis", "technical"),
     fCheck(6, "Market structure", "trend"),
     fCheck(7, "Option chain / OI", "oi"),
@@ -294,10 +370,10 @@ export function diagnose(a: Analysis, now = new Date()): RecommendationDiagnosti
     : `${a.candidates.length} candidate(s) generated; ${candidates.filter((c) => c.executable).length} executable.`;
 
   const fresh = (k: keyof typeof src) => src[k].source;
-  const overall = isMock ? "MOCK" : isEod ? "END_OF_DAY" : Object.values(src).some((x) => x.source === "STALE") ? "STALE" : src.market.source === "LIVE" ? "LIVE" : src.market.source;
+  const overall = isMock ? "MOCK" : mockInputs.length > 0 ? "PARTIAL MOCK" : isEod ? "END_OF_DAY" : Object.values(src).some((x) => x.source === "STALE") ? "STALE" : src.market.source === "LIVE" ? "LIVE" : src.market.source;
 
   return {
-    underlying: s.index === "nifty" ? "NIFTY" : "BANKNIFTY",
+    underlying: s.index.toUpperCase(),
     evaluatedAt: now.toISOString(),
     strategyVersion: STRATEGY_VERSION.strategyVersion,
     marketStatus: mkt,
@@ -315,6 +391,11 @@ export function diagnose(a: Analysis, now = new Date()): RecommendationDiagnosti
     candidateSummary,
     requiredScore: MIN_STRATEGY_SCORE,
     eventRisk: { level: ev?.level ?? (s.news.eventRisk ? "HIGH" : "NONE"), reason: ev?.reason ?? s.news.eventRisk, articles: s.news.detail?.articleCount ?? null, blocking: eventBlocking },
+    optionVerification: {
+      window: s.optionPriceVerification?.window ?? null,
+      legChecks: rec.legVerification?.verdicts ?? [],
+      legGuardApplicable: rec.legVerification?.applicable ?? false,
+    },
     historicalDataBlocksLive: false,
     summary: finalDecision === "TRADE"
       ? `${a.plan?.strategy} is eligible (paper trade only).`

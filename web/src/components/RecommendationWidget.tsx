@@ -1,4 +1,5 @@
 "use client";
+import { loginUrlFor } from "@/lib/loginRedirect";
 
 import { useState } from "react";
 import type { RecommendationResponse } from "@/lib/recommendationEnricher";
@@ -24,6 +25,11 @@ export function RecommendationWidget() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ index }),
       });
+      if (res.status === 401) {
+        // Not signed in: go to login and return here. Nothing is retried automatically (generation is not idempotent).
+        window.location.assign(loginUrlFor(window.location.pathname + window.location.search));
+        return;
+      }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? `Server error ${res.status}`);

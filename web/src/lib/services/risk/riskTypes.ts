@@ -17,6 +17,7 @@ export type RiskRejectionReason =
   | "UNKNOWN_MAX_LOSS"
   | "INSUFFICIENT_CAPITAL"
   | "STALE_PRICE"
+  | "END_OF_DAY_DATA"
   | "WIDE_BID_ASK"
   | "EXTREME_EVENT_RISK"
   | "VOLATILITY_RESTRICTION";
@@ -30,7 +31,12 @@ export interface RiskInputs {
 
 export interface RiskAssessment {
   status: RiskStatus;
-  allowed: boolean;
+  allowed: boolean; // Recommendation eligibility: true when the market trade plan is structurally and mathematically sound
+  strategyAllowed?: boolean; // Strategy-level trade plan eligibility (entry, stop, targets, R:R, freshness)
+  portfolioAllowed?: boolean; // Portfolio-level affordability & limits (when account capital is provided)
+  portfolioReasons?: RiskRejectionReason[]; // Portfolio-specific constraints (e.g. ZERO_LOTS, DAILY_LOSS_LIMIT)
+  portfolioHumanReasons?: string[]; // Human-readable explanations for portfolio constraints
+  sizingStatus?: "UNCONFIGURED" | "SIZED" | "ZERO_LOTS" | "PORTFOLIO_CONSTRAINED";
   index: IndexId;
   lotSize: number;
   entryPrice: number; // Combined entry per unit
@@ -46,8 +52,8 @@ export interface RiskAssessment {
   targetFill?: number; // Target exit per unit after exit slippage
   netRewardRatio?: number | null; // Reward to target 1 after slippage and charges, divided by net risk
   assumptions?: string[]; // Stated assumptions behind the cost and slippage figures
-  quantity: number; // Total quantity (lots * lotSize)
-  lots: number; // Number of lots allocated
+  quantity: number; // Total quantity (lots * lotSize, 0 if unconfigured or unallocated)
+  lots: number; // Number of lots allocated (0 if unconfigured or unallocated)
   maxLotsAllowed: number;
   totalRisk: number; // Stop risk (lots * riskPerLot)
   maxTheoreticalLoss: number | null; // Theoretical max loss for trade

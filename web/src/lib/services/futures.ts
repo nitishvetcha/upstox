@@ -6,9 +6,10 @@ import { isTradingDay, istMinutes, istToday } from "../time.ts";
 import { istDate } from "./technicalAnalysis.ts";
 import { cached } from "./cache.ts";
 import { UpstoxError } from "./errors.ts";
+import { assertUpstoxNetworkAllowed } from "./upstoxNetworkGate.ts";
 
 // Upstox's public, daily-refreshed NSE instrument master (no token needed).
-const INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz";
+const INSTRUMENTS_URLS = ["NSE", "BSE"].map((x) => `https://assets.upstox.com/market-quote/instruments/exchange/${x}.json.gz`);
 const CONTRACTS_TTL_MS = 60 * 60_000;
 export const AT_VWAP_PCT = 0.02; // |futures − VWAP| below 0.02% of VWAP = AT VWAP
 
@@ -36,7 +37,7 @@ export function normalizeFuturesContracts(raw: unknown): FuturesContract[] {
     .filter(
       (x) =>
         x?.instrument_type === "FUT" &&
-        x.segment === "NSE_FO" &&
+        (x.segment === "NSE_FO" || x.segment === "BSE_FO") &&
         typeof x.instrument_key === "string" &&
         typeof x.underlying_key === "string" &&
         typeof x.expiry === "number",
@@ -76,10 +77,14 @@ export function fetchFuturesContracts(now: Date): Promise<FuturesContract[]> {
       console[ok ? "info" : "warn"](JSON.stringify({ evt: "upstox_request", endpoint: "instruments/NSE.json.gz", status, durationMs: Date.now() - t0, ok, ...extra }));
     let status: number | null = null;
     try {
-      const res = await fetch(INSTRUMENTS_URL, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
-      status = res.status;
-      if (!res.ok) throw new UpstoxError("UPSTOX_API_ERROR", `instrument master HTTP ${status}`, status);
-      const list = normalizeFuturesContracts(JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8")));
+      const list: FuturesContract[] = [];
+      for (const url of INSTRUMENTS_URLS) {
+        assertUpstoxNetworkAllowed("instruments/NSE.json.gz"); // gate: refuses unless MARKET_DATA_PROVIDER=upstox
+        const res = await fetch(url, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
+        status = res.status;
+        if (!res.ok) throw new UpstoxError("UPSTOX_API_ERROR", `instrument master HTTP ${status}`, status);
+        list.push(...normalizeFuturesContracts(JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8"))));
+      }
       log(status, true, { futures: list.length });
       return list;
     } catch (e) {
