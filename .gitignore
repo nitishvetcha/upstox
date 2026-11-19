@@ -20,3 +20,8 @@ snscrape/
 .DS_Store
 .env
 
+
+# Raw research data (approved 2026-11-08). Evidence is copied to docs/evidence/ with hashes.
+web/.research-data/
+.next/
+.test-data/
