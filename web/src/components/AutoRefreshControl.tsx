@@ -43,6 +43,14 @@ export function AutoRefreshControl() {
     triggerRefresh();
   };
 
+  useEffect(() => {
+    if (isPending) {
+      window.dispatchEvent(new Event("app:start-loading"));
+    } else {
+      window.dispatchEvent(new Event("app:stop-loading"));
+    }
+  }, [isPending]);
+
   const formatCountdown = (secs: number) => {
     if (secs < 60) return `${secs}s`;
     const m = Math.floor(secs / 60);
@@ -53,17 +61,33 @@ export function AutoRefreshControl() {
   const pct = intervalSec > 0 ? ((intervalSec - secondsLeft) / intervalSec) * 100 : 0;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs shadow-sm">
-      <button
-        type="button"
-        onClick={handleManualRefresh}
-        disabled={isPending}
-        className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-0.5 font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
-        title="Refresh now"
-      >
-        <RefreshCw size={12} className={isPending ? "animate-spin text-sky-400" : "text-zinc-400"} />
-        <span>{isPending ? "Updating…" : "Refresh"}</span>
-      </button>
+    <>
+      {isPending && (
+        <div className="fixed top-4 right-4 z-[9990] flex items-center gap-2.5 rounded-full border border-sky-400/50 bg-zinc-950/95 px-4 py-2 text-xs font-medium text-sky-200 shadow-2xl backdrop-blur-md">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+          </span>
+          <RefreshCw size={13} className="animate-spin text-sky-400" />
+          <span>Refreshing Live Quotes &amp; Signals…</span>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs shadow-sm">
+        <button
+          type="button"
+          onClick={handleManualRefresh}
+          disabled={isPending}
+          className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-all ${
+            isPending
+              ? "bg-sky-950 text-sky-300 ring-1 ring-sky-500 shadow-[0_0_10px_rgba(56,189,248,0.3)]"
+              : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+          } disabled:opacity-75`}
+          title="Refresh now"
+        >
+          <RefreshCw size={12} className={isPending ? "animate-spin text-sky-400" : "text-zinc-400"} />
+          <span>{isPending ? "Updating…" : "Refresh"}</span>
+        </button>
 
       <div className="h-3 w-px bg-zinc-700" />
 
@@ -103,5 +127,6 @@ export function AutoRefreshControl() {
         <option value={1800}>30m</option>
       </select>
     </div>
+    </>
   );
 }

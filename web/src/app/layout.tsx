@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import AppChrome from "../components/AppChrome";
+import { TopProgressBar } from "../components/TopProgressBar";
 
 // Self-hosted Geist and Geist Mono (official Vercel release v1.9.2, SIL OFL 1.1). Variable fonts cover weights 100–900.
 // Replaces the build-time Google Fonts download so the production build needs no external network access.
@@ -21,8 +22,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full bg-zinc-950 text-zinc-100">{children}
-        <AppChrome /></body>
+      <body className="min-h-full bg-zinc-950 text-zinc-100">
+        <TopProgressBar />
+        {children}
+        <AppChrome />
+      </body>
     </html>
   );
 }

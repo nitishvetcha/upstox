@@ -84,8 +84,8 @@ function DecisionFunnel({ options, stockScans }: {
 async function loadData() {
   try {
     const now = new Date();
-    const snaps = await Promise.allSettled(INDICES.map((i) => getSnapshot(i)));
-    const [intradayResult, swingResult, ltResult] = await Promise.all([
+    const [snaps, intradayResult, swingResult, ltResult] = await Promise.all([
+      Promise.allSettled(INDICES.map((i) => getSnapshot(i))),
       scanStocks("intraday", now),
       scanStocks("swing", now),
       scanLongTerm(NO_FUNDAMENTAL_PROVIDER),
