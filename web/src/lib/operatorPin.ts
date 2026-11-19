@@ -39,6 +39,16 @@ export function readRecord(file = pinFile()): PinRecord | null {
     const r = JSON.parse(fs.readFileSync(file, "utf8")) as PinRecord;
     return r && r.v === 1 && typeof r.salt === "string" && typeof r.hash === "string" ? r : null;
   } catch {
+    const envPin = process.env.OPERATOR_PIN;
+    if (envPin && isValidPinFormat(envPin)) {
+      try {
+        const rec = makeRecord(envPin);
+        writeRecord(rec, file);
+        return rec;
+      } catch {
+        return null;
+      }
+    }
     return null;
   }
 }
