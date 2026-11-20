@@ -18,11 +18,13 @@ import {
   RotateCcw,
   Shield,
   Sliders,
+  Sparkles,
   Target,
   TrendingDown,
   TrendingUp,
   X,
 } from "lucide-react";
+import { analyzeSavedPick } from "@/lib/savedPickAnalytics";
 
 export interface CalculatorPick {
   id: string;
@@ -34,6 +36,7 @@ export interface CalculatorPick {
   targets?: number[];
   source?: string;
   note?: string;
+  livePrice?: number | null;
 }
 
 interface SavedPickCalculatorProps {
@@ -83,11 +86,12 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
     [pick.instrument, pick.instrumentType]
   );
 
+  const initialLtp = pick.livePrice != null && pick.livePrice > 0 ? pick.livePrice : rawEntry;
   const [lotSize, setLotSize] = useState<number>(detectedLotSize);
   const [lots, setLots] = useState<number>(1);
   const [accountCapital, setAccountCapital] = useState<number>(100_000);
-  const [simulatedLtp, setSimulatedLtp] = useState<number>(entry);
-  const [customLtpInput, setCustomLtpInput] = useState<string>(entry ? String(entry) : "");
+  const [simulatedLtp, setSimulatedLtp] = useState<number>(initialLtp);
+  const [customLtpInput, setCustomLtpInput] = useState<string>(initialLtp ? String(initialLtp) : "");
 
   const totalQuantity = Math.max(1, lots) * Math.max(1, lotSize);
   const capitalRequired = Math.round(entry * totalQuantity * 100) / 100;
@@ -255,6 +259,26 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
   const t1Id = useId();
   const t2Id = useId();
 
+  const liveAnalysis = useMemo(
+    () =>
+      analyzeSavedPick(
+        {
+          id: pick.id,
+          savedAt: new Date().toISOString(),
+          instrument: pick.instrument,
+          instrumentType: pick.instrumentType as any,
+          direction: pick.direction as any,
+          entry,
+          stopLoss: stop,
+          targets: [t1, t2],
+          source: (pick.source as any) ?? "RESEARCH",
+          validation: "NOT_VALIDATED",
+        },
+        { livePrice: currentLtp }
+      ),
+    [pick, entry, stop, t1, t2, currentLtp]
+  );
+
   return (
     <div className="mt-3 rounded-xl border border-zinc-700/80 bg-zinc-950 p-4 shadow-xl text-zinc-200">
       {/* Header */}
@@ -287,6 +311,78 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
             <X size={16} />
           </button>
         )}
+      </div>
+
+      {/* Live Market Place, Probability & Smart Verdict Banner */}
+      <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900/80 p-3 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="font-semibold text-white">Live Market Status:</span>
+            <span className="font-mono font-bold text-base text-white">₹{currentLtp}</span>
+            <span
+              className={`font-mono font-bold ${
+                livePnlRupees >= 0 ? "text-emerald-400" : "text-red-400"
+              }`}
+            >
+              {livePnlRupees >= 0 ? "+" : ""}
+              {fmtInr(livePnlRupees)} ({livePnlPct.toFixed(1)}%)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-xs font-bold ${
+                liveAnalysis.probability >= 60
+                  ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                  : liveAnalysis.probability >= 40
+                  ? "bg-sky-950 text-sky-300 border border-sky-800"
+                  : liveAnalysis.probability >= 20
+                  ? "bg-amber-950 text-amber-300 border border-amber-800"
+                  : "bg-red-950 text-red-300 border border-red-800"
+              }`}
+            >
+              <Sparkles size={11} />
+              {liveAnalysis.probability}% Odds of T1
+            </span>
+            <span className="text-[10px] text-zinc-400 font-mono">
+              (Req: {breakevenWinRate.toFixed(1)}%)
+            </span>
+          </div>
+        </div>
+
+        {/* Verdict Callout */}
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-950/80 p-2.5 border border-zinc-800/80">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-bold text-zinc-400">Recommendation:</span>
+              <span
+                className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold uppercase tracking-wider ${
+                  liveAnalysis.verdict === "BOOK_PROFIT"
+                    ? "bg-emerald-950 text-emerald-300 border border-emerald-700"
+                    : liveAnalysis.verdict === "KEEP"
+                    ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                    : liveAnalysis.verdict === "TIME_EXIT"
+                    ? "bg-amber-950 text-amber-300 border border-amber-800"
+                    : liveAnalysis.verdict === "REMOVE"
+                    ? "bg-red-950 text-red-300 border border-red-800"
+                    : "bg-zinc-800 text-zinc-300"
+                }`}
+              >
+                {liveAnalysis.verdictLabel}
+              </span>
+            </div>
+            <div className="text-[11px] text-zinc-300">
+              {liveAnalysis.verdictReason}
+            </div>
+          </div>
+          <div className="text-right text-[11px] text-sky-300 font-medium">
+            👉 {liveAnalysis.actionableStep}
+          </div>
+        </div>
       </div>
 
       {/* Non-Trader Friendly 3-Step Plain English Translation */}
