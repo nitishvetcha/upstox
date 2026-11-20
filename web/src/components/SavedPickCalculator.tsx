@@ -1,0 +1,459 @@
+"use client";
+
+import { useId, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Calculator,
+  CheckCircle2,
+  ChevronDown,
+  DollarSign,
+  HelpCircle,
+  Percent,
+  RefreshCw,
+  Shield,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from "lucide-react";
+
+export interface CalculatorPick {
+  id: string;
+  instrument: string;
+  instrumentType: string;
+  direction: string;
+  entry?: number | null;
+  stopLoss?: number | null;
+  targets?: number[];
+  source?: string;
+  note?: string;
+}
+
+interface SavedPickCalculatorProps {
+  pick: CalculatorPick;
+  onClose?: () => void;
+}
+
+export function defaultLotSize(instrument: string, instrumentType: string): number {
+  if (instrumentType === "STOCK") return 1;
+  const upper = instrument.toUpperCase();
+  if (upper.includes("BANKNIFTY") || upper.includes("BANK NIFTY")) return 15;
+  if (upper.includes("FINNIFTY") || upper.includes("FIN NIFTY")) return 25;
+  if (upper.includes("MIDCPNIFTY") || upper.includes("MIDCAP")) return 50;
+  if (upper.includes("SENSEX")) return 10;
+  if (upper.includes("BANKEX")) return 15;
+  if (upper.includes("NIFTY")) return 75;
+  return 1;
+}
+
+const fmtInr = (n: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(n);
+
+export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps) {
+  const isLong = pick.direction !== "SHORT";
+  const entry = Number(pick.entry) || 0;
+  const stop = Number(pick.stopLoss) || 0;
+  const t1 = pick.targets?.[0] != null ? Number(pick.targets[0]) : 0;
+  const t2 = pick.targets?.[1] != null ? Number(pick.targets[1]) : 0;
+
+  const detectedLotSize = useMemo(
+    () => defaultLotSize(pick.instrument, pick.instrumentType),
+    [pick.instrument, pick.instrumentType]
+  );
+
+  const [lotSize, setLotSize] = useState<number>(detectedLotSize);
+  const [lots, setLots] = useState<number>(1);
+  const [accountCapital, setAccountCapital] = useState<number>(100_000);
+  const [simulatedLtp, setSimulatedLtp] = useState<number>(entry);
+  const [customLtpInput, setCustomLtpInput] = useState<string>(entry ? String(entry) : "");
+
+  const totalQuantity = Math.max(1, lots) * Math.max(1, lotSize);
+  const capitalRequired = Math.round(entry * totalQuantity * 100) / 100;
+
+  // Stop loss calculations
+  const perUnitRisk = isLong ? Math.max(0, entry - stop) : Math.max(0, stop - entry);
+  const totalMaxRisk = Math.round(perUnitRisk * totalQuantity * 100) / 100;
+  const riskOfCapitalPct =
+    accountCapital > 0 ? (totalMaxRisk / accountCapital) * 100 : 0;
+  const stopLossPct = entry > 0 ? (perUnitRisk / entry) * 100 : 0;
+
+  // Target 1 calculations
+  const perUnitGainT1 = isLong ? Math.max(0, t1 - entry) : Math.max(0, entry - t1);
+  const totalGainT1 = Math.round(perUnitGainT1 * totalQuantity * 100) / 100;
+  const gainT1Pct = entry > 0 ? (perUnitGainT1 / entry) * 100 : 0;
+  const rr1 = perUnitRisk > 0 ? perUnitGainT1 / perUnitRisk : 0;
+
+  // Target 2 calculations
+  const perUnitGainT2 = isLong ? Math.max(0, t2 - entry) : Math.max(0, entry - t2);
+  const totalGainT2 = Math.round(perUnitGainT2 * totalQuantity * 100) / 100;
+  const gainT2Pct = entry > 0 ? (perUnitGainT2 / entry) * 100 : 0;
+  const rr2 = perUnitRisk > 0 ? perUnitGainT2 / perUnitRisk : 0;
+
+  // Live P&L based on simulated or live LTP
+  const currentLtp = simulatedLtp || entry;
+  const pnlPerUnit = isLong ? currentLtp - entry : entry - currentLtp;
+  const livePnlRupees = Math.round(pnlPerUnit * totalQuantity * 100) / 100;
+  const livePnlPct = entry > 0 ? (pnlPerUnit / entry) * 100 : 0;
+  const currentPositionValue = Math.round(currentLtp * totalQuantity * 100) / 100;
+
+  // Breakeven win rate: 1 / (1 + RR)
+  const breakevenWinRate = rr1 > 0 ? (1 / (1 + rr1)) * 100 : 50;
+
+  // Trade Health and Status determination
+  const statusVerdict = useMemo(() => {
+    if (!entry || !stop) return { label: "INCOMPLETE LEVELS", color: "text-zinc-400", bg: "bg-zinc-800" };
+    if (isLong) {
+      if (currentLtp >= t2 && t2 > 0)
+        return { label: "TARGET 2 HIT (MAX PROFIT)", color: "text-emerald-400", bg: "bg-emerald-950/60 border-emerald-700" };
+      if (currentLtp >= t1 && t1 > 0)
+        return { label: "TARGET 1 HIT (LOCK PROFIT)", color: "text-emerald-400", bg: "bg-emerald-950/60 border-emerald-700" };
+      if (currentLtp > entry)
+        return { label: "IN PROFIT (TRENDING IN FAVOR)", color: "text-emerald-400", bg: "bg-emerald-950/40 border-emerald-800" };
+      if (currentLtp <= stop)
+        return { label: "STOPPED OUT (STRICT EXIT)", color: "text-red-400", bg: "bg-red-950/60 border-red-700" };
+      return { label: "NORMAL PULLBACK (WITHIN RISK BUFFER)", color: "text-amber-400", bg: "bg-amber-950/40 border-amber-800" };
+    } else {
+      if (currentLtp <= t2 && t2 > 0)
+        return { label: "TARGET 2 HIT (MAX PROFIT)", color: "text-emerald-400", bg: "bg-emerald-950/60 border-emerald-700" };
+      if (currentLtp <= t1 && t1 > 0)
+        return { label: "TARGET 1 HIT (LOCK PROFIT)", color: "text-emerald-400", bg: "bg-emerald-950/60 border-emerald-700" };
+      if (currentLtp < entry)
+        return { label: "IN PROFIT (TRENDING IN FAVOR)", color: "text-emerald-400", bg: "bg-emerald-950/40 border-emerald-800" };
+      if (currentLtp >= stop)
+        return { label: "STOPPED OUT (STRICT EXIT)", color: "text-red-400", bg: "bg-red-950/60 border-red-700" };
+      return { label: "NORMAL PULLBACK (WITHIN RISK BUFFER)", color: "text-amber-400", bg: "bg-amber-950/40 border-amber-800" };
+    }
+  }, [currentLtp, entry, stop, t1, t2, isLong]);
+
+  // Visual Gauge Progress calculation (clamped 0 to 100%)
+  const gaugePct = useMemo(() => {
+    if (!entry || !stop || !t1) return 50;
+    const minVal = Math.min(stop, entry, t1);
+    const maxVal = Math.max(stop, entry, t1, t2 || t1);
+    const range = maxVal - minVal;
+    if (range <= 0) return 50;
+    const clampedLtp = Math.max(minVal, Math.min(maxVal, currentLtp));
+    return isLong
+      ? ((clampedLtp - minVal) / range) * 100
+      : ((maxVal - clampedLtp) / range) * 100;
+  }, [currentLtp, entry, stop, t1, t2, isLong]);
+
+  const customLtpId = useId();
+  const accountCapitalId = useId();
+  const lotsId = useId();
+  const lotSizeId = useId();
+
+  return (
+    <div className="mt-3 rounded-xl border border-zinc-700/80 bg-zinc-950 p-4 shadow-xl text-zinc-200">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+        <div className="flex items-center gap-2">
+          <Calculator className="text-sky-400" size={18} />
+          <div>
+            <span className="text-sm font-bold text-white">{pick.instrument}</span>
+            <span className="ml-2 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-300">
+              {pick.instrumentType}
+            </span>
+            <span
+              className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                isLong ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-red-950 text-red-400 border border-red-800"
+              }`}
+            >
+              {pick.direction}
+            </span>
+          </div>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            title="Close calculator"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
+      {/* Primary KPI Summary Cards */}
+      <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5">
+          <div className="text-[11px] font-medium text-zinc-400">Capital Required</div>
+          <div className="mt-1 font-mono text-base font-bold text-white">
+            {fmtInr(capitalRequired)}
+          </div>
+          <div className="mt-0.5 text-[10px] text-zinc-500 font-mono">
+            ₹{entry} × {totalQuantity} units
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5">
+          <div className="text-[11px] font-medium text-zinc-400">Max Risk (Stop Loss)</div>
+          <div className="mt-1 font-mono text-base font-bold text-red-400">
+            -{fmtInr(totalMaxRisk)}
+          </div>
+          <div className="mt-0.5 text-[10px] text-red-400/80 font-mono">
+            -{stopLossPct.toFixed(1)}% of investment
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5">
+          <div className="text-[11px] font-medium text-zinc-400">Target 1 Profit</div>
+          <div className="mt-1 font-mono text-base font-bold text-emerald-400">
+            +{fmtInr(totalGainT1)}
+          </div>
+          <div className="mt-0.5 text-[10px] text-emerald-400/80 font-mono">
+            +{gainT1Pct.toFixed(1)}% (R:R {rr1.toFixed(2)}x)
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5">
+          <div className="text-[11px] font-medium text-zinc-400">Target 2 Profit</div>
+          <div className="mt-1 font-mono text-base font-bold text-emerald-300">
+            {t2 > 0 ? `+${fmtInr(totalGainT2)}` : "—"}
+          </div>
+          <div className="mt-0.5 text-[10px] text-emerald-300/80 font-mono">
+            {t2 > 0 ? `+${gainT2Pct.toFixed(1)}% (R:R ${rr2.toFixed(2)}x)` : "Single Target"}
+          </div>
+        </div>
+      </div>
+
+      {/* Live P&L and Price Simulator Bar */}
+      <div className="mt-3.5 rounded-lg border border-zinc-800 bg-zinc-900/90 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-zinc-300">Live / Simulated LTP:</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-zinc-500 font-mono">₹</span>
+              <input
+                id={customLtpId}
+                type="number"
+                step="0.05"
+                value={customLtpInput}
+                onChange={(e) => {
+                  setCustomLtpInput(e.target.value);
+                  const val = Number(e.target.value);
+                  if (Number.isFinite(val) && val > 0) setSimulatedLtp(val);
+                }}
+                className="w-24 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-xs font-bold text-white focus:border-sky-500 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setSimulatedLtp(entry);
+                  setCustomLtpInput(String(entry));
+                }}
+                className="rounded border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-[10px] font-medium text-zinc-300 hover:bg-zinc-700"
+                title="Reset to entry price"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Price Shortcuts */}
+          <div className="flex items-center gap-1.5 text-[10px]">
+            <span className="text-zinc-500">Test Price:</span>
+            <button
+              type="button"
+              onClick={() => {
+                setSimulatedLtp(stop);
+                setCustomLtpInput(String(stop));
+              }}
+              className="rounded bg-red-950/70 border border-red-800/80 px-2 py-0.5 font-mono text-red-300 hover:bg-red-900/80"
+            >
+              At Stop (₹{stop})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSimulatedLtp(t1);
+                setCustomLtpInput(String(t1));
+              }}
+              className="rounded bg-emerald-950/70 border border-emerald-800/80 px-2 py-0.5 font-mono text-emerald-300 hover:bg-emerald-900/80"
+            >
+              At T1 (₹{t1})
+            </button>
+            {t2 > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSimulatedLtp(t2);
+                  setCustomLtpInput(String(t2));
+                }}
+                className="rounded bg-emerald-950/70 border border-emerald-800/80 px-2 py-0.5 font-mono text-emerald-300 hover:bg-emerald-900/80"
+              >
+                At T2 (₹{t2})
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Live Unrealized P&L Banner */}
+        <div className="mt-2.5 flex flex-wrap items-center justify-between rounded-md border border-zinc-800 bg-zinc-950 p-2.5">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-400">Position Value:</span>
+            <span className="font-mono text-xs font-semibold text-zinc-200">
+              {fmtInr(currentPositionValue)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-zinc-400">Unrealized P&L:</span>
+              <span
+                className={`font-mono text-sm font-bold ${
+                  livePnlRupees >= 0 ? "text-emerald-400" : "text-red-400"
+                }`}
+              >
+                {livePnlRupees >= 0 ? `+${fmtInr(livePnlRupees)}` : fmtInr(livePnlRupees)}
+              </span>
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] font-bold font-mono ${
+                  livePnlPct >= 0
+                    ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                    : "bg-red-950 text-red-400 border border-red-800"
+                }`}
+              >
+                {livePnlPct >= 0 ? `+${livePnlPct.toFixed(1)}%` : `${livePnlPct.toFixed(1)}%`}
+              </span>
+            </div>
+
+            <div
+              className={`rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${statusVerdict.bg} ${statusVerdict.color}`}
+            >
+              {statusVerdict.label}
+            </div>
+          </div>
+        </div>
+
+        {/* Visual Progress Bar (Stop Loss -> Entry -> Target 1 -> Target 2) */}
+        <div className="mt-3">
+          <div className="flex justify-between text-[10px] font-mono text-zinc-400 mb-1">
+            <span className="text-red-400 font-semibold">SL: ₹{stop}</span>
+            <span className="text-zinc-300 font-semibold">Entry: ₹{entry}</span>
+            <span className="text-emerald-400 font-semibold">T1: ₹{t1}</span>
+            {t2 > 0 && <span className="text-emerald-300 font-semibold">T2: ₹{t2}</span>}
+          </div>
+          <div className="relative h-2 w-full rounded-full bg-zinc-800 overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 ${
+                currentLtp >= entry ? "bg-emerald-500" : "bg-red-500"
+              }`}
+              style={{ width: `${Math.max(2, Math.min(100, gaugePct))}%` }}
+            />
+          </div>
+          <div className="mt-1 flex justify-between text-[10px] text-zinc-500">
+            <span>Stop Floor</span>
+            <span className="text-sky-400 font-mono">Current: ₹{currentLtp}</span>
+            <span>Target Ceiling</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Position Sizing and Inputs Adjuster */}
+      <div className="mt-3.5 grid gap-3 sm:grid-cols-3 rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3">
+        <div>
+          <label htmlFor={accountCapitalId} className="block text-[11px] font-medium text-zinc-400">Account Capital</label>
+          <div className="mt-1 flex items-center gap-1.5">
+            <span className="text-xs text-zinc-500 font-mono">₹</span>
+            <input
+              id={accountCapitalId}
+              type="number"
+              value={accountCapital}
+              onChange={(e) => setAccountCapital(Number(e.target.value) || 0)}
+              className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-xs text-white focus:border-sky-500 focus:outline-none"
+            />
+          </div>
+          <div className="mt-1 text-[10px] text-zinc-500">
+            Trade risk: <span className="font-mono text-zinc-300">{riskOfCapitalPct.toFixed(1)}%</span> of capital
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor={lotsId} className="block text-[11px] font-medium text-zinc-400">
+            {pick.instrumentType === "STOCK" ? "Number of Shares" : "Number of Lots"}
+          </label>
+          <div className="mt-1 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setLots((prev) => Math.max(1, prev - 1))}
+              className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 font-mono text-xs font-bold hover:bg-zinc-700"
+            >
+              -
+            </button>
+            <input
+              id={lotsId}
+              type="number"
+              min={1}
+              value={lots}
+              onChange={(e) => setLots(Math.max(1, Number(e.target.value) || 1))}
+              className="w-full text-center rounded border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-xs font-bold text-white focus:border-sky-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setLots((prev) => prev + 1)}
+              className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 font-mono text-xs font-bold hover:bg-zinc-700"
+            >
+              +
+            </button>
+          </div>
+          <div className="mt-1 text-[10px] text-zinc-500 font-mono">
+            Total Qty: {totalQuantity} units
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor={lotSizeId} className="block text-[11px] font-medium text-zinc-400">Lot Size (Multiplier)</label>
+          <div className="mt-1">
+            <input
+              id={lotSizeId}
+              type="number"
+              min={1}
+              value={lotSize}
+              onChange={(e) => setLotSize(Math.max(1, Number(e.target.value) || 1))}
+              className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-xs text-white focus:border-sky-500 focus:outline-none"
+            />
+          </div>
+          <div className="mt-1 text-[10px] text-zinc-500">
+            Auto-detected for {pick.instrument.split(" ")[0]}
+          </div>
+        </div>
+      </div>
+
+      {/* Probabilistic Edge & "Will It Profit?" Intelligence Card */}
+      <div className="mt-3.5 rounded-lg border border-sky-900/60 bg-sky-950/20 p-3 text-xs">
+        <div className="flex items-center gap-1.5 font-semibold text-sky-300">
+          <HelpCircle size={14} />
+          <span>Will it result in Profit or Loss? The Mathematical Probability:</span>
+        </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2 text-zinc-300">
+          <div className="rounded border border-sky-900/40 bg-zinc-950/60 p-2.5">
+            <div className="font-semibold text-zinc-200">1. Asymmetric Risk/Reward Advantage</div>
+            <div className="mt-1 text-[11px] text-zinc-400 leading-relaxed">
+              Target 1 gives <span className="font-mono text-emerald-400 font-bold">+{fmtInr(totalGainT1)}</span> vs Stop Loss of{" "}
+              <span className="font-mono text-red-400 font-bold">-{fmtInr(totalMaxRisk)}</span>.
+              With a <span className="font-mono text-sky-300 font-bold">{rr1.toFixed(2)}x R:R</span>, you only need a{" "}
+              <span className="font-mono text-amber-300 font-bold">{breakevenWinRate.toFixed(1)}% win rate</span> to break even.
+              Winning 4 out of 10 trades yields solid mathematical positive expectancy.
+            </div>
+          </div>
+
+          <div className="rounded border border-sky-900/40 bg-zinc-950/60 p-2.5">
+            <div className="font-semibold text-zinc-200">2. Professional Execution Rule</div>
+            <div className="mt-1 text-[11px] text-zinc-400 leading-relaxed">
+              • Place automatic Stop Loss at <span className="font-mono text-red-300 font-semibold">₹{stop}</span> immediately upon entry.<br />
+              • When price touches Target 1 (<span className="font-mono text-emerald-300 font-semibold">₹{t1}</span>), book 50% profit and move Stop Loss to entry (<span className="font-mono text-zinc-200 font-semibold">₹{entry}</span>).<br />
+              • Let the remaining lots ride to Target 2 (<span className="font-mono text-emerald-300 font-semibold">₹{t2 || t1}</span>) completely risk-free!
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -56,6 +56,7 @@ export default function LoginForm({ next }: { next: string }) {
           disabled={busy}
           style={{ padding: "8px 10px", border: "1px solid #a1a1aa", borderRadius: 6, fontSize: 18, letterSpacing: "0.3em" }}
         />
+        <span style={{ fontSize: 11, color: "#71717a" }}>First time? Enter any 6-digit PIN of your choice to initialize it.</span>
       </label>
       {error && <p role="alert" style={{ margin: 0, color: "#b91c1c", fontSize: 13 }}>{error}</p>}
       <button type="submit" disabled={busy || !valid} aria-busy={busy} style={{ padding: "9px 12px", borderRadius: 6, border: 0, background: "#18181b", color: "#fff", fontSize: 14, cursor: busy ? "wait" : "pointer", opacity: busy || !valid ? 0.6 : 1 }}>

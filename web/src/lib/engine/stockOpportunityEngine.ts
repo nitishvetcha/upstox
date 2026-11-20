@@ -168,37 +168,42 @@ async function batchQuotes(instruments: StockInstrument[], now: Date): Promise<S
   if (!token) return instruments.map((i) => unavailable(i, "AUTHENTICATION: UPSTOX_NOT_CONNECTED"));
   
   const BATCH_SIZE = 50;
-  const results: StockMarketData[] = [];
+  const chunks: StockInstrument[][] = [];
   for (let offset = 0; offset < instruments.length; offset += BATCH_SIZE) {
-    const chunk = instruments.slice(offset, offset + BATCH_SIZE);
-    const keys = chunk.map((i) => i.instrumentKey).join(",");
-    try {
-      const raw = await get(token, "/v2/market-quote/quotes", { instrument_key: keys }, { index: "nifty" }) as Record<string, Record<string, unknown>>;
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-        results.push(...chunk.map((inst) => unavailable(inst, "MALFORMED_RESPONSE: quote data is not an object")));
-        continue;
-      }
-      const byToken = new Map<string, Record<string, unknown>>();
-      for (const entry of Object.values(raw)) {
-        const instrumentToken = entry?.instrument_token;
-        if (typeof instrumentToken === "string" && !byToken.has(instrumentToken)) byToken.set(instrumentToken, entry);
-      }
-      results.push(...chunk.map((inst) => {
-        const entry = byToken.get(inst.instrumentKey);
-        if (!entry) return unavailable(inst, "PARTIAL_COVERAGE: provider omitted requested instrument");
-        if (typeof entry.last_price !== "number" || !Number.isFinite(entry.last_price) || entry.last_price <= 0) {
-          return unavailable(inst, "MALFORMED_RESPONSE: quote missing positive last_price");
-        }
-        return normalizeStockQuote({ [inst.instrumentKey]: entry }, inst, now, "UPSTOX"); // this batch is the Upstox request
-      }));
-    } catch (e) {
-      const category = stockProviderFailureCategory(e);
-      const providerCode = e instanceof UpstoxError ? e.reason : "UPSTOX_NETWORK";
-      const status = e instanceof UpstoxError && e.status !== null ? ` HTTP_${e.status}` : "";
-      results.push(...chunk.map((i) => unavailable(i, `${category}: ${providerCode}${status}`)));
-    }
+    chunks.push(instruments.slice(offset, offset + BATCH_SIZE));
   }
-  return results;
+
+  const chunkResults = await Promise.all(
+    chunks.map(async (chunk) => {
+      const keys = chunk.map((i) => i.instrumentKey).join(",");
+      try {
+        const raw = await get(token, "/v2/market-quote/quotes", { instrument_key: keys }, { index: "nifty" }) as Record<string, Record<string, unknown>>;
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+          return chunk.map((inst) => unavailable(inst, "MALFORMED_RESPONSE: quote data is not an object"));
+        }
+        const byToken = new Map<string, Record<string, unknown>>();
+        for (const entry of Object.values(raw)) {
+          const instrumentToken = entry?.instrument_token;
+          if (typeof instrumentToken === "string" && !byToken.has(instrumentToken)) byToken.set(instrumentToken, entry);
+        }
+        return chunk.map((inst) => {
+          const entry = byToken.get(inst.instrumentKey);
+          if (!entry) return unavailable(inst, "PARTIAL_COVERAGE: provider omitted requested instrument");
+          if (typeof entry.last_price !== "number" || !Number.isFinite(entry.last_price) || entry.last_price <= 0) {
+            return unavailable(inst, "MALFORMED_RESPONSE: quote missing positive last_price");
+          }
+          return normalizeStockQuote({ [inst.instrumentKey]: entry }, inst, now, "UPSTOX"); // this batch is the Upstox request
+        });
+      } catch (e) {
+        const category = stockProviderFailureCategory(e);
+        const providerCode = e instanceof UpstoxError ? e.reason : "UPSTOX_NETWORK";
+        const status = e instanceof UpstoxError && e.status !== null ? ` HTTP_${e.status}` : "";
+        return chunk.map((i) => unavailable(i, `${category}: ${providerCode}${status}`));
+      }
+    })
+  );
+
+  return chunkResults.flat();
 }
 
 function stockDiagnostics(quotes: StockMarketData[], requested: number): StockCollectionDiagnostics {
@@ -754,6 +759,37 @@ export const STOCK_SECTOR_MAP: Record<string, string> = {
   CHOLAFIN: "FINANCIALS",
   HDFCLIFE: "FINANCIALS",
   SBILIFE: "FINANCIALS",
+  // Additional Banking & Financials
+  AUBANK: "BANKING",
+  BANDHANBNK: "BANKING",
+  BANKINDIA: "BANKING",
+  CANBK: "BANKING",
+  FEDERALBNK: "BANKING",
+  IDFCFIRSTB: "BANKING",
+  INDIANB: "BANKING",
+  UNIONBANK: "BANKING",
+  YESBANK: "BANKING",
+  ANGELONE: "FINANCIALS",
+  BSE: "FINANCIALS",
+  CDSL: "FINANCIALS",
+  HDFCAMC: "FINANCIALS",
+  HUDCO: "FINANCIALS",
+  ICICIGI: "FINANCIALS",
+  IREDA: "FINANCIALS",
+  IRFC: "FINANCIALS",
+  LICHSGFIN: "FINANCIALS",
+  LICI: "FINANCIALS",
+  LTF: "FINANCIALS",
+  MCX: "FINANCIALS",
+  MFSL: "FINANCIALS",
+  MUTHOOTFIN: "FINANCIALS",
+  PAYTM: "FINANCIALS",
+  PFC: "FINANCIALS",
+  POLICYBZR: "FINANCIALS",
+  POONAWALLA: "FINANCIALS",
+  RECLTD: "FINANCIALS",
+  SBICARD: "FINANCIALS",
+  SHRIRAMFIN: "FINANCIALS",
   // IT & Tech
   TCS: "IT",
   INFY: "IT",
@@ -762,16 +798,31 @@ export const STOCK_SECTOR_MAP: Record<string, string> = {
   TECHM: "IT",
   LTIM: "IT",
   COFORGE: "IT",
+  KPITTECH: "IT",
+  LTTS: "IT",
+  MPHASIS: "IT",
+  NAUKRI: "IT",
+  OFSS: "IT",
   PERSISTENT: "IT",
+  TATAELXSI: "IT",
   // Auto & Mobility
   TATAMOTORS: "AUTO",
+  TMPV: "AUTO",
   MARUTI: "AUTO",
   "M&M": "AUTO",
   "BAJAJ-AUTO": "AUTO",
   HEROMOTOCO: "AUTO",
   EICHERMOT: "AUTO",
   TVSMOTOR: "AUTO",
+  ASHOKLEY: "AUTO",
+  BALKRISIND: "AUTO",
   BHARATFORG: "AUTO",
+  BOSCHLTD: "AUTO",
+  ESCORTS: "AUTO",
+  EXIDEIND: "AUTO",
+  MOTHERSON: "AUTO",
+  MRF: "AUTO",
+  SONACOMS: "AUTO",
   // Energy, Power & Utilities
   RELIANCE: "ENERGY",
   ONGC: "ENERGY",
@@ -780,13 +831,29 @@ export const STOCK_SECTOR_MAP: Record<string, string> = {
   BPCL: "ENERGY",
   COALINDIA: "ENERGY",
   IOC: "ENERGY",
+  ADANIENSOL: "ENERGY",
+  ADANIGREEN: "ENERGY",
+  CESC: "ENERGY",
+  GAIL: "ENERGY",
+  HINDPETRO: "ENERGY",
+  JSWENERGY: "ENERGY",
+  NHPC: "ENERGY",
+  OIL: "ENERGY",
+  PETRONET: "ENERGY",
+  SUZLON: "ENERGY",
+  TATAPOWER: "ENERGY",
+  TORNTPOWER: "ENERGY",
   // Metals & Mining
   TATASTEEL: "METALS",
   JSWSTEEL: "METALS",
   HINDALCO: "METALS",
   VEDL: "METALS",
   JINDALSTEL: "METALS",
+  HINDCOPPER: "METALS",
+  HINDZINC: "METALS",
+  NATIONALUM: "METALS",
   NMDC: "METALS",
+  SAIL: "METALS",
   // Pharma & Healthcare
   SUNPHARMA: "PHARMA",
   CIPLA: "PHARMA",
@@ -794,6 +861,15 @@ export const STOCK_SECTOR_MAP: Record<string, string> = {
   APOLLOHOSP: "PHARMA",
   DIVISLAB: "PHARMA",
   LUPIN: "PHARMA",
+  ALKEM: "PHARMA",
+  AUROPHARMA: "PHARMA",
+  BIOCON: "PHARMA",
+  FORTIS: "PHARMA",
+  GLENMARK: "PHARMA",
+  LALPATHLAB: "PHARMA",
+  LAURUSLABS: "PHARMA",
+  MAXHEALTH: "PHARMA",
+  TORNTPHARM: "PHARMA",
   // FMCG & Consumer Goods
   ITC: "FMCG",
   HINDUNILVR: "FMCG",
@@ -802,15 +878,72 @@ export const STOCK_SECTOR_MAP: Record<string, string> = {
   TATACONSUM: "FMCG",
   DABUR: "FMCG",
   GODREJCP: "FMCG",
-  // Infrastructure, Telecom & Cement
+  COLPAL: "FMCG",
+  MARICO: "FMCG",
+  PATANJALI: "FMCG",
+  // Infrastructure, Telecom, Defence & Cement
   LT: "INFRA",
   BHARTIARTL: "TELECOM",
+  INDUSTOWER: "TELECOM",
+  TATACOMM: "TELECOM",
   ULTRACEMCO: "CEMENT",
   GRASIM: "CEMENT",
   AMBUJACEM: "CEMENT",
+  ACC: "CEMENT",
+  DALBHARAT: "CEMENT",
+  RAMCOCEM: "CEMENT",
+  SHREECEM: "CEMENT",
   ADANIENT: "INFRA",
   ADANIPORTS: "INFRA",
+  ABB: "INFRA",
+  ASTRAL: "INFRA",
+  CGPOWER: "INFRA",
+  CONCOR: "INFRA",
+  CUMMINSIND: "INFRA",
+  DELHIVERY: "INFRA",
+  GMRAIRPORT: "INFRA",
+  GVT: "INFRA",
+  HAL: "DEFENCE",
+  INDHOTEL: "INFRA",
+  INDIGO: "INFRA",
+  IRCTC: "INFRA",
+  POLYCAB: "INFRA",
+  RVNL: "INFRA",
+  SIEMENS: "INFRA",
+  // Realty
+  DLF: "REALTY",
+  GODREJPROP: "REALTY",
+  NBCC: "REALTY",
+  OBEROIRLTY: "REALTY",
+  PHOENIXLTD: "REALTY",
+  PRESTIGE: "REALTY",
+  // Chemicals & Fertilizers
+  COROMANDEL: "CHEMICALS",
+  DEEPAKNTR: "CHEMICALS",
+  FACT: "CHEMICALS",
+  PIDILITIND: "CHEMICALS",
+  PIIND: "CHEMICALS",
+  SOLARINDS: "CHEMICALS",
+  SRF: "CHEMICALS",
+  UPL: "CHEMICALS",
+  // Consumer, Retail & Media
   TITAN: "CONSUMER",
+  CROMPTON: "CONSUMER",
+  DIXON: "CONSUMER",
+  DMART: "CONSUMER",
+  ETERNAL: "CONSUMER",
+  HAVELLS: "CONSUMER",
+  JUBLFOOD: "CONSUMER",
+  KALYANKJIL: "CONSUMER",
+  NYKAA: "CONSUMER",
+  PAGEIND: "CONSUMER",
+  PVRINOX: "CONSUMER",
+  SWIGGY: "CONSUMER",
+  UBL: "CONSUMER",
+  UNITDSPR: "CONSUMER",
+  VOLTAS: "CONSUMER",
+  WHIRLPOOL: "CONSUMER",
+  ZEEL: "MEDIA",
 };
 
 export function computeSectorMatrix(quotes: StockMarketData[]): Map<string, SectorBreadthSummary> {
@@ -943,8 +1076,8 @@ export interface ScanDeps {
 export function unavailableStockScan(
   kind: "intraday" | "swing",
   now: Date,
-  universe = "NIFTY_50",
-  scanned: number = NIFTY_50.length,
+  universe = "ALL_LIQUID",
+  scanned: number = ALL_LIQUID_CONSTITUENTS.length,
 ): StockOpportunityResult {
   return {
     timestamp: now.toISOString(), engineVersion: STOCK_OPPORTUNITY_VERSION, kind,
@@ -956,7 +1089,7 @@ export function unavailableStockScan(
 }
 
 export async function scanStocks(kind: "intraday" | "swing", now = new Date(), deps: ScanDeps = {}): Promise<StockOpportunityResult> {
-  const isExpanded = process.env.STOCK_SCAN_UNIVERSE === "EXPANDED" || process.env.STOCK_SCAN_UNIVERSE === "ALL_LIQUID" || Boolean(deps.universe);
+  const isExpanded = process.env.STOCK_SCAN_UNIVERSE !== "NIFTY_50";
   const constituentList = deps.universe ?? (isExpanded ? ALL_LIQUID_CONSTITUENTS : NIFTY_50);
   const universeName = deps.universeName ?? (isExpanded ? "ALL_LIQUID" : "NIFTY_50");
 

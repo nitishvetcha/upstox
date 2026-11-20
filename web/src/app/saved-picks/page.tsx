@@ -1,9 +1,10 @@
 "use client";
 // Save and review picks. Every entry is labelled. Unvalidated picks are shown as NOT VALIDATED.
 // Filtering only hides rows; it never changes what a pick says.
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, Trash2 } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Bookmark, Calculator, Trash2 } from "lucide-react";
 import { ALL, distinct, filterPicks, sortNewestFirst } from "@/lib/savedPickFilter";
+import { SavedPickCalculator } from "@/components/SavedPickCalculator";
 
 type Pick = { id: string; savedAt: string; instrument: string; instrumentType: string; direction: string; entry?: number | null; stopLoss?: number | null; targets?: number[]; source: string; note?: string; validation: string; statusLabel: string };
 
@@ -28,6 +29,7 @@ export default function SavedPicksPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState({ query: "", instrumentType: ALL, source: ALL, validation: ALL });
   const [form, setForm] = useState({ instrument: "", instrumentType: "STOCK", direction: "LONG", entry: "", stopLoss: "", target: "", source: "RESEARCH", note: "" });
+  const [selectedPickId, setSelectedPickId] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -163,7 +165,8 @@ export default function SavedPicksPage() {
             {!loading && visible.map((p) => {
               const ist = fmtIstDateTime(p.savedAt);
               return (
-                <tr key={p.id} className="border-t border-zinc-800/70 text-zinc-300">
+                <Fragment key={p.id}>
+                  <tr className="border-t border-zinc-800/70 text-zinc-300">
                   <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
                     <div className="font-semibold text-zinc-200">{ist.date}</div>
                     {ist.time && <div className="text-[11px] text-zinc-400">{ist.time}</div>}
@@ -198,19 +201,45 @@ export default function SavedPicksPage() {
                     {p.note ? <div className="text-xs text-zinc-500">{p.note}</div> : null}
                   </td>
                   <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      aria-label={`Delete ${p.instrument}`}
-                      className="inline-flex min-h-[32px] items-center gap-1.5 rounded border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition-colors hover:border-red-800 hover:bg-red-950/40 hover:text-red-300"
-                      onClick={() => remove(p.id)}
-                    >
-                      <Trash2 size={12} aria-hidden />
-                      Delete
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        aria-label={`Calculate investment for ${p.instrument}`}
+                        className={`inline-flex min-h-[32px] items-center gap-1.5 rounded border px-2.5 py-1 text-xs transition-colors ${
+                          selectedPickId === p.id
+                            ? "border-sky-500 bg-sky-950/70 text-sky-200"
+                            : "border-zinc-700 text-zinc-300 hover:border-sky-700 hover:bg-sky-950/40 hover:text-sky-300"
+                        }`}
+                        onClick={() => setSelectedPickId(selectedPickId === p.id ? null : p.id)}
+                      >
+                        <Calculator size={12} aria-hidden />
+                        {selectedPickId === p.id ? "Hide" : "Calculate"}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete ${p.instrument}`}
+                        className="inline-flex min-h-[32px] items-center gap-1.5 rounded border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition-colors hover:border-red-800 hover:bg-red-950/40 hover:text-red-300"
+                        onClick={() => remove(p.id)}
+                      >
+                        <Trash2 size={12} aria-hidden />
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
-              );
-            })}
+                {selectedPickId === p.id && (
+                  <tr key={`${p.id}-calc`} className="border-t border-zinc-800 bg-zinc-950/90">
+                    <td colSpan={9} className="p-3">
+                      <SavedPickCalculator
+                        pick={p}
+                        onClose={() => setSelectedPickId(null)}
+                      />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
             {!loading && visible.length === 0 && (
               <tr><td colSpan={9} className="px-3 py-6 text-center text-zinc-500">{picks.length === 0 ? "No saved picks yet." : "No saved picks match these filters."}</td></tr>
             )}

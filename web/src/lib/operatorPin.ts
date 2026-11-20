@@ -34,20 +34,24 @@ function sameHex(a: string, b: string): boolean {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
+let memoryRecord: PinRecord | null = null;
+
 export function readRecord(file = pinFile()): PinRecord | null {
   try {
     const r = JSON.parse(fs.readFileSync(file, "utf8")) as PinRecord;
     return r && r.v === 1 && typeof r.salt === "string" && typeof r.hash === "string" ? r : null;
   } catch {
+    if (memoryRecord) return memoryRecord;
     const envPin = process.env.OPERATOR_PIN;
     if (envPin && isValidPinFormat(envPin)) {
+      const rec = makeRecord(envPin);
       try {
-        const rec = makeRecord(envPin);
         writeRecord(rec, file);
-        return rec;
       } catch {
-        return null;
+        // file write may fail on read-only cloud environments
       }
+      memoryRecord = rec;
+      return rec;
     }
     return null;
   }
@@ -61,10 +65,15 @@ export function pinGeneration(file = pinFile()): string {
 }
 
 function writeRecord(rec: PinRecord, file: string): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(rec), { mode: 0o600 });
-  fs.renameSync(tmp, file);
+  memoryRecord = rec;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(rec), { mode: 0o600 });
+    fs.renameSync(tmp, file);
+  } catch {
+    // In-memory fallback if filesystem is read-only
+  }
 }
 
 function makeRecord(pin: string): PinRecord {
