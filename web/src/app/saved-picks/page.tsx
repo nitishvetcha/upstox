@@ -192,13 +192,35 @@ export default function SavedPicksPage() {
                   </td>
                   <td className="px-3 py-2">{p.source}</td>
                   <td className="px-3 py-2">
-                    <span className="font-semibold text-zinc-100">{p.statusLabel}</span>
-                    {p.entry && p.targets?.[0] && p.stopLoss && Math.abs(p.entry - p.stopLoss) > 0 && (
-                      <div className="text-[10px] font-mono text-sky-400">
-                        R:R {(Math.abs(p.targets[0] - p.entry) / Math.abs(p.entry - p.stopLoss)).toFixed(2)}x
+                    <div className="flex flex-col gap-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase border ${
+                            p.validation === "VALIDATED"
+                              ? "border-emerald-600 bg-emerald-950/60 text-emerald-300"
+                              : "border-zinc-700 bg-zinc-800 text-zinc-300"
+                          }`}
+                          title="Validation Status: Research setup saved from Opportunity Scanner. Requires forward paper tracking or walk-forward backtesting for statistical validation."
+                        >
+                          {p.statusLabel}
+                        </span>
+                        {p.source === "LIVE" ? (
+                          <span className="inline-flex items-center gap-1 rounded border border-emerald-800 bg-emerald-950/50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> Live Data
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded border border-amber-800 bg-amber-950/50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-400"></span> Research Snapshot
+                          </span>
+                        )}
                       </div>
-                    )}
-                    {p.note ? <div className="text-xs text-zinc-500">{p.note}</div> : null}
+                      {p.entry && p.targets?.[0] && p.stopLoss && Math.abs(p.entry - p.stopLoss) > 0 && (
+                        <div className="text-[11px] font-mono text-sky-400 font-medium">
+                          R:R {(Math.abs(p.targets[0] - p.entry) / Math.abs(p.entry - p.stopLoss)).toFixed(2)}x
+                        </div>
+                      )}
+                      {p.note ? <div className="text-[11px] text-zinc-400 max-w-sm leading-relaxed">{p.note}</div> : null}
+                    </div>
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5">

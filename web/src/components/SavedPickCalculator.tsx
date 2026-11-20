@@ -454,6 +454,33 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
           </div>
         </div>
       </div>
+
+      {/* Validation Hub */}
+      <div className="mt-3.5 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-xs flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-semibold text-zinc-200 flex items-center gap-1.5">
+            <Shield size={14} className="text-emerald-400" />
+            <span>Signal Validation Hub:</span>
+          </div>
+          <p className="text-[11px] text-zinc-400 mt-0.5">
+            Saved picks are candidate setups. To forward-track outcomes or test historical edge:
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href="/opportunity-journal"
+            className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:border-zinc-500"
+          >
+            Track in Journal →
+          </a>
+          <a
+            href="/backtest"
+            className="rounded border border-sky-800 bg-sky-950/60 px-3 py-1 text-xs font-medium text-sky-200 hover:bg-sky-900"
+          >
+            Walk-Forward Backtest →
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
