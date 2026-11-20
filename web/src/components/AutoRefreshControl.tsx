@@ -4,13 +4,29 @@ import { useEffect, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, Pause, Play } from "lucide-react";
 
+const DEFAULT_INTERVAL_SEC = 900; // default 15 minutes (900 seconds)
+
 export function AutoRefreshControl() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [intervalSec, setIntervalSec] = useState<number>(30); // default 30s
-  const [secondsLeft, setSecondsLeft] = useState<number>(30);
+  const [intervalSec, setIntervalSec] = useState<number>(DEFAULT_INTERVAL_SEC);
+  const [secondsLeft, setSecondsLeft] = useState<number>(DEFAULT_INTERVAL_SEC);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = localStorage.getItem("analyzer_auto_refresh_sec");
+      if (stored) {
+        const parsed = Number(stored);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          setIntervalSec(parsed);
+          setSecondsLeft(parsed);
+        }
+      }
+    } catch {}
+  }, []);
 
   const triggerRefresh = useCallback(() => {
     startTransition(() => {
@@ -114,6 +130,9 @@ export function AutoRefreshControl() {
           const val = Number(e.target.value);
           setIntervalSec(val);
           setSecondsLeft(val);
+          try {
+            localStorage.setItem("analyzer_auto_refresh_sec", String(val));
+          } catch {}
         }}
         className="rounded bg-zinc-950 px-1.5 py-0.5 text-[11px] font-mono text-zinc-300 border border-zinc-800 focus:outline-none"
         aria-label="Auto-refresh interval"
@@ -123,7 +142,7 @@ export function AutoRefreshControl() {
         <option value={60}>1m</option>
         <option value={120}>2m</option>
         <option value={300}>5m</option>
-        <option value={900}>15m</option>
+        <option value={900}>15m (default)</option>
         <option value={1800}>30m</option>
       </select>
     </div>

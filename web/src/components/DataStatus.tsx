@@ -4,7 +4,7 @@ import { dataLabel } from "@/lib/dataStatus";
 import { FALLBACK_LABELS } from "@/lib/fallback";
 import { fmtIst } from "@/lib/time";
 import { sourceProviderLabel } from "@/lib/provenanceDisplay";
-import RefreshDataButton from "./RefreshDataButton";
+import { AutoRefreshControl } from "./AutoRefreshControl";
 
 const NOTE = {
   "LIVE DATA": "All data from Upstox.",
@@ -37,9 +37,9 @@ export function DataStatus({ snaps, refreshedAt }: { snaps: Snapshot[]; refreshe
       <strong className="font-semibold">{label}</strong>
       {reason && <span>Reason: {FALLBACK_LABELS[reason]}.</span>}
       <span>{NOTE[label]}</span>
-      <span className="ml-auto flex items-center gap-3 font-mono text-xs">
+      <span className="ml-auto flex flex-wrap items-center gap-3 font-mono text-xs">
         <span>Source: {provider} · Last refresh {fmtIst(refreshedAt)} IST</span>
-        <RefreshDataButton />
+        <AutoRefreshControl />
       </span>
     </div>
   );
