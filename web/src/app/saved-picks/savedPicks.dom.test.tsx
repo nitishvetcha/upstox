@@ -260,3 +260,67 @@ test("a failed Delete displays explicit error message", async () => {
   assert.match(container.textContent ?? "", /NIFTY 22000 CE/, "pick remains visible after failed delete");
   await act(async () => root.unmount());
 });
+
+test("completed intraday trades from previous sessions are auto-archived and cleanable", async () => {
+  const completedIntradayPick = {
+    id: "p-eicher",
+    savedAt: "2026-11-01T05:00:00.000Z", // Past day in IST
+    instrument: "EICHERMOT",
+    instrumentType: "STOCK",
+    direction: "LONG",
+    entry: 7904,
+    stopLoss: 7633,
+    targets: [8386],
+    source: "LIVE",
+    note: "Saved from stock opportunity card",
+    validation: "NOT_VALIDATED",
+    statusLabel: "NOT VALIDATED",
+    isCompleted: true,
+    isIntraday: true,
+  };
+
+  let purged = false;
+  g.fetch = async (url: string | URL, init?: RequestInit) => {
+    const urlStr = String(url);
+    if (init?.method === "DELETE" && urlStr.includes("purgeCompleted=true")) {
+      purged = true;
+      return new Response(JSON.stringify({ purged: true, removedCount: 1, remainingCount: 1 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const picks = purged ? [pick] : [pick, completedIntradayPick];
+    return new Response(JSON.stringify({ picks }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  const { container, root } = await mount();
+  await settle();
+
+  // Active pick is shown
+  assert.match(container.textContent ?? "", /NIFTY 22000 CE/);
+  // Banner announces 1 completed intraday trade squared off
+  assert.match(container.textContent ?? "", /1 Intraday Trade Squared Off/);
+  // By default, completed pick is hidden from the active list
+  assert.doesNotMatch(container.textContent ?? "", /EICHERMOT/);
+
+  // Toggle "Show Archived"
+  const toggleBtn = clickButton(container, /Show Archived/);
+  assert.ok(toggleBtn);
+  await click(toggleBtn!);
+  await settle();
+  // Now EICHERMOT is visible with SESSION SQUARED OFF badge
+  assert.match(container.textContent ?? "", /EICHERMOT/);
+  assert.match(container.textContent ?? "", /SESSION SQUARED OFF/);
+
+  // Click "Clean Completed Picks"
+  const cleanBtn = clickButton(container, /Clean Completed Picks/);
+  assert.ok(cleanBtn);
+  await click(cleanBtn!);
+  await settle();
+
+  assert.ok(purged, "DELETE ?purgeCompleted=true was issued");
+  assert.match(container.textContent ?? "", /Cleaned 1 completed intraday trade/);
+  assert.match(container.textContent ?? "", /NIFTY 22000 CE/);
+  await act(async () => root.unmount());
+});
+

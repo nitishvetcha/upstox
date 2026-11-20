@@ -4,7 +4,18 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { savePick, loadPicks, removePick, statusLabel, validatePick } from "./savedPicks.ts";
+import {
+  savePick,
+  loadPicks,
+  removePick,
+  statusLabel,
+  validatePick,
+  isIntradayPick,
+  isSessionCompleted,
+  isOptionExpired,
+  isPickCompleted,
+  removeCompletedPicks,
+} from "./savedPicks.ts";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "picks-"));
 const file = path.join(dir, "picks.json");
@@ -68,4 +79,85 @@ test("SP-8. corrupt file is treated as empty, not as an error that drops other d
   const bad = path.join(dir, "corrupt.json");
   fs.writeFileSync(bad, "{not json");
   assert.deepEqual(loadPicks(bad), []);
+});
+
+test("SP-9. isIntradayPick correctly identifies intraday stocks vs long-term investments", () => {
+  // Stock from intraday momentum screener
+  assert.equal(isIntradayPick({ instrumentType: "STOCK", note: "Saved from stock opportunity card" }), true);
+  // Stock marked as long-term accumulation
+  assert.equal(isIntradayPick({ instrumentType: "STOCK", note: "Long-term accumulation setup (BUY). Fundamental Score: 85/100." }), false);
+  // Multi-month holding
+  assert.equal(isIntradayPick({ instrumentType: "STOCK", note: "Multi-months+ holding" }), false);
+  // Standard option without intraday tag is positional/expiry based
+  assert.equal(isIntradayPick({ instrumentType: "INDEX_OPTION", note: "Saved from options opportunity card" }), false);
+  // Option explicitly tagged intraday
+  assert.equal(isIntradayPick({ instrumentType: "INDEX_OPTION", note: "Intraday scalp 3:15 PM" }), true);
+});
+
+test("SP-10. isSessionCompleted detects completed trading days and 15:30 IST close", () => {
+  // Saved on 19 Nov 2026. Evaluated on 20 Nov 2026 -> Past calendar day -> Completed
+  const savedNov19 = "2026-11-19T05:00:00.000Z"; // 10:30 AM IST
+  const nowNov20 = new Date("2026-11-20T06:00:00.000Z"); // 11:30 AM IST
+  assert.equal(isSessionCompleted(savedNov19, nowNov20), true);
+
+  // Saved on 20 Nov 2026 at 10:00 IST. Evaluated on 20 Nov 2026 at 14:00 IST -> During session -> Active
+  const savedNov20Morning = "2026-11-20T04:30:00.000Z"; // 10:00 AM IST
+  const nowNov20Afternoon = new Date("2026-11-20T08:30:00.000Z"); // 14:00 PM IST
+  assert.equal(isSessionCompleted(savedNov20Morning, nowNov20Afternoon), false);
+
+  // Saved on 20 Nov 2026 at 10:00 IST. Evaluated on 20 Nov 2026 at 16:00 IST (past 15:30 IST) -> Completed
+  const nowNov20Evening = new Date("2026-11-20T10:30:00.000Z"); // 16:00 PM IST
+  assert.equal(isSessionCompleted(savedNov20Morning, nowNov20Evening), true);
+
+  // Saved after hours at 18:00 IST on 20 Nov for next session. Evaluated at 19:00 IST on 20 Nov -> Not completed yet
+  const savedNov20AfterHours = "2026-11-20T12:30:00.000Z"; // 18:00 PM IST
+  const nowNov20Night = new Date("2026-11-20T13:30:00.000Z"); // 19:00 PM IST
+  assert.equal(isSessionCompleted(savedNov20AfterHours, nowNov20Night), false);
+});
+
+test("SP-11. isOptionExpired and isPickCompleted detect expired options", () => {
+  // NIFTY option expiring 2026-11-19, evaluated on 2026-11-20 -> Expired
+  assert.equal(isOptionExpired("NIFTY 2026-11-19 25450 CE", new Date("2026-11-20T05:00:00.000Z")), true);
+
+  // NIFTY option expiring 2026-11-23, evaluated on 2026-11-20 -> Active (Not expired)
+  assert.equal(isOptionExpired("NIFTY 2026-11-23 25450 CE", new Date("2026-11-20T05:00:00.000Z")), false);
+});
+
+test("SP-12. removeCompletedPicks purges completed intraday and expired trades while preserving active", () => {
+  const testFile = path.join(dir, "purge-test.json");
+  const p1 = {
+    id: "p-expired-stock",
+    savedAt: "2026-11-19T05:00:00.000Z", // Past day
+    instrument: "EICHERMOT",
+    instrumentType: "STOCK" as const,
+    direction: "LONG" as const,
+    entry: 7904,
+    source: "LIVE" as const,
+    validation: "NOT_VALIDATED" as const,
+    note: "Saved from stock opportunity card",
+  };
+  const p2 = {
+    id: "p-active-option",
+    savedAt: "2026-11-20T04:00:00.000Z",
+    instrument: "NIFTY 2026-11-23 25600 CE",
+    instrumentType: "INDEX_OPTION" as const,
+    direction: "LONG" as const,
+    entry: 63.55,
+    source: "RESEARCH" as const,
+    validation: "NOT_VALIDATED" as const,
+  };
+  fs.writeFileSync(testFile, JSON.stringify([p1, p2], null, 2));
+
+  const now = new Date("2026-11-20T05:00:00.000Z");
+  const res = removeCompletedPicks(testFile, now);
+
+  assert.equal(res.removed.length, 1);
+  assert.equal(res.removed[0].id, "p-expired-stock");
+  assert.equal(res.remaining.length, 1);
+  assert.equal(res.remaining[0].id, "p-active-option");
+
+  // Verify file on disk is updated
+  const onDisk = loadPicks(testFile);
+  assert.equal(onDisk.length, 1);
+  assert.equal(onDisk[0].id, "p-active-option");
 });

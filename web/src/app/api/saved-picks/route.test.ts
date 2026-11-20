@@ -61,3 +61,35 @@ test("API-8. invalid JSON body returns 400", async () => {
   const r = await POST(new Request("http://x", { method: "POST", body: "{bad" }));
   assert.equal(r.status, 400);
 });
+test("API-9. DELETE with ?purgeCompleted=true purges completed intraday picks", async () => {
+  // Save an old intraday pick directly to the test file
+  const pastPick = {
+    id: "old-intraday",
+    savedAt: "2026-11-01T05:00:00.000Z",
+    instrument: "EICHERMOT",
+    instrumentType: "STOCK",
+    direction: "LONG",
+    entry: 7900,
+    source: "LIVE",
+    validation: "NOT_VALIDATED",
+    note: "Saved from stock opportunity card",
+  };
+  fs.writeFileSync(process.env.SAVED_PICKS_FILE!, JSON.stringify([pastPick], null, 2));
+
+  // Also add an active pick via POST
+  await POST(req({ ...body, instrument: "NIFTY 2026-11-23 25600 CE", instrumentType: "INDEX_OPTION" }));
+
+  const res = await DELETE(new Request("http://x/api/saved-picks?purgeCompleted=true", { method: "DELETE" }));
+  assert.equal(res.status, 200);
+  const j = await res.json();
+  assert.equal(j.purged, true);
+  assert.equal(j.removedCount, 1);
+  assert.deepEqual(j.removedIds, ["old-intraday"]);
+
+  // GET should now only return the active option
+  const list = await (await GET()).json();
+  assert.equal(list.picks.length, 1);
+  assert.equal(list.picks[0].instrument, "NIFTY 2026-11-23 25600 CE");
+  assert.equal(list.picks[0].isCompleted, false);
+});
+

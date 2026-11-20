@@ -2,6 +2,21 @@
 // A pick is NEVER a validated signal unless its validation status says so. Mock data cannot be saved as LIVE.
 import * as fs from "node:fs";
 import * as path from "node:path";
+import {
+  istDay,
+  isIntradayPick,
+  isSessionCompleted,
+  isOptionExpired,
+  isPickCompleted,
+} from "./savedPickFilter.ts";
+
+export {
+  istDay,
+  isIntradayPick,
+  isSessionCompleted,
+  isOptionExpired,
+  isPickCompleted,
+};
 
 export type PickSource = "MOCK" | "LIVE" | "RESEARCH";
 export type ValidationStatus = "NOT_VALIDATED" | "RESEARCH_ONLY" | "VALIDATED";
@@ -60,11 +75,6 @@ export function loadPicks(file: string): SavedPick[] {
   }
 }
 
-// IST calendar day of an instant, used for duplicate detection (one identical card per day).
-export function istDay(d: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
-}
-
 // Identity of a saved card: the same instrument, direction, levels and source saved on the same IST day is a duplicate.
 export function duplicateKey(p: Pick<SavedPick, "instrument" | "instrumentType" | "direction" | "entry" | "stopLoss" | "targets" | "source">, savedAt: string): string {
   return [p.instrument.trim().toUpperCase(), p.instrumentType, p.direction, p.entry ?? "", p.stopLoss ?? "", (p.targets ?? []).join("|"), p.source, istDay(new Date(savedAt))].join("#");
@@ -106,3 +116,24 @@ export function removePick(file: string, id: string): boolean {
   fs.renameSync(tmp, file);
   return true;
 }
+
+/**
+ * Removes completed picks from the storage file atomically.
+ * Returns the removed picks and remaining active picks.
+ */
+export function removeCompletedPicks(file: string, now = new Date()): { removed: SavedPick[]; remaining: SavedPick[] } {
+  const all = loadPicks(file);
+  const remaining = all.filter((p) => !isPickCompleted(p, now));
+  const removed = all.filter((p) => isPickCompleted(p, now));
+
+  if (removed.length > 0) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = file + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(remaining, null, 2));
+    fs.renameSync(tmp, file);
+  }
+
+  return { removed, remaining };
+}
+
+
