@@ -58,3 +58,25 @@ test("Math calculations for NIFTY 25650 CE from user screenshot", () => {
   const livePnl = (simulatedLtp - entry) * totalQty;
   assert.ok(Math.abs(livePnl - 2088.75) < 0.01);
 });
+
+test("Target adjustment presets correctly recalculate achievable intraday profits", () => {
+  const entry = 72.15;
+  const stopLoss = 35.53; // 50% stop
+  const risk = entry - stopLoss; // 36.62
+  const lotSize = 75;
+
+  // Preset 1: 1:1.0 Scalp Target
+  const t1Scalp = Math.round((entry + risk * 1.0) * 100) / 100; // 108.77 (+50.7%)
+  const scalpGain = (t1Scalp - entry) * lotSize;
+  assert.ok(Math.abs(scalpGain - 2746.50) < 1.0);
+
+  // Preset 2: 1:1.5 Intraday Target (Realistic)
+  const t1Intraday = Math.round((entry + risk * 1.5) * 100) / 100; // 127.08 (+76.1%)
+  const intradayGain = (t1Intraday - entry) * lotSize;
+  assert.ok(Math.abs(intradayGain - 4119.75) < 1.0);
+
+  // Preset 3: 1:2.0 Moderate Swing Target
+  const t1Swing = Math.round((entry + risk * 2.0) * 100) / 100; // 145.39 (+101.5%)
+  const swingGain = (t1Swing - entry) * lotSize;
+  assert.ok(Math.abs(swingGain - 5493.00) < 1.0);
+});

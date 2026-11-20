@@ -454,7 +454,9 @@ function calcTradePoints(
   const level = type === "CE" ? chain.resistance : chain.support;
   const room = Math.abs(level - spot);
   // Use at least 0.4× ATR as minimum room (avoids zero target when at structural level)
-  const useRoom = Math.max(room, atr * 0.4);
+  // Ceiling: bound room to 2.5× ATR (or 1.5× expected move) so targets stay realistic for intraday/tactical horizons.
+  const maxRoom = Math.max(atr * 2.5, (chain.expectedMove ?? 0) * 1.5, 120);
+  const useRoom = Math.min(Math.max(room, atr * 0.4), maxRoom);
 
   const t1 = r2(entry + d * useRoom * 0.45) ?? entry;
   const t2 = r2(entry + d * useRoom * 0.85) ?? entry;

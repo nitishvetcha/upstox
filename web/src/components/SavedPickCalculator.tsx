@@ -12,7 +12,10 @@ import {
   HelpCircle,
   Percent,
   RefreshCw,
+  RotateCcw,
   Shield,
+  Sliders,
+  Target,
   TrendingDown,
   TrendingUp,
   X,
@@ -54,12 +57,21 @@ const fmtInr = (n: number) =>
     maximumFractionDigits: 2,
   }).format(n);
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps) {
   const isLong = pick.direction !== "SHORT";
-  const entry = Number(pick.entry) || 0;
-  const stop = Number(pick.stopLoss) || 0;
-  const t1 = pick.targets?.[0] != null ? Number(pick.targets[0]) : 0;
-  const t2 = pick.targets?.[1] != null ? Number(pick.targets[1]) : 0;
+  const rawEntry = Number(pick.entry) || 0;
+  const rawStop = Number(pick.stopLoss) || 0;
+  const rawT1 = pick.targets?.[0] != null ? Number(pick.targets[0]) : 0;
+  const rawT2 = pick.targets?.[1] != null ? Number(pick.targets[1]) : 0;
+
+  // Interactive adjustable trade levels
+  const [entry, setEntry] = useState<number>(rawEntry);
+  const [stop, setStop] = useState<number>(rawStop);
+  const [t1, setT1] = useState<number>(rawT1);
+  const [t2, setT2] = useState<number>(rawT2);
+  const [activePreset, setActivePreset] = useState<string>("original");
 
   const detectedLotSize = useMemo(
     () => defaultLotSize(pick.instrument, pick.instrumentType),
@@ -78,8 +90,7 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
   // Stop loss calculations
   const perUnitRisk = isLong ? Math.max(0, entry - stop) : Math.max(0, stop - entry);
   const totalMaxRisk = Math.round(perUnitRisk * totalQuantity * 100) / 100;
-  const riskOfCapitalPct =
-    accountCapital > 0 ? (totalMaxRisk / accountCapital) * 100 : 0;
+  const riskOfCapitalPct = accountCapital > 0 ? (totalMaxRisk / accountCapital) * 100 : 0;
   const stopLossPct = entry > 0 ? (perUnitRisk / entry) * 100 : 0;
 
   // Target 1 calculations
@@ -103,6 +114,50 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
 
   // Breakeven win rate: 1 / (1 + RR)
   const breakevenWinRate = rr1 > 0 ? (1 / (1 + rr1)) * 100 : 50;
+
+  // Quick Preset Handlers
+  const applyPreset = (preset: "scalp" | "intraday" | "swing" | "original") => {
+    setActivePreset(preset);
+    if (preset === "original") {
+      setEntry(rawEntry);
+      setStop(rawStop);
+      setT1(rawT1);
+      setT2(rawT2);
+      setSimulatedLtp(rawEntry);
+      setCustomLtpInput(String(rawEntry));
+      return;
+    }
+
+    const currentRisk = perUnitRisk > 0 ? perUnitRisk : Math.max(0.5, entry * 0.25);
+
+    if (preset === "scalp") {
+      // 1:1.0 Scalp
+      const newT1 = round2(isLong ? entry + currentRisk * 1.0 : entry - currentRisk * 1.0);
+      const newT2 = round2(isLong ? entry + currentRisk * 1.5 : entry - currentRisk * 1.5);
+      setT1(newT1);
+      setT2(newT2);
+    } else if (preset === "intraday") {
+      // 1:1.5 Realistic Intraday
+      const newT1 = round2(isLong ? entry + currentRisk * 1.5 : entry - currentRisk * 1.5);
+      const newT2 = round2(isLong ? entry + currentRisk * 2.0 : entry - currentRisk * 2.0);
+      setT1(newT1);
+      setT2(newT2);
+    } else if (preset === "swing") {
+      // 1:2.0 Moderate Swing
+      const newT1 = round2(isLong ? entry + currentRisk * 2.0 : entry - currentRisk * 2.0);
+      const newT2 = round2(isLong ? entry + currentRisk * 3.0 : entry - currentRisk * 3.0);
+      setT1(newT1);
+      setT2(newT2);
+    }
+  };
+
+  // Adjust Stop Loss by percentage preset
+  const setStopByPct = (pct: number) => {
+    setActivePreset("custom");
+    const delta = round2(entry * (pct / 100));
+    const newStop = round2(isLong ? Math.max(0.05, entry - delta) : entry + delta);
+    setStop(newStop);
+  };
 
   // Trade Health and Status determination
   const statusVerdict = useMemo(() => {
@@ -147,6 +202,10 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
   const accountCapitalId = useId();
   const lotsId = useId();
   const lotSizeId = useId();
+  const entryId = useId();
+  const stopId = useId();
+  const t1Id = useId();
+  const t2Id = useId();
 
   return (
     <div className="mt-3 rounded-xl border border-zinc-700/80 bg-zinc-950 p-4 shadow-xl text-zinc-200">
@@ -161,7 +220,9 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
             </span>
             <span
               className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                isLong ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-red-950 text-red-400 border border-red-800"
+                isLong
+                  ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                  : "bg-red-950 text-red-400 border border-red-800"
               }`}
             >
               {pick.direction}
@@ -180,8 +241,183 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
         )}
       </div>
 
+      {/* Target & Level Adjuster Section */}
+      <div className="mt-3.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
+          <div className="flex items-center gap-1.5">
+            <Sliders size={14} className="text-sky-400" />
+            <span className="text-xs font-semibold text-white">
+              Adjust Targets & Stop Loss (Make T1 / T2 Realistic)
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="text-zinc-500 font-medium">Quick R:R Presets:</span>
+            <button
+              type="button"
+              onClick={() => applyPreset("scalp")}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition ${
+                activePreset === "scalp"
+                  ? "bg-sky-600 text-white font-bold"
+                  : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              }`}
+            >
+              1:1.0 Scalp
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset("intraday")}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition ${
+                activePreset === "intraday"
+                  ? "bg-sky-600 text-white font-bold"
+                  : "bg-sky-950/80 text-sky-300 border border-sky-800/80 hover:bg-sky-900"
+              }`}
+            >
+              1:1.5 Intraday (Recommended)
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset("swing")}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition ${
+                activePreset === "swing"
+                  ? "bg-emerald-600 text-white font-bold"
+                  : "bg-emerald-950/80 text-emerald-300 border border-emerald-800/80 hover:bg-emerald-900"
+              }`}
+            >
+              1:2.0 Moderate
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset("original")}
+              className="flex items-center gap-1 rounded bg-zinc-800/80 px-2 py-0.5 text-[10px] text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+              title="Reset to algorithmic scanner values"
+            >
+              <RotateCcw size={10} />
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* Entry Price */}
+          <div className="rounded border border-zinc-800 bg-zinc-950/80 p-2.5">
+            <label htmlFor={entryId} className="block text-[10px] font-semibold uppercase text-zinc-400">
+              Entry Price (₹)
+            </label>
+            <div className="mt-1 flex items-center gap-1">
+              <input
+                id={entryId}
+                type="number"
+                step="0.05"
+                value={entry}
+                onChange={(e) => {
+                  setActivePreset("custom");
+                  const val = Number(e.target.value) || 0;
+                  setEntry(val);
+                }}
+                className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs font-bold text-white focus:border-sky-500 focus:outline-none"
+              />
+            </div>
+            <div className="mt-1 text-[10px] text-zinc-500">
+              Per unit base cost
+            </div>
+          </div>
+
+          {/* Stop Loss */}
+          <div className="rounded border border-red-900/40 bg-zinc-950/80 p-2.5">
+            <div className="flex items-center justify-between">
+              <label htmlFor={stopId} className="block text-[10px] font-semibold uppercase text-red-400">
+                Stop Loss (₹)
+              </label>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setStopByPct(25)}
+                  className="rounded bg-red-950/80 px-1 text-[9px] text-red-300 hover:bg-red-900"
+                  title="Set stop to -25%"
+                >
+                  25%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStopByPct(50)}
+                  className="rounded bg-red-950/80 px-1 text-[9px] text-red-300 hover:bg-red-900"
+                  title="Set stop to -50%"
+                >
+                  50%
+                </button>
+              </div>
+            </div>
+            <div className="mt-1 flex items-center gap-1">
+              <input
+                id={stopId}
+                type="number"
+                step="0.05"
+                value={stop}
+                onChange={(e) => {
+                  setActivePreset("custom");
+                  const val = Number(e.target.value) || 0;
+                  setStop(val);
+                }}
+                className="w-full rounded border border-red-800/60 bg-zinc-900 px-2 py-1 font-mono text-xs font-bold text-red-300 focus:border-red-500 focus:outline-none"
+              />
+            </div>
+            <div className="mt-1 text-[10px] text-red-400 font-mono">
+              Risk: -₹{round2(perUnitRisk)} (-{stopLossPct.toFixed(1)}%)
+            </div>
+          </div>
+
+          {/* Target 1 */}
+          <div className="rounded border border-emerald-900/40 bg-zinc-950/80 p-2.5">
+            <label htmlFor={t1Id} className="block text-[10px] font-semibold uppercase text-emerald-400">
+              Target 1 (T1) (₹)
+            </label>
+            <div className="mt-1 flex items-center gap-1">
+              <input
+                id={t1Id}
+                type="number"
+                step="0.05"
+                value={t1}
+                onChange={(e) => {
+                  setActivePreset("custom");
+                  const val = Number(e.target.value) || 0;
+                  setT1(val);
+                }}
+                className="w-full rounded border border-emerald-800/60 bg-zinc-900 px-2 py-1 font-mono text-xs font-bold text-emerald-300 focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+            <div className="mt-1 text-[10px] text-emerald-400 font-mono">
+              +{gainT1Pct.toFixed(1)}% (R:R {rr1.toFixed(2)}x)
+            </div>
+          </div>
+
+          {/* Target 2 */}
+          <div className="rounded border border-emerald-900/30 bg-zinc-950/80 p-2.5">
+            <label htmlFor={t2Id} className="block text-[10px] font-semibold uppercase text-emerald-300">
+              Target 2 (T2) (₹)
+            </label>
+            <div className="mt-1 flex items-center gap-1">
+              <input
+                id={t2Id}
+                type="number"
+                step="0.05"
+                value={t2}
+                onChange={(e) => {
+                  setActivePreset("custom");
+                  const val = Number(e.target.value) || 0;
+                  setT2(val);
+                }}
+                className="w-full rounded border border-emerald-800/40 bg-zinc-900 px-2 py-1 font-mono text-xs font-bold text-emerald-200 focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+            <div className="mt-1 text-[10px] text-emerald-300 font-mono">
+              {t2 > 0 ? `+${gainT2Pct.toFixed(1)}% (R:R ${rr2.toFixed(2)}x)` : "Optional runner"}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Primary KPI Summary Cards */}
-      <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <div className="mt-3.5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5">
           <div className="text-[11px] font-medium text-zinc-400">Capital Required</div>
           <div className="mt-1 font-mono text-base font-bold text-white">
@@ -192,17 +428,17 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
           </div>
         </div>
 
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5">
+        <div className="rounded-lg border border-red-900/30 bg-zinc-900/60 p-2.5">
           <div className="text-[11px] font-medium text-zinc-400">Max Risk (Stop Loss)</div>
           <div className="mt-1 font-mono text-base font-bold text-red-400">
             -{fmtInr(totalMaxRisk)}
           </div>
           <div className="mt-0.5 text-[10px] text-red-400/80 font-mono">
-            -{stopLossPct.toFixed(1)}% of investment
+            -{stopLossPct.toFixed(1)}% of capital
           </div>
         </div>
 
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5">
+        <div className="rounded-lg border border-emerald-900/30 bg-zinc-900/60 p-2.5">
           <div className="text-[11px] font-medium text-zinc-400">Target 1 Profit</div>
           <div className="mt-1 font-mono text-base font-bold text-emerald-400">
             +{fmtInr(totalGainT1)}
@@ -212,7 +448,7 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
           </div>
         </div>
 
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5">
+        <div className="rounded-lg border border-emerald-900/20 bg-zinc-900/60 p-2.5">
           <div className="text-[11px] font-medium text-zinc-400">Target 2 Profit</div>
           <div className="mt-1 font-mono text-base font-bold text-emerald-300">
             {t2 > 0 ? `+${fmtInr(totalGainT2)}` : "—"}
@@ -257,7 +493,7 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
           </div>
 
           {/* Quick Price Shortcuts */}
-          <div className="flex items-center gap-1.5 text-[10px]">
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
             <span className="text-zinc-500">Test Price:</span>
             <button
               type="button"
@@ -359,7 +595,9 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
       {/* Position Sizing and Inputs Adjuster */}
       <div className="mt-3.5 grid gap-3 sm:grid-cols-3 rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-3">
         <div>
-          <label htmlFor={accountCapitalId} className="block text-[11px] font-medium text-zinc-400">Account Capital</label>
+          <label htmlFor={accountCapitalId} className="block text-[11px] font-medium text-zinc-400">
+            Account Capital
+          </label>
           <div className="mt-1 flex items-center gap-1.5">
             <span className="text-xs text-zinc-500 font-mono">₹</span>
             <input
@@ -409,7 +647,9 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
         </div>
 
         <div>
-          <label htmlFor={lotSizeId} className="block text-[11px] font-medium text-zinc-400">Lot Size (Multiplier)</label>
+          <label htmlFor={lotSizeId} className="block text-[11px] font-medium text-zinc-400">
+            Lot Size (Multiplier)
+          </label>
           <div className="mt-1">
             <input
               id={lotSizeId}
@@ -430,15 +670,16 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
       <div className="mt-3.5 rounded-lg border border-sky-900/60 bg-sky-950/20 p-3 text-xs">
         <div className="flex items-center gap-1.5 font-semibold text-sky-300">
           <HelpCircle size={14} />
-          <span>Will it result in Profit or Loss? The Mathematical Probability:</span>
+          <span>Profit Realism & Probability Analysis:</span>
         </div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2 text-zinc-300">
           <div className="rounded border border-sky-900/40 bg-zinc-950/60 p-2.5">
             <div className="font-semibold text-zinc-200">1. Asymmetric Risk/Reward Advantage</div>
             <div className="mt-1 text-[11px] text-zinc-400 leading-relaxed">
-              Target 1 gives <span className="font-mono text-emerald-400 font-bold">+{fmtInr(totalGainT1)}</span> vs Stop Loss of{" "}
+              Target 1 gives{" "}
+              <span className="font-mono text-emerald-400 font-bold">+{fmtInr(totalGainT1)}</span> vs Stop Loss of{" "}
               <span className="font-mono text-red-400 font-bold">-{fmtInr(totalMaxRisk)}</span>.
-              With a <span className="font-mono text-sky-300 font-bold">{rr1.toFixed(2)}x R:R</span>, you only need a{" "}
+              With your adjusted <span className="font-mono text-sky-300 font-bold">{rr1.toFixed(2)}x R:R</span>, you only need a{" "}
               <span className="font-mono text-amber-300 font-bold">{breakevenWinRate.toFixed(1)}% win rate</span> to break even.
               Winning 4 out of 10 trades yields solid mathematical positive expectancy.
             </div>
@@ -447,9 +688,13 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
           <div className="rounded border border-sky-900/40 bg-zinc-950/60 p-2.5">
             <div className="font-semibold text-zinc-200">2. Professional Execution Rule</div>
             <div className="mt-1 text-[11px] text-zinc-400 leading-relaxed">
-              • Place automatic Stop Loss at <span className="font-mono text-red-300 font-semibold">₹{stop}</span> immediately upon entry.<br />
-              • When price touches Target 1 (<span className="font-mono text-emerald-300 font-semibold">₹{t1}</span>), book 50% profit and move Stop Loss to entry (<span className="font-mono text-zinc-200 font-semibold">₹{entry}</span>).<br />
-              • Let the remaining lots ride to Target 2 (<span className="font-mono text-emerald-300 font-semibold">₹{t2 || t1}</span>) completely risk-free!
+              • Place automatic Stop Loss at{" "}
+              <span className="font-mono text-red-300 font-semibold">₹{stop}</span> immediately upon entry.<br />
+              • When price touches Target 1 (
+              <span className="font-mono text-emerald-300 font-semibold">₹{t1}</span>), book 50% profit and trail Stop Loss to entry (
+              <span className="font-mono text-zinc-200 font-semibold">₹{entry}</span>).<br />
+              • Let the remaining lots ride to Target 2 (
+              <span className="font-mono text-emerald-300 font-semibold">₹{t2 || t1}</span>) completely risk-free!
             </div>
           </div>
         </div>
