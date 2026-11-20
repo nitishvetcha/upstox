@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     const rec: OpportunityRecord = {
       id,
       trackedAt: now,
-      engineVersion: (body.engineVersion as string) ?? "20.1",
+      engineVersion: (body.engineVersion as string) ?? "20.2",
       underlying: (body.underlying as string) ?? (body.symbol as string) ?? "UNKNOWN",
       instrumentKey: (body.instrumentKey as string | null) ?? null,
       symbol: (body.symbol as string | null) ?? null,

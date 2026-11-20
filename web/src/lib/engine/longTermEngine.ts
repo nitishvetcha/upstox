@@ -5,7 +5,7 @@
 import { STOCK_OPPORTUNITY_VERSION } from "./stockOpportunityEngine.ts";
 import { cached } from "../services/cache.ts";
 
-export const LONG_TERM_ENGINE_VERSION = STOCK_OPPORTUNITY_VERSION; // "20.1"
+export const LONG_TERM_ENGINE_VERSION = STOCK_OPPORTUNITY_VERSION; // "20.2"
 
 // ── Fundamental provider interface ───────────────────────────────────────────
 export interface FundamentalData {

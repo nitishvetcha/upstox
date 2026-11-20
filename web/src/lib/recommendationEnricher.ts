@@ -90,6 +90,8 @@ export interface RecommendationResponse {
   } | null;
   market: {
     spot: number | null;
+    /** Nearest listed strike to spot. Optional for recommendations saved before this field existed. */
+    atmStrike?: number | null;
     expiry: string | null;
     regime: string;
     pcr: number | null;
@@ -330,6 +332,7 @@ export function buildRecommendationResponse(a: Analysis, now = new Date()): Reco
     execution,
     market: {
       spot: s.spot,
+      atmStrike: a.chain.atmStrike,
       expiry: s.expiry,
       regime: a.regime,
       pcr: a.chain.pcrOi,

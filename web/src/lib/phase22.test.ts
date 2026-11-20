@@ -58,13 +58,13 @@ function bullishSnapshot(): Snapshot {
 
 // ── VR22 — Version ────────────────────────────────────────────────────────────
 
-describe("VR22 — Version 20.1", () => {
-  it("VR22-01: options engine version is 20.1", () => {
-    assert.equal(OPPORTUNITY_ENGINE_VERSION, "20.1");
+describe("VR22 — Current engine version", () => {
+  it("VR22-01: options engine version is 20.2", () => {
+    assert.equal(OPPORTUNITY_ENGINE_VERSION, "20.2");
   });
 
-  it("VR22-02: stock engine version is 20.1", () => {
-    assert.equal(STOCK_OPPORTUNITY_VERSION, "20.1");
+  it("VR22-02: stock engine version is 20.2", () => {
+    assert.equal(STOCK_OPPORTUNITY_VERSION, "20.2");
   });
 
   it("VR22-03: WEIGHTS unchanged (sum = 100)", () => {

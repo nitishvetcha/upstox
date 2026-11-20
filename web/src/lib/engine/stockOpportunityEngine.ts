@@ -1,4 +1,4 @@
-// Phase 20 — Stock Opportunity Engine v20.0 → 20.1
+// Stock Opportunity Engine 20.2 — corrected breakout scoring and VWAP provenance.
 // Multi-factor intraday and swing scanner for NIFTY 50.
 // Uses a single batch API call for quotes, then scores each stock on
 // multiple factors including relative strength vs NIFTY.
@@ -20,7 +20,7 @@ import { istToday, latestTradingSessionDate, isTradingDay } from "../time.ts";
 import type { Candle } from "../types.ts";
 import { UpstoxError } from "../services/errors.ts";
 
-export const STOCK_OPPORTUNITY_VERSION = "20.1";
+export const STOCK_OPPORTUNITY_VERSION = "20.2";
 
 // ── Setup types ───────────────────────────────────────────────────────────────
 export type IntradaySetup =
@@ -591,6 +591,7 @@ export function detectIntradaySetup(
   if (chg >= 0) {
     // Bullish direction
     if (isBreakout) {
+      score += 15;
       reasons.push(`Trading above yesterday's high (${pdh})`);
     } else if (isOrbBreakout) {
       score += 15;
@@ -625,6 +626,7 @@ export function detectIntradaySetup(
     // Bearish direction
     const absPct = Math.abs(chg);
     if (isBreakdown) {
+      score += 15;
       reasons.push(`Trading below yesterday's low (${pdl})`);
     } else if (isOrbBreakdown) {
       score += 15;
@@ -677,20 +679,28 @@ function buildTradePlan(
   // ponytail: 1.2× gives R:R ≈ 1.04 at LOD/HOD; 1.75× gives R:R ≈ 1.52
   const targetMult = strongMomentum ? 1.75 : 1.2;
 
+  // Intraday structural risk model:
+  // Instead of an unconstrained stop all the way at session low/high (which can exceed 3-5% late in the day),
+  // anchor stop to recent structural invalidation / 0.75x ATR, capped at 1.5% max risk:
+  const maxRiskPct = 0.015; // 1.5% max intraday capital risk
+  const maxRisk = ltp * maxRiskPct;
+
   if (direction === "BULLISH") {
-    const stop = r2(low - atrProxy * 0.15);
+    const structuralStop = Math.max(low - atrProxy * 0.15, ltp - atrProxy * 0.75);
+    const stop = r2(Math.max(structuralStop, ltp - maxRisk));
     const risk = Math.max(ltp - stop, 0.01);
-    const t1 = r2(ltp + atrProxy * targetMult);
-    const t2 = r2(ltp + atrProxy * targetMult * 1.8);
+    const t1 = r2(ltp + Math.max(atrProxy * targetMult, risk * 1.5));
+    const t2 = r2(ltp + Math.max(atrProxy * targetMult * 1.8, risk * 2.5));
     return {
       entry: ltp, entryLow: r2(ltp), entryHigh: r2(ltp * 1.003),
       stop, target1: t1, target2: t2, rr: r2((t1 - ltp) / risk),
     };
   } else {
-    const stop = r2(high + atrProxy * 0.15);
+    const structuralStop = Math.min(high + atrProxy * 0.15, ltp + atrProxy * 0.75);
+    const stop = r2(Math.min(structuralStop, ltp + maxRisk));
     const risk = Math.max(stop - ltp, 0.01);
-    const t1 = r2(ltp - atrProxy * targetMult);
-    const t2 = r2(ltp - atrProxy * targetMult * 1.8);
+    const t1 = r2(ltp - Math.max(atrProxy * targetMult, risk * 1.5));
+    const t2 = r2(ltp - Math.max(atrProxy * targetMult * 1.8, risk * 2.5));
     return {
       entry: ltp, entryLow: r2(ltp * 0.997), entryHigh: r2(ltp),
       stop, target1: t1, target2: t2, rr: r2((ltp - t1) / risk),
@@ -1002,7 +1012,9 @@ export function scoreIntradayQuote(
   const plan = buildTradePlan(q, scored.direction, rs, atr);
   if (plan.rr < 1.0) return null;
 
-  const vwap = (q.high && q.low && q.ltp) ? r2((q.high + q.low + q.ltp) / 3) : null;
+  // VWAP requires intraday price × volume bars. The former (H + L + LTP) / 3
+  // value was a typical price and must not be presented as volume weighted.
+  const vwap = q.vwap != null && Number.isFinite(q.vwap) && q.vwap > 0 ? r2(q.vwap) : null;
   const vwapDistancePct = (vwap && q.ltp) ? r2(((q.ltp - vwap) / vwap) * 100) : null;
   if (scored.direction === "BULLISH" && vwapDistancePct !== null && vwapDistancePct > 0) {
     scored.reasons.push(`✓ Trading above intraday VWAP (${vwapDistancePct >= 0 ? "+" : ""}${vwapDistancePct}%)`);
@@ -1217,6 +1229,9 @@ export async function scanStocks(kind: "intraday" | "swing", now = new Date(), d
     // liveSources=3 only when the quote is genuinely LIVE; END_OF_DAY/STALE → 0 → forces REJECT grade
     const liveSourcesCount = q.freshness === "LIVE" ? 3 : 0;
     const rawGrade = gradeOpportunity(scored.score, plan.rr, scored.confidence, liveSourcesCount);
+    // Stock V1 has negative development and validation expectancy (PF 0.69).
+    // Keep qualified signals visible for forward research, but never label them actionable.
+    const evidenceCappedGrade: OpportunityGrade = rawGrade === "REJECT" ? "REJECT" : "C";
     const gradeReasons: string[] = [];
     if (q.freshness !== "LIVE") {
       gradeReasons.push(`Quote ${q.freshness}, not live`);
@@ -1229,6 +1244,9 @@ export async function scanStocks(kind: "intraday" | "swing", now = new Date(), d
     }
     if (rawGrade === "REJECT" && gradeReasons.length === 0) {
       gradeReasons.push("Did not meet quality thresholds for tradable grade");
+    }
+    if (evidenceCappedGrade === "C" && rawGrade !== "REJECT") {
+      gradeReasons.push("Stock V1 has negative development and validation expectancy (PF 0.69): forward-research watch-only");
     }
 
     opportunities.push({
@@ -1258,7 +1276,7 @@ export async function scanStocks(kind: "intraday" | "swing", now = new Date(), d
       rangePosition: rangePosition(q.ltp!, q.high, q.low),
       reasons: scored.reasons,
       invalidation,
-      grade: rawGrade,
+      grade: evidenceCappedGrade,
       gradeReasons,
       confidence: scored.confidence,
       vwap: res.vwap,

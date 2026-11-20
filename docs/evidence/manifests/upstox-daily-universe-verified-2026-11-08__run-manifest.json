@@ -1,0 +1,6 @@
+{
+ "createdAt": "2026-11-08T10:36:00.322Z",
+ "script": "scripts/upstox-verify-clean.ts",
+ "manifestSha256": "e2f29e2d580e3d327993c97c54decfbe963ce901a2b95b74b5000c2584258330",
+ "universeSha256": "4a54975ed1a8fdc0965be25eca8cb7b103a920a1b765e88dbc29219197689372"
+}

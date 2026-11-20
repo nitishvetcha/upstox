@@ -61,15 +61,15 @@ function snapshotBase(overrides: Partial<Snapshot> = {}): Snapshot {
 
 describe("EV — Engine versioning Phase 20", () => {
   it("EV-01: OPPORTUNITY_ENGINE_VERSION is 20.0", () => {
-    assert.equal(OPPORTUNITY_ENGINE_VERSION, "20.1");
+    assert.equal(OPPORTUNITY_ENGINE_VERSION, "20.2");
   });
 
   it("EV-02: STOCK_OPPORTUNITY_VERSION is 20.0", () => {
-    assert.equal(STOCK_OPPORTUNITY_VERSION, "20.1");
+    assert.equal(STOCK_OPPORTUNITY_VERSION, "20.2");
   });
 
-  it("EV-03: LONG_TERM_ENGINE_VERSION is 20.1", () => {
-    assert.equal(LONG_TERM_ENGINE_VERSION, "20.1");
+  it("EV-03: LONG_TERM_ENGINE_VERSION is 20.2", () => {
+    assert.equal(LONG_TERM_ENGINE_VERSION, "20.2");
   });
 
   it("EV-04: WEIGHTS sum to 100", () => {

@@ -69,10 +69,10 @@ export function Sidebar() {
   }, [open]);
 
   return (
-    <nav aria-label="Main navigation" className="shrink-0 border-b border-zinc-800 bg-zinc-950 md:w-52 md:border-b-0 md:border-r md:p-3">
+    <nav aria-label="Main navigation" className="shrink-0 border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl md:sticky md:top-0 md:h-screen md:w-60 md:overflow-y-auto md:border-b-0 md:border-r md:p-3">
       {/* Mobile bar: brand plus a menu button. Hidden on md and wider, where the sidebar is always shown. */}
       <div className="flex items-center justify-between px-2 py-1.5 md:hidden">
-        <span className="text-sm font-semibold text-zinc-100">Options Analyzer</span>
+        <span className="flex items-center gap-2 text-sm font-semibold text-zinc-100"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/15 text-sky-300">OA</span> Options Analyzer</span>
         <button
           ref={toggleRef}
           type="button"
@@ -85,14 +85,17 @@ export function Sidebar() {
           {open ? <X size={18} aria-hidden /> : <Menu size={18} aria-hidden />}
         </button>
       </div>
-      <div id="site-nav-links" className={`${open ? "flex" : "hidden"} flex-col gap-1 p-2 md:flex md:p-0`}>
-        <div className="hidden px-2 pb-4 pt-1 md:block">
-          <div className="text-sm font-semibold text-zinc-100">Options Analyzer</div>
-          <div className="text-[11px] text-zinc-500">Paper research · read-only</div>
+      <div id="site-nav-links" className={`${open ? "flex" : "hidden"} max-h-[calc(100vh-3.5rem)] flex-col gap-1 overflow-y-auto p-2 md:flex md:max-h-none md:overflow-visible md:p-0`}>
+        <div className="hidden px-2 pb-5 pt-1 md:block">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-sky-500/20 bg-sky-500/10 text-xs font-black text-sky-300">OA</span>
+            <div><div className="text-sm font-semibold text-zinc-100">Options Analyzer</div><div className="text-xs text-zinc-500">Decision workspace</div></div>
+          </div>
+          <div className="mt-3 rounded-lg border border-emerald-900/60 bg-emerald-950/20 px-2.5 py-2 text-xs text-emerald-300">Paper research only · no broker orders</div>
         </div>
         {GROUPS.map(([group, items]) => (
           <div key={group} className="contents md:block">
-            {group && <div className="hidden px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-600 md:block">{group}</div>}
+            {group && <div className="hidden px-2 pb-1.5 pt-4 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500 md:block">{group}</div>}
             {items.map(({ href, title, Icon }) => {
               const active = path === href;
               return (
@@ -100,11 +103,11 @@ export function Sidebar() {
                   key={href}
                   href={href}
                   aria-current={active ? "page" : undefined}
-                  className={`flex min-h-[24px] items-center gap-2 rounded px-2 py-2 text-sm md:py-1.5 ${
-                    active ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                  className={`group flex min-h-10 items-center gap-2.5 rounded-lg border px-2.5 py-2 text-sm ${
+                    active ? "border-sky-800/50 bg-sky-950/50 font-semibold text-sky-100 shadow-sm" : "border-transparent text-zinc-400 hover:border-zinc-800 hover:bg-zinc-900/80 hover:text-zinc-100"
                   }`}
                 >
-                  <Icon size={15} aria-hidden />
+                  <Icon size={16} aria-hidden className={active ? "text-sky-400" : "text-zinc-500 group-hover:text-zinc-300"} />
                   {title}
                 </Link>
               );

@@ -5,7 +5,7 @@ import type { Bar } from "./indicators.ts";
 import { parseSessionFile, chronologicalSplit, EXPECTED_BARS } from "./dataset.ts";
 import { adverse, roundTripCharges, SCENARIOS, type GateInputs } from "./risk.ts";
 import { simulateStock, countMissingMinutes, istMinute } from "./simulate.ts";
-import { pullbackSignal, trendSignal, PULLBACK_LOOKBACK } from "./signal.ts";
+import { openingRangeSignal, pullbackSignal, trendSignal, PULLBACK_LOOKBACK } from "./signal.ts";
 import { runExperiment, selectCandidate, SELECTION_RULE, type ExperimentResult } from "./research.ts";
 import type { HistoricalDataset } from "./dataset.ts";
 
@@ -55,6 +55,21 @@ describe("candidate signals", () => {
     const n = 8;
     const z = () => Array(n).fill(10);
     assert.equal(pullbackSignal({ i: PULLBACK_LOOKBACK - 1, close: z(), low: z(), high: z(), e9: Array(n).fill(11), e21: z(), vwap: Array(n).fill(9) }), null);
+  });
+
+  it("ORB continuation waits for a completed opening range and requires a fresh trend-confirmed crossing", () => {
+    const n = 20;
+    const close = Array(n).fill(100);
+    const high = Array(n).fill(101);
+    const low = Array(n).fill(99);
+    const e9 = Array(n).fill(101);
+    const e21 = Array(n).fill(100);
+    const vwap = Array(n).fill(100);
+    assert.equal(openingRangeSignal({ i: 14, close, high, low, e9, e21, vwap, sessionStart: 0 }), null);
+    close[15] = 102;
+    assert.equal(openingRangeSignal({ i: 15, close, high, low, e9, e21, vwap, sessionStart: 0 }), "LONG");
+    close[16] = 103;
+    assert.equal(openingRangeSignal({ i: 16, close, high, low, e9, e21, vwap, sessionStart: 0 }), null);
   });
 });
 

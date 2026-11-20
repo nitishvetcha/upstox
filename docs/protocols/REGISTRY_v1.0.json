@@ -1,0 +1,75 @@
+{
+ "registeredOn": "2026-11-08",
+ "runnerSha256": "88d118a6ac39f2233c0078949ef9210b8bfead3e3b8807f3d52587fbffef87aa",
+ "inputsSha256": {
+  "daily universe calendar": "df8abbfcf3a65f69351af9646d10daa99d4f2beb2b75c6fadf3fe7cbb106770f",
+  "daily universe coverage": "55a744bfcbd125deffd90ecd0504b7f63bc963c8720ae9dbafadf3be8d4d2f37",
+  "daily universe verification": "13deb3944db2240728990aaefb30ee8c040f5b054fb1e44fe5ce544780c9716d",
+  "equity master": "3675bb26683a8dc3d6d70bfde45086f0a6c8975c45a92e2522b068d108f5970e",
+  "corporate-action validation": "fe1eb76f5d871f53c60e8742cf1d6e320a881cdb726d211021cacaacd197d652",
+  "NIFTY 50 daily (v1 verified)": "d83bca47753d4d1d5169e2d8d7eea85f86d1ddd79959f737bf5817ecf736417e"
+ },
+ "protocols": {
+  "H1_RELATIVE_STRENGTH_12M_SKIP1M": {
+   "file": "docs/protocols/PROTOCOL_H1_RELATIVE_STRENGTH_12M_SKIP1M_v1.0.md",
+   "sha256": "79978cb9c9e073b60b25ea01af84dd92affd06825cbea31c2f2edc42458fe37f"
+  },
+  "H2_SHORT_REVERSAL_1M": {
+   "file": "docs/protocols/PROTOCOL_H2_SHORT_REVERSAL_1M_v1.0.md",
+   "sha256": "26871f57c229760c4eef35b6609653bf2795ff500cffbedfca9739d1972a6220"
+  },
+  "H3_BREADTH_REGIME": {
+   "file": "docs/protocols/PROTOCOL_H3_BREADTH_REGIME_v1.0.md",
+   "sha256": "2ca05194ada80d0ad57dd29d2675bf130fb9578421ced6901b5abf239baec465"
+  },
+  "H4_VOLATILITY_REGIME": {
+   "file": "docs/protocols/PROTOCOL_H4_VOLATILITY_REGIME_v1.0.md",
+   "sha256": "f654d882fcd7f4a16c6e6f8b0ebdca30c90c6292184e4d27255c55b4762dce44"
+  },
+  "H5_LIQUIDITY_BEHAVIOUR": {
+   "file": "docs/protocols/PROTOCOL_H5_LIQUIDITY_BEHAVIOUR_v1.0.md",
+   "sha256": "8aa7a72c07f67024672caf62f74f126316b5fa96670f668cdbd6c492260c8dd1"
+  }
+ },
+ "amendments": [
+  {
+   "id": "A1",
+   "date": "2026-11-08",
+   "reason": "2017-12-31 is not a session; use last session on or before DEV_END",
+   "oldRunnerSha256": "def5cfa35964c6f9bd7e93e5c19b3d441e9ccdd2a62b591f08c1f4c931ec96c3",
+   "newRunnerSha256": "88d118a6ac39f2233c0078949ef9210b8bfead3e3b8807f3d52587fbffef87aa",
+   "methodChange": false
+  },
+  {
+   "id": "A2",
+   "date": "2026-11-08",
+   "file": "docs/protocols/AMENDMENT_A2_PRICE_ARTEFACT_v1.0.md",
+   "sha256": "e2144c0ab62715b4230b38fbc18b3af6d59ab26c6e3dfafea52e1704fc964fd2",
+   "status": "written; registered before rerun",
+   "methodChange": true,
+   "note": "post-result data-quality amendment; v1.0 results labelled contaminated"
+  }
+ ],
+ "v1ResultsLabel": "contaminated (see A2)",
+ "reruns": [
+  {
+   "id": "A2-rerun-dev",
+   "date": "2026-11-08",
+   "outputs": {
+    "crosssectional-dev-A2-before-2026-11-08/results.json": "98dd8e85f3ca41c7a8ecec8a35d529bbbad34aecab9d22c2b2b0dd846bab995b",
+    "crosssectional-dev-A2-after-2026-11-08/results.json": "28ac2b9833313468c85bceac3474ecb9b2cc38cc14722cc60d7b5de1441d3350",
+    "crosssectional-dev-A2-after-2026-11-08/positions-and-exclusions.json": "225beb77abd704cf792c9daa687ed7ef682762a4a6ee06919d16470dde9c9bfb"
+   },
+   "labelled": "sensitivity/research rerun following a post-result data-quality amendment; NOT independent validation; v1.0 results contaminated"
+  }
+ ],
+ "audits": [
+  {
+   "id": "A3",
+   "outputs": {
+    "A3_H1_POSITION_AUDIT_2026-11-08.md": "8b83c4f9be992e079cee8b615f5c302058fc75954ec4afd0e1e20563b7d0f396",
+    "h1-position-audit.json": "68cfd47c4b18ccd76f8438da3f50ac7473cf4365638425a77f58f7b59b7cba72"
+   }
+  }
+ ]
+}

@@ -78,12 +78,18 @@ export function RecommendationCard({ a }: { a: Analysis }) {
   return (
     <Card className="p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-400">Recommendation of the day</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-400">Legacy index analysis · Strategy 11.4</h2>
+          <Badge tone="warn">FROZEN</Badge>
+        </div>
         <Badge tone={label === "LIVE DATA" || label === "END OF DAY" ? "neutral" : "warn"}>{label}</Badge>
       </div>
 
       <div className="mt-4 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
         <div className="space-y-4">
+          <p className="rounded border border-amber-800/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
+            Maintained for continuity and comparison. Use the Opportunity Engine for current stock and options candidate screening; this frozen model is not the unified recommendation source.
+          </p>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-lg font-semibold text-zinc-100">{s.name}</span>
             <Badge>{a.status}</Badge>

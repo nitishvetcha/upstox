@@ -49,6 +49,8 @@ export interface StockMarketData {
   atr?: number | null;
   avgVolume?: number | null;
   rvol?: number | null;
+  /** Session VWAP calculated from intraday price/volume bars. Never substitute typical price. */
+  vwap?: number | null;
   openingRangeHigh?: number | null;
   openingRangeLow?: number | null;
   orbHigh?: number | null;

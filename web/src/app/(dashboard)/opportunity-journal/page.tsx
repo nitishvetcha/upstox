@@ -1,10 +1,11 @@
 import { listPaperOpportunities, isFixture } from "@/lib/services/paperOpportunityStore";
-import type { PaperOpportunity, PaperStatus, DailySummary } from "@/lib/services/paperOpportunityStore";
+import type { PaperOpportunity, PaperStatus } from "@/lib/services/paperOpportunityStore";
 import { listSessionRecords, buildMultiSessionSummary } from "@/lib/services/sessionEvidenceStore";
 import { marketStatus } from "@/lib/services/liveSessionController";
 import { evidenceAuthStatus, tokenStatus, verifyCurrentCredentialCached } from "@/lib/services/upstoxAuth";
 import { listCollectionRuns } from "@/lib/services/liveOpportunityCollector";
 import { listMonitorRuns } from "@/lib/services/paperTradeMonitorRunner";
+import { monitoringView } from "@/lib/opportunityMonitoring";
 
 const STATUS_COLORS: Record<PaperStatus, string> = {
   OPEN:         "bg-blue-100 text-blue-800",
@@ -56,7 +57,7 @@ function StatusBanner({
 }) {
   const isConn = authStatus === "CONNECTED";
   return (
-    <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 p-4 mb-6 text-xs grid grid-cols-2 sm:grid-cols-5 gap-3">
+    <div className="app-surface mb-6 grid grid-cols-2 gap-3 rounded-2xl p-4 text-sm sm:grid-cols-5">
       <div>
         <div className="text-neutral-500 font-medium">Market Status</div>
         <div className={`text-sm font-bold ${mStatus === "OPEN" ? "text-green-600" : "text-amber-600"}`}>
@@ -87,7 +88,7 @@ function StatusBanner({
 
 function MultiSessionCard({ summary }: { summary: ReturnType<typeof buildMultiSessionSummary> }) {
   return (
-    <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 p-4 mb-6 bg-white dark:bg-neutral-900">
+    <div className="app-surface mb-6 rounded-2xl p-5">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-neutral-500">Multi-Session Evidence Summary</h2>
         <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold">
@@ -126,17 +127,20 @@ function MultiSessionCard({ summary }: { summary: ReturnType<typeof buildMultiSe
   );
 }
 
-function OpenCard({ opp }: { opp: PaperOpportunity }) {
+function OpenCard({ opp, now }: { opp: PaperOpportunity; now: Date }) {
   const label = opp.optionType
     ? `${opp.underlying} ${opp.strike} ${opp.optionType}`
     : (opp.symbol ?? opp.underlying);
+  const live = monitoringView(opp, now);
+  const freshnessTone = live.freshness === "FRESH" ? "text-green-600"
+    : live.freshness === "AGING" ? "text-amber-600" : "text-red-600";
   return (
-    <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 p-4 mb-3">
+    <div className="mb-3 rounded-2xl border border-sky-800/70 bg-sky-950/25 p-5">
       <div className="flex items-center justify-between mb-2">
         <span className="font-semibold">{label}</span>
         <StatusBadge status={opp.status} />
       </div>
-      <div className="text-xs text-neutral-600 dark:text-neutral-400 grid grid-cols-3 gap-1">
+      <div className="grid grid-cols-2 gap-2 text-sm text-zinc-300 sm:grid-cols-3">
         <div>Entry: <span className="font-medium">₹{opp.entry}</span></div>
         <div>Stop: <span className="font-medium">₹{opp.stop}</span></div>
         <div>T1: <span className="font-medium">₹{opp.target1}</span></div>
@@ -146,6 +150,30 @@ function OpenCard({ opp }: { opp: PaperOpportunity }) {
         <div>Score: <span className="font-medium">{opp.score}</span></div>
         <div>MFE: <span className="font-medium">{fmt(opp.mfe)}</span></div>
         <div>MAE: <span className="font-medium">{fmt(opp.mae)}</span></div>
+      </div>
+      <div className="mt-4 rounded-xl border border-sky-900 bg-zinc-950/50 p-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-semibold">Live risk monitor</span>
+          <span className={`text-xs font-bold ${freshnessTone}`}>
+            {live.freshness}{live.priceAgeSeconds === null ? "" : ` · ${live.priceAgeSeconds}s old`}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+          <div>Current: <span className="font-semibold">{fmt(live.currentPrice, 2, "₹")}</span></div>
+          <div>P&amp;L/unit: <span className="font-semibold">{fmt(live.currentPnlPerUnit, 2, "₹")}</span></div>
+          <div>Current R: <span className="font-semibold">{fmt(live.currentR)}R</span></div>
+          <div>Stop distance: <span className="font-semibold">{fmt(live.stopDistancePct)}%</span></div>
+          <div>T1 distance: <span className="font-semibold">{fmt(live.target1DistancePct)}%</span></div>
+          <div>T2 distance: <span className="font-semibold">{fmt(live.target2DistancePct)}%</span></div>
+          <div>Price at: <span className="font-semibold">{opp.lastLivePriceAt ? new Date(opp.lastLivePriceAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</span></div>
+          <div>Record update: <span className="font-semibold">{new Date(opp.updatedAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}</span></div>
+        </div>
+        {(live.freshness === "STALE" || live.freshness === "UNAVAILABLE") && (
+          <p className="mt-2 rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-800">
+            Stale-price alert: do not use this card for a manual decision until a verified LIVE update arrives.
+          </p>
+        )}
+        {opp.thetaWarning && <p className="mt-2 text-xs font-medium text-amber-700">{opp.thetaWarning}</p>}
       </div>
       {opp.source !== "LIVE" && (
         <div className="mt-2 text-xs text-orange-600 font-medium">Data source: {opp.source}</div>
@@ -180,9 +208,13 @@ function CompletedRow({ opp }: { opp: PaperOpportunity }) {
 }
 
 export default async function OpportunityJournalPage() {
-  const all = listPaperOpportunities().filter((o) => !isFixture(o));
+  const stored = listPaperOpportunities();
+  const evidence = stored.filter((o) => !isFixture(o));
+  // Manual UI records are visible for monitoring, but remain excluded from performance evidence.
+  const all = stored.filter((o) => !isFixture(o) || o.provenance === "MANUAL_UI");
   const sessions = listSessionRecords();
-  const multiSummary = buildMultiSessionSummary(sessions, all);
+  const multiSummary = buildMultiSessionSummary(sessions, evidence);
+  const now = new Date();
 
   const mStatus = marketStatus();
   let authStatus = "NOT_CONNECTED";
@@ -202,8 +234,8 @@ export default async function OpportunityJournalPage() {
   const completed = all.filter((o) => o.status !== "OPEN");
 
   return (
-    <main className="max-w-5xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-4">Opportunity Journal & Evidence Engine</h1>
+    <main className="mx-auto max-w-7xl">
+      <header className="app-surface mb-6 rounded-2xl p-5 sm:p-6"><p className="app-kicker">Monitoring and evidence</p><h1 className="mt-2 text-2xl font-bold sm:text-3xl">Opportunity Journal</h1><p className="mt-2 text-sm text-zinc-400 sm:text-base">Monitor open paper opportunities, price freshness and completed outcomes in one place.</p></header>
 
       <StatusBanner
         mStatus={mStatus}
@@ -223,7 +255,7 @@ export default async function OpportunityJournalPage() {
         {open.length === 0 ? (
           <p className="text-sm text-neutral-500">No open paper opportunities.</p>
         ) : (
-          open.map((o) => <OpenCard key={o.id} opp={o} />)
+          open.map((o) => <OpenCard key={o.id} opp={o} now={now} />)
         )}
       </section>
 

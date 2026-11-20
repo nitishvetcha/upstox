@@ -552,9 +552,9 @@ describe("SA24 — Safety Phase 24", () => {
     assert.equal(result, "NONE", `found order calls: ${result}`);
   });
 
-  it("SA24-02: Phase 22 strategy version still 20.1", async () => {
+  it("SA24-02: opportunity strategy exposes the current engine version", async () => {
     const { OPPORTUNITY_ENGINE_VERSION } = await import("./engine/opportunityEngine.ts");
-    assert.equal(OPPORTUNITY_ENGINE_VERSION, "20.1");
+    assert.equal(OPPORTUNITY_ENGINE_VERSION, "20.2");
   });
 
   it("SA24-03: MARKET_CLOSED collection creates 0 trades", async () => {

@@ -216,13 +216,13 @@ describe("SV30 — Strategy freeze and engine version integrity", () => {
     assert.ok(!src.includes("placeOrder"), "strategy must be read-only");
   });
 
-  it("SV30-02 STOCK_OPPORTUNITY_VERSION is 20.1", async () => {
+  it("SV30-02 STOCK_OPPORTUNITY_VERSION is 20.2", async () => {
     const m = await import("./engine/stockOpportunityEngine.ts");
-    assert.equal(m.STOCK_OPPORTUNITY_VERSION, "20.1");
+    assert.equal(m.STOCK_OPPORTUNITY_VERSION, "20.2");
   });
 
-  it("SV30-03 OPPORTUNITY_ENGINE_VERSION is 20.1", async () => {
+  it("SV30-03 OPPORTUNITY_ENGINE_VERSION is 20.2", async () => {
     const m = await import("./engine/opportunityEngine.ts");
-    assert.equal(m.OPPORTUNITY_ENGINE_VERSION, "20.1");
+    assert.equal(m.OPPORTUNITY_ENGINE_VERSION, "20.2");
   });
 });

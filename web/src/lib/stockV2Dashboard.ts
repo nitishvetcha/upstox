@@ -7,7 +7,7 @@ import { ema, sessionVwap, type Bar } from "./stockV2/indicators.ts";
 import { istDate } from "./stockV2/simulate.ts";
 
 export const HIST_DIR = path.join(process.cwd(), ".research-data/intraday-bars-historical");
-export const RESULTS_DIR = path.join(process.cwd(), ".research-data/stock-v2");
+export const RESULTS_DIR = path.join(process.cwd(), ".research-data/stock-v3-historical-2026-11-20");
 
 // Lightweight Charts renders UTC. Shifting by the IST offset makes the axis read as IST wall-clock time.
 const IST_SHIFT_S = 19800;

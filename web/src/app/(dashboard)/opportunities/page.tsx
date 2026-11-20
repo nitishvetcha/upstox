@@ -20,6 +20,7 @@ import { OptionPayoffVisualizer } from "@/components/OptionPayoffVisualizer";
 import { PositionSizeCalculator } from "@/components/PositionSizeCalculator";
 import { summarizeSources } from "@/lib/provenanceDisplay";
 import { pickFromStock, pickFromContract } from "@/lib/savedPickMapping";
+import { selectBestRecommendation, type RecommendationCandidate } from "@/lib/bestRecommendation";
 // ── Decision funnel: real engine counts only. Rejections are reported as one total; the engines do not split them into data-quality, strategy and risk categories. ──
 
 interface StockScanCounts {
@@ -162,9 +163,100 @@ const tw = {
 
 function SafetyNotice() {
   return (
-    <p className="rounded-lg border border-fuchsia-700/50 bg-fuchsia-900/20 px-3 py-2 text-xs font-semibold text-fuchsia-200">
-      ⚠ PAPER RESEARCH — MANUAL REVIEW ONLY. NO AUTOMATIC BROKER ORDERS. Engine grades are analytical labels, not trade approvals.
-    </p>
+    <div className="flex gap-3 rounded-xl border border-fuchsia-700/50 bg-fuchsia-900/20 px-4 py-3 text-sm text-fuchsia-100">
+      <span aria-hidden className="font-bold text-fuchsia-300">!</span><p><span className="font-semibold">Paper research · manual review only.</span> No automatic broker orders. Engine grades are analytical labels, not trade approvals.</p>
+    </div>
+  );
+}
+
+interface BestDisplay {
+  label: string;
+  strategy: string;
+  horizon: string;
+  entry: number;
+  stop: number;
+  target1: number;
+  target2: number;
+  grossRr: number;
+  netRr: number | null;
+  dataAgeSeconds: number | null;
+  invalidation: string;
+  executablePrice: string;
+}
+
+function BestAvailableNow({ candidates }: { candidates: RecommendationCandidate<BestDisplay>[] }) {
+  const best = selectBestRecommendation(candidates);
+  if (best.status === "NO_TRADE") {
+    return (
+      <section aria-label="Best available now" className="rounded-2xl border border-amber-700/60 bg-amber-950/30 p-5 sm:p-6">
+        <div className="text-xs font-semibold uppercase tracking-widest text-amber-400">Best Available Now</div>
+        <div className="mt-2 text-2xl font-bold text-amber-200">NO TRADE</div>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-amber-100/80">{best.reason}</p>
+        <p className="mt-3 text-xs text-zinc-400">{best.watchOnlyCount} candidate(s) retained for monitoring only.</p>
+      </section>
+    );
+  }
+  const { candidate } = best;
+  const item = candidate.item;
+  const age = item.dataAgeSeconds == null ? "Unavailable" : `${Math.round(item.dataAgeSeconds)}s`;
+  return (
+    <section aria-label="Best available now" className="rounded-2xl border border-emerald-700/60 bg-emerald-950/25 p-5 shadow-xl shadow-emerald-950/10 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-widest text-emerald-400">Best Available Now · manual review</div>
+          <h2 className="mt-2 text-2xl font-bold text-zinc-100">{item.label}</h2>
+          <p className="mt-1 text-sm text-zinc-300">{candidate.engine} · {item.strategy} · {item.horizon}</p>
+        </div>
+        <div className="flex gap-2"><GradeChip grade={candidate.grade} /><span className={tw.pill("teal")}>score {candidate.score}</span></div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+        <Cell label="Executable entry" value={item.executablePrice} />
+        <Cell label="Plan entry" value={fmt(item.entry)} />
+        <Cell label="Stop" value={fmt(item.stop)} />
+        <Cell label="Target 1" value={fmt(item.target1)} />
+        <Cell label="Target 2" value={fmt(item.target2)} />
+        <Cell label="Gross R:R" value={`${item.grossRr.toFixed(2)}x`} />
+        <Cell label="Net R:R after costs" value={item.netRr == null ? "Unavailable" : `${item.netRr.toFixed(2)}x`} />
+        <Cell label="Data age" value={age} tone={item.dataAgeSeconds != null && item.dataAgeSeconds <= 60 ? "text-emerald-300" : "text-amber-300"} />
+      </div>
+      <p className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-300"><span className="font-semibold text-zinc-100">Invalidation:</span> {item.invalidation}</p>
+      <p className="mt-2 text-xs text-zinc-400">Selection is grade-first across active engines. Grade C and REJECT are never promoted. No order is placed.</p>
+    </section>
+  );
+}
+
+function EngineGovernanceBanner() {
+  const engines = [
+    { name: "Index Options", status: "ACTIVE SCREENING", tone: "border-emerald-700/60 bg-emerald-950/30 text-emerald-300", desc: "Tactical Greeks screening with structural invalidation stops & live execution quotes." },
+    { name: "Intraday Stocks", status: "PAPER EVALUATION", tone: "border-sky-700/60 bg-sky-950/30 text-sky-300", desc: "1.5% max-risk structural stops, real volume/VWAP validation. Forward paper tracking." },
+    { name: "Long-Term Bluechips", status: "FUNDAMENTAL RESEARCH", tone: "border-teal-700/60 bg-teal-950/30 text-teal-300", desc: "Quality balance sheet screener (ROCE > 15%, ROE > 15%, low D/E, moat analysis)." },
+    { name: "Strategy 11.4", status: "FROZEN BENCHMARK", tone: "border-zinc-700 bg-zinc-900 text-zinc-400", desc: "SHA-256 byte-for-byte immutable historical baseline; not the unified pick engine." },
+    { name: "Swing Stocks", status: "RETIRED · WATCH ONLY", tone: "border-red-800/60 bg-red-950/30 text-red-300", desc: "Retired following negative 5y backtest. Retained for observational diagnostics only." },
+  ];
+
+  return (
+    <section aria-label="Strategy governance" className="rounded-2xl border border-zinc-800 bg-zinc-950/50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div>
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">System Architecture</span>
+          <h2 className="text-sm font-semibold text-zinc-200">Engine Governance &amp; Actionability Tiers</h2>
+        </div>
+        <span className="text-xs text-zinc-400">Transparent engine status across all asset classes</span>
+      </div>
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5 text-xs">
+        {engines.map((e) => (
+          <div key={e.name} className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-2.5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <span className="font-semibold text-zinc-200">{e.name}</span>
+              </div>
+              <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold border ${e.tone}`}>{e.status}</span>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">{e.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -181,9 +273,9 @@ function GradeChip({ grade }: { grade: OpportunityGrade | undefined }) {
 function Cell({ label, value, tone, sub }: { label: string; value: string; tone?: string; sub?: string }) {
   return (
     <div className="rounded bg-zinc-950/50 px-2 py-1.5 text-center">
-      <div className={`font-mono text-xs ${tone ?? "text-zinc-100"}`}>{value}</div>
-      <div className="text-[10px] text-zinc-500 mt-0.5">{label}</div>
-      {sub && <div className="text-[9px] text-zinc-400 mt-0.5">{sub}</div>}
+      <div className={`font-mono text-sm font-semibold ${tone ?? "text-zinc-100"}`}>{value}</div>
+      <div className="mt-1 text-xs text-zinc-400">{label}</div>
+      {sub && <div className="mt-1 text-xs text-zinc-400">{sub}</div>}
     </div>
   );
 }
@@ -380,9 +472,13 @@ function StockCard({ stock, rank, horizon = "INTRADAY" }: { stock: StockOpportun
       <div className="mt-2.5 rounded-lg border border-zinc-800 bg-zinc-950/60 p-2.5 text-xs">
         <div className="font-semibold text-zinc-300 mb-1 flex items-center justify-between">
           <span>Trade Management &amp; Trailing Plan</span>
-          <span className="text-[10px] text-zinc-500 font-mono">2-Tier Strategy</span>
+          <span className="text-[10px] text-zinc-500 font-mono">1.5% Capped Risk · 2-Tier Exit</span>
         </div>
         <div className="space-y-1 text-[11px] text-zinc-400">
+          <div className="flex items-center gap-1.5">
+            <span className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-[10px] text-amber-400">SL (Capped)</span>
+            <span>Structural stop at <strong className="text-zinc-200">{fmt(stock.stop)}</strong> (capped to max 1.5% capital risk, avoids distant session-low stops)</span>
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-[10px] text-emerald-400">T1 (50%)</span>
             <span>Exit 50% at <strong className="text-zinc-200">{fmt(stock.target1)}</strong> and trail Stop to Breakeven (<strong className="text-zinc-200">{fmt(stock.entry)}</strong>)</span>
@@ -706,9 +802,13 @@ function OptionRecCard({ contract, snapshotSource, lotSize, rank, daysLeft }: {
       <div className="mt-2.5 rounded-lg border border-zinc-800 bg-zinc-950/60 p-2.5 text-xs">
         <div className="font-semibold text-zinc-300 mb-1 flex items-center justify-between">
           <span>Option Execution &amp; Trailing Plan</span>
-          <span className="text-[10px] text-zinc-500 font-mono">2-Tier Strategy</span>
+          <span className="text-[10px] text-zinc-500 font-mono">Structural SL · 2-Tier Exit</span>
         </div>
         <div className="space-y-1 text-[11px] text-zinc-400">
+          <div className="flex items-center gap-1.5">
+            <span className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-[10px] text-amber-400">SL (Structural)</span>
+            <span>Invalidation at <strong className="text-zinc-200">{fmt(contract.stop)}</strong> (bounded delta-scaled risk, not a blind 50% haircut)</span>
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-[10px] text-emerald-400">T1 (50%)</span>
             <span>Book 50% at <strong className="text-zinc-200">{fmt(contract.target1)}</strong> and move SL to Entry (<strong className="text-zinc-200">{fmt(contract.entry)}</strong>) for a risk-free trade</span>
@@ -1055,10 +1155,51 @@ export default async function OpportunitiesPage() {
   const isPrimary = (o: OptionsOpportunityResult) => o.underlying === "NIFTY" || o.underlying === "BANKNIFTY";
   const indexOptions = [...rawIndexOptions].sort((a, b) => (isPrimary(a) ? 0 : 1) - (isPrimary(b) ? 0 : 1));
 
-  const intradayLong = intradayResult.topOpportunities.map((s) => s).filter((s) => s.direction === "BULLISH");
-  const intradayShort = intradayResult.topOpportunities.map((s) => s).filter((s) => s.direction === "BEARISH");
-  const swingLong = swingResult.topOpportunities.map((s) => s).filter((s) => s.direction === "BULLISH");
-  const swingShort = swingResult.topOpportunities.map((s) => s).filter((s) => s.direction === "BEARISH");
+  // REJECT candidates remain available in the diagnostics section, but must never be
+  // presented in the primary recommendation lanes.
+  const actionableStocks = (stocks: StockOpportunity[]) => stocks.filter((s) => s.grade !== "REJECT");
+  const intradayEligible = actionableStocks(intradayResult.topOpportunities);
+  const swingEligible = actionableStocks(swingResult.topOpportunities);
+  const intradayLong = intradayEligible.filter((s) => s.direction === "BULLISH");
+  const intradayShort = intradayEligible.filter((s) => s.direction === "BEARISH");
+  const swingLong = swingEligible.filter((s) => s.direction === "BULLISH");
+  const swingShort = swingEligible.filter((s) => s.direction === "BEARISH");
+
+  const recommendationCandidates: RecommendationCandidate<BestDisplay>[] = [
+    ...indexOptions.flatMap((result) => result.topOpportunities.map((item) => {
+      const tradeAt = item.lastTradeTime ? Date.parse(item.lastTradeTime) : NaN;
+      return {
+        engine: "OPTIONS" as const,
+        grade: item.grade,
+        score: item.opportunityScore,
+        netRewardToRisk: item.estimatedValues?.netRewardToRisk ?? null,
+        item: {
+          label: `${item.underlying} ${item.strike} ${item.optionType}`,
+          strategy: item.strategyType,
+          horizon: item.expiry ? `Expires ${item.expiry}` : "Intraday options",
+          entry: item.entry, stop: item.stop, target1: item.target1, target2: item.target2,
+          grossRr: item.rr,
+          netRr: item.estimatedValues?.netRewardToRisk ?? null,
+          dataAgeSeconds: Number.isFinite(tradeAt) ? Math.max(0, (now.getTime() - tradeAt) / 1000) : null,
+          invalidation: item.invalidation,
+          executablePrice: item.executablePricing ? fmt(item.executablePricing.entryPrice) : "Unavailable",
+        },
+      };
+    })),
+    ...intradayResult.topOpportunities.map((item) => ({
+      engine: "STOCK_INTRADAY" as const,
+      grade: item.grade,
+      score: item.opportunityScore,
+      netRewardToRisk: null,
+      item: {
+        label: item.symbol, strategy: item.setup, horizon: "Intraday · exit by session close",
+        entry: item.entry, stop: item.stop, target1: item.target1, target2: item.target2,
+        grossRr: item.rr, netRr: null, dataAgeSeconds: item.dataAgeSeconds ?? null,
+        invalidation: item.invalidation,
+        executablePrice: "Unavailable — use live bid/ask before manual entry",
+      },
+    })),
+  ];
 
 
   const scannedAt = now.toLocaleString("en-IN", {
@@ -1066,17 +1207,18 @@ export default async function OpportunitiesPage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-2 md:p-4">
+    <div className="mx-auto max-w-[90rem] space-y-8">
 
       {/* Header */}
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div className="app-surface flex flex-wrap items-end justify-between gap-4 rounded-2xl p-5 sm:p-6">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-100">Opportunities Dashboard</h1>
-          <p className="text-xs text-zinc-500 mt-0.5">
-            Opportunity Engine v20.1 · read-only · no real orders · scanned {scannedAt} IST
+          <p className="app-kicker">Unified recommendation review</p>
+          <h1 className="mt-2 text-2xl font-bold text-zinc-100 sm:text-3xl">Opportunities</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            Opportunity Engine v20.2 · read-only · no real orders · scanned {scannedAt} IST
           </p>
           {/* G5: one data-source label for everything on this page. MOCK, MIXED, UNAVAILABLE and LIVE are shown as they are. */}
-          <p className="text-xs mt-0.5 font-mono text-zinc-300">
+          <p className="mt-1 text-xs font-mono text-zinc-400">
             Data source (options): {summarizeSources(indexOptions.map((o) => o.source))} · stock scans: {summarizeSources([intradayResult.source, swingResult.source])}
           </p>
         </div>
@@ -1091,6 +1233,10 @@ export default async function OpportunitiesPage() {
       </div>
 
       <SafetyNotice />
+
+      <BestAvailableNow candidates={recommendationCandidates} />
+
+      <EngineGovernanceBanner />
 
       <DecisionFunnel
         options={indexOptions}
@@ -1109,7 +1255,7 @@ export default async function OpportunitiesPage() {
 
         <SubSection title="Intraday Stocks" tone="text-zinc-300">
           <p className="mb-2 text-xs text-zinc-500">
-            {intradayResult.stocksScanned} scanned ({intradayResult.universe}) · {intradayResult.stocksAvailable} with data · {intradayResult.topOpportunities.length} candidates · freshness: {intradayResult.freshness}
+            {intradayResult.stocksScanned} scanned ({intradayResult.universe}) · {intradayResult.stocksAvailable} with data · {intradayEligible.length} eligible · {intradayResult.topOpportunities.length - intradayEligible.length} rejected in top results · freshness: {intradayResult.freshness}
           </p>
           <div className="mb-3 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
@@ -1147,7 +1293,7 @@ export default async function OpportunitiesPage() {
               )}
             </>
           ) : (
-            <Empty msg="No intraday stock candidates right now." reason={intradayResult.noOpportunityReason} />
+            <Empty msg="No eligible intraday stock candidates right now." reason={intradayResult.noOpportunityReason ?? (intradayResult.topOpportunities.length > 0 ? "The highest-scoring candidates failed mandatory grade or data-quality gates. See Rejected & No-Trade Details." : null)} />
           )}
         </SubSection>
 
@@ -1172,7 +1318,7 @@ export default async function OpportunitiesPage() {
               )}
             </>
           ) : (
-            <Empty msg="No swing stock candidates right now." reason={swingResult.noOpportunityReason} />
+            <Empty msg="No eligible swing stock candidates right now." reason={swingResult.noOpportunityReason ?? (swingResult.topOpportunities.length > 0 ? "The highest-scoring candidates are observation-only or rejected. See Rejected & No-Trade Details." : null)} />
           )}
         </SubSection>
 

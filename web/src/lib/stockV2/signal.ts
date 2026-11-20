@@ -1,10 +1,11 @@
 // Stock V2 signal candidates. Every function reads only indices at or before the decision bar `i`.
 import type { Side } from "./risk.ts";
 
-export type StrategyId = "TREND_RECLAIM" | "PULLBACK_RECLAIM";
+export type StrategyId = "TREND_RECLAIM" | "PULLBACK_RECLAIM" | "ORB_CONTINUATION";
 
-export const STRATEGIES: StrategyId[] = ["TREND_RECLAIM", "PULLBACK_RECLAIM"];
+export const STRATEGIES: StrategyId[] = ["TREND_RECLAIM", "PULLBACK_RECLAIM", "ORB_CONTINUATION"];
 export const PULLBACK_LOOKBACK = 3; // bars before the decision bar in which price must have touched EMA 21
+export const OPENING_RANGE_BARS = 15; // 09:15–09:29; signals may begin from 09:30
 
 export interface SignalInputs {
   i: number;
@@ -14,6 +15,7 @@ export interface SignalInputs {
   e9: (number | null)[];
   e21: (number | null)[];
   vwap: (number | null)[]; // session-aligned: vwap[i] is the VWAP at global index i, or null
+  sessionStart?: number;
 }
 
 // TREND_RECLAIM: EMA 9 above EMA 21 and close above VWAP (LONG); mirror for SHORT.
@@ -47,6 +49,22 @@ export function pullbackSignal(x: SignalInputs): Side | null {
   return null;
 }
 
+// ORB_CONTINUATION: the first close crossing the completed 15-minute opening range, confirmed by EMA trend and VWAP.
+// The range contains only bars before the decision bar and the next bar open is still used for execution.
+export function openingRangeSignal(x: SignalInputs): Side | null {
+  const { i, close, low, high, e9, e21, vwap, sessionStart } = x;
+  if (sessionStart == null || i < sessionStart + OPENING_RANGE_BARS || i <= 0) return null;
+  const a9 = e9[i], a21 = e21[i], v = vwap[i];
+  if (a9 === null || a21 === null || v === null) return null;
+  const openingHigh = Math.max(...high.slice(sessionStart, sessionStart + OPENING_RANGE_BARS));
+  const openingLow = Math.min(...low.slice(sessionStart, sessionStart + OPENING_RANGE_BARS));
+  if (a9 > a21 && close[i] > v && close[i] > openingHigh && close[i - 1] <= openingHigh) return "LONG";
+  if (a9 < a21 && close[i] < v && close[i] < openingLow && close[i - 1] >= openingLow) return "SHORT";
+  return null;
+}
+
 export function signalFor(strategy: StrategyId, x: SignalInputs): Side | null {
-  return strategy === "TREND_RECLAIM" ? trendSignal(x) : pullbackSignal(x);
+  if (strategy === "TREND_RECLAIM") return trendSignal(x);
+  if (strategy === "PULLBACK_RECLAIM") return pullbackSignal(x);
+  return openingRangeSignal(x);
 }

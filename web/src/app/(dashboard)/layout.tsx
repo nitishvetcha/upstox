@@ -21,7 +21,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar tickers={tickers} generatedAt={generatedAt} dataLabel={dataLabel(analyses.map((a) => a.snapshot))} upstoxStatus={token.status} />
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main className="flex-1 px-4 py-5 sm:px-6 md:px-8 md:py-7">{children}</main>
       </div>
     </div>
   );

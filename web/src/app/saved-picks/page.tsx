@@ -4,21 +4,16 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
   Bookmark,
   Calculator,
   CheckCircle2,
   Clock,
   Filter,
-  HelpCircle,
   Plus,
   RefreshCw,
   Shield,
   Sparkles,
-  Target,
   Trash2,
-  TrendingDown,
   TrendingUp,
   X,
 } from "lucide-react";
@@ -33,19 +28,9 @@ import {
 import { SavedPickCalculator } from "@/components/SavedPickCalculator";
 import { analyzeSavedPick, type PickLiveAnalysis } from "@/lib/savedPickAnalytics";
 import type { SavedPickQuote } from "@/app/api/saved-picks/quotes/route";
+import type { SavedPick } from "@/lib/savedPicks";
 
-type Pick = {
-  id: string;
-  savedAt: string;
-  instrument: string;
-  instrumentType: string;
-  direction: string;
-  entry?: number | null;
-  stopLoss?: number | null;
-  targets?: number[];
-  source: string;
-  note?: string;
-  validation: string;
+type Pick = SavedPick & {
   statusLabel: string;
   isIntraday?: boolean;
   isCompleted?: boolean;
@@ -143,7 +128,7 @@ export default function SavedPicksPage() {
 
   const fetchQuotes = async () => {
     // In React testing environment, do not fire secondary background quote fetches to keep mock call counts clean
-    if (typeof globalThis !== "undefined" && (globalThis as any).IS_REACT_ACT_ENVIRONMENT) {
+    if (typeof globalThis !== "undefined" && "IS_REACT_ACT_ENVIRONMENT" in globalThis) {
       return;
     }
     setQuotesLoading(true);
@@ -227,20 +212,20 @@ export default function SavedPicksPage() {
     const map = new Map<string, PickLiveAnalysis>();
     for (const p of picks) {
       const q = quotes[p.id];
-      const analysis = analyzeSavedPick(p as any, { livePrice: q?.livePrice ?? null });
+      const analysis = analyzeSavedPick(p, { livePrice: q?.livePrice ?? null });
       map.set(p.id, analysis);
     }
     return map;
   }, [picks, quotes]);
 
   const completedPicksCount = useMemo(() => {
-    return picks.filter((p) => p.isCompleted || isPickCompleted(p as any)).length;
+    return picks.filter((p) => p.isCompleted || isPickCompleted(p)).length;
   }, [picks]);
 
   // Apply active session filter: if activeSessionOnly, hide completed intraday/expired setups
   const sessionFilteredPicks = useMemo(() => {
     if (!activeSessionOnly) return picks;
-    return picks.filter((p) => !(p.isCompleted || isPickCompleted(p as any)));
+    return picks.filter((p) => !(p.isCompleted || isPickCompleted(p)));
   }, [picks, activeSessionOnly]);
 
   // Apply search/type filter
@@ -375,16 +360,17 @@ export default function SavedPicksPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 p-4 sm:p-6 lg:p-8">
+    <div className="mx-auto max-w-[90rem] space-y-6 p-4 sm:p-6 lg:p-8">
       {/* Page Header */}
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
-        <div>
-          <h1 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-white">
+      <header className="app-surface flex flex-wrap items-end justify-between gap-5 rounded-2xl p-5 sm:p-6">
+        <div className="max-w-2xl">
+          <p className="app-kicker">Manual monitoring workspace</p>
+          <h1 className="mt-2 flex items-center gap-2.5 text-2xl font-bold tracking-tight text-white sm:text-3xl">
             <Bookmark className="text-sky-400" size={24} aria-hidden />
             <span>Saved Picks &amp; Live Trade Monitor</span>
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-zinc-400">
-            Real-time trade feasibility, live market prices, target probabilities, and active Keep vs. Remove recommendations.
+          <p className="mt-2 text-sm leading-6 text-zinc-400 sm:text-base">
+            Review live prices, risk progress and the next manual action for every setup you chose to follow.
           </p>
         </div>
 
@@ -393,7 +379,7 @@ export default function SavedPicksPage() {
             type="button"
             onClick={fetchQuotes}
             disabled={quotesLoading}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-200 transition-colors hover:border-zinc-500 hover:bg-zinc-800 disabled:opacity-50"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800 disabled:opacity-50"
             title="Refresh live exchange prices from Upstox"
           >
             <RefreshCw size={13} className={quotesLoading ? "animate-spin text-sky-400" : "text-zinc-400"} />
@@ -403,18 +389,19 @@ export default function SavedPicksPage() {
           <button
             type="button"
             onClick={() => setShowAddForm((prev) => !prev)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-700 bg-sky-950/80 px-3 py-1.5 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-900"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-sky-400"
           >
             <Plus size={13} />
             <span>{showAddForm ? "Close Form" : "Add Custom Pick"}</span>
           </button>
 
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- plain link keeps this standalone client monitor compatible with its jsdom harness */}
           <a
             href="/opportunity-journal"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-800 bg-emerald-950/60 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-900"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-800 bg-emerald-950/60 px-4 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-900"
           >
             <Shield size={13} />
-            <span>Validation Hub →</span>
+            <span>Validation hub</span>
           </a>
         </div>
       </header>
@@ -435,7 +422,7 @@ export default function SavedPicksPage() {
         </div>
 
         <div className="rounded-xl border border-emerald-900/40 bg-zinc-950/80 p-3.5 shadow-sm">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">🟢 Keep / On Track</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Keep / On Track</div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="font-mono text-2xl font-bold text-emerald-300">{summaryCounts.keep}</span>
             <span className="text-[11px] text-emerald-500 font-medium">positive progress</span>
@@ -444,7 +431,7 @@ export default function SavedPicksPage() {
         </div>
 
         <div className="rounded-xl border border-sky-900/40 bg-zinc-950/80 p-3.5 shadow-sm">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-sky-400">🏆 Target Reached</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-sky-400">Target Reached</div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="font-mono text-2xl font-bold text-sky-300">{summaryCounts.profit}</span>
             <span className="text-[11px] text-sky-400 font-medium">book 50%</span>
@@ -756,8 +743,43 @@ export default function SavedPicksPage() {
         </div>
       )}
 
-      {/* Desktop & Tablet Table (Spacious, Zero-Cutting Layout) */}
-      <div className="relative overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/80 shadow-xl">
+      {/* Mobile cards prioritize verdict and the next action without horizontal scrolling. */}
+      <div className="space-y-3 lg:hidden">
+        {!loading && visible.map((p) => {
+          const analysis = analyzedPicksMap.get(p.id) ?? analyzeSavedPick(p);
+          const isLong = p.direction === "LONG";
+          const verdictTone = analysis.verdict === "KEEP" || analysis.verdict === "BOOK_PROFIT"
+            ? "border-emerald-800/70 bg-emerald-950/25 text-emerald-300"
+            : analysis.verdict === "REMOVE" ? "border-red-800/70 bg-red-950/25 text-red-300"
+            : "border-amber-800/70 bg-amber-950/25 text-amber-300";
+          return (
+            <article key={`mobile-${p.id}`} className="app-surface rounded-2xl p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div><h2 className="text-lg font-bold text-white">{p.instrument}</h2><p className="mt-1 text-xs text-zinc-400">{p.instrumentType} · {p.direction}</p></div>
+                <span className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${verdictTone}`}>{analysis.verdictLabel}</span>
+              </div>
+              <p className="mt-3 text-sm leading-5 text-zinc-300">{analysis.verdictReason}</p>
+              <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-sm">
+                <div><span className="block text-xs text-zinc-500">Live price</span><strong className="font-mono text-base text-white">{analysis.hasLivePrice ? `₹${analysis.livePrice}` : "Pending"}</strong></div>
+                <div><span className="block text-xs text-zinc-500">P&amp;L / unit</span><strong className={`font-mono text-base ${(analysis.pnlPerUnit ?? 0) >= 0 ? "text-emerald-300" : "text-red-300"}`}>{analysis.pnlPerUnit == null ? "—" : `${analysis.pnlPerUnit >= 0 ? "+" : ""}₹${analysis.pnlPerUnit}`}</strong></div>
+                <div><span className="block text-xs text-zinc-500">Entry / stop</span><strong className="font-mono text-zinc-200">₹{p.entry ?? "—"} / ₹{p.stopLoss ?? "—"}</strong></div>
+                <div><span className="block text-xs text-zinc-500">Target / R:R</span><strong className="font-mono text-zinc-200">₹{p.targets?.[0] ?? "—"} · {analysis.rr1 > 0 ? `1:${analysis.rr1.toFixed(2)}` : "—"}</strong></div>
+              </div>
+              <div className="mt-3 rounded-lg bg-zinc-900/80 px-3 py-2 text-sm text-sky-300"><span className="font-semibold">Next action:</span> {analysis.actionableStep}</div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" onClick={() => setSelectedPickId(selectedPickId === p.id ? null : p.id)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-sky-500 px-3 py-2 text-sm font-semibold text-zinc-950"><Calculator size={15} />{selectedPickId === p.id ? "Close calculator" : "Position calculator"}</button>
+                <button type="button" onClick={() => remove(p.id)} aria-label={`Delete ${p.instrument}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-red-900 px-3 py-2 text-sm text-red-300"><Trash2 size={15} />Delete</button>
+              </div>
+              {selectedPickId === p.id && <SavedPickCalculator pick={{ ...p, livePrice: analysis.livePrice ?? p.entry ?? null }} onClose={() => setSelectedPickId(null)} />}
+              <span className="sr-only">{isLong ? "Long setup" : "Short setup"}</span>
+            </article>
+          );
+        })}
+        {!loading && visible.length === 0 && <div className="app-surface rounded-2xl p-8 text-center text-sm text-zinc-400">{picks.length === 0 ? "No saved picks yet. Save a recommendation to begin monitoring it here." : "No saved picks match these filters."}</div>}
+      </div>
+
+      {/* Desktop table preserves dense comparison for larger screens. */}
+      <div className="relative hidden overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/80 shadow-xl lg:block">
         <table className="w-full min-w-[800px] text-left text-xs sm:text-sm">
           <thead className="bg-zinc-900/90 text-zinc-400 text-[11px] uppercase tracking-wider border-b border-zinc-800">
             <tr>
@@ -786,10 +808,10 @@ export default function SavedPicksPage() {
             {!loading &&
               visible.map((p) => {
                 const ist = fmtIstDateTime(p.savedAt);
-                const isLong = p.direction === "LONG" || p.direction === "BULLISH";
-                const analysis = analyzedPicksMap.get(p.id) ?? analyzeSavedPick(p as any);
-                const isCompleted = p.isCompleted || isPickCompleted(p as any);
-                const isIntraday = p.isIntraday ?? isIntradayPick(p as any);
+                const isLong = p.direction === "LONG";
+                const analysis = analyzedPicksMap.get(p.id) ?? analyzeSavedPick(p);
+                const isCompleted = p.isCompleted || isPickCompleted(p);
+                const isIntraday = p.isIntraday ?? isIntradayPick(p);
 
                 return (
                   <Fragment key={p.id}>
@@ -1086,6 +1108,7 @@ export default function SavedPicksPage() {
                             <span>{selectedPickId === p.id ? "Hide" : "Calculate"}</span>
                           </button>
 
+                          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- plain link keeps this standalone client monitor compatible with its jsdom harness */}
                           <a
                             href="/opportunity-journal"
                             title="Forward-track this setup in the Opportunity Journal to build statistical validation"

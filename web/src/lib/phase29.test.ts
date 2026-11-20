@@ -48,10 +48,10 @@ describe("PG29 — Opportunities page no HTTP self-fetch", () => {
     assert.ok(src.includes("swingResult.topOpportunities.map"), "must render all swing candidates");
   });
 
-  it("PG29-06 page shows version 20.1 not 20.0", () => {
+  it("PG29-06 page shows version 20.2 not 20.0", () => {
     const src = fs.readFileSync(pageFile, "utf8");
     assert.ok(!src.includes("v20.0"), "must not show v20.0");
-    assert.ok(src.includes("v20.1"), "must show v20.1");
+    assert.ok(src.includes("v20.2"), "must show v20.2");
   });
 
   it("PG29-07 no real order links in page", () => {

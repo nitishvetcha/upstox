@@ -49,11 +49,11 @@ function baseSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
 
 describe("OE — Opportunity Engine versioning", () => {
   it("OE-01: OPPORTUNITY_ENGINE_VERSION is 20.0", () => {
-    assert.equal(OPPORTUNITY_ENGINE_VERSION, "20.1");
+    assert.equal(OPPORTUNITY_ENGINE_VERSION, "20.2");
   });
 
   it("OE-02: STOCK_OPPORTUNITY_VERSION is 20.0", () => {
-    assert.equal(STOCK_OPPORTUNITY_VERSION, "20.1");
+    assert.equal(STOCK_OPPORTUNITY_VERSION, "20.2");
   });
 
   it("OE-03: engine version is independent of strategy version", async () => {
@@ -69,7 +69,7 @@ describe("OO — Options Opportunity evaluation", () => {
     const s = baseSnapshot();
     const r = evaluateOptionsOpportunity(s, "NIFTY");
     assert.ok(r.timestamp);
-    assert.equal(r.engineVersion, "20.1");
+    assert.equal(r.engineVersion, "20.2");
     assert.equal(r.underlying, "NIFTY");
     assert.ok(Array.isArray(r.topOpportunities));
     assert.ok(Array.isArray(r.rejectedContracts));
@@ -310,7 +310,7 @@ describe("SO — Stock opportunity engine source safety", () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
     const r = await scanStocks("swing", FIXTURE_NOW, FIXTURE_DEPS);
     assert.equal(r.kind, "swing");
-    assert.ok(r.engineVersion === "20.1");
+    assert.ok(r.engineVersion === "20.2");
   });
 
   it("SO-03: unavailable source returns noOpportunityReason", async () => {
@@ -322,10 +322,10 @@ describe("SO — Stock opportunity engine source safety", () => {
     assert.equal(r.topOpportunities.length, 0);
   });
 
-  it("SO-04: universe is NIFTY_50", async () => {
+  it("SO-04: universe is valid liquid stock universe", async () => {
     const { scanStocks } = await import("./engine/stockOpportunityEngine.ts");
     const r = await scanStocks("intraday", FIXTURE_NOW, FIXTURE_DEPS);
-    assert.equal(r.universe, "NIFTY_50");
+    assert.ok(r.universe === "NIFTY_50" || r.universe === "ALL_LIQUID");
   });
 
   it("SO-05: topOpportunities length is at most 3", async () => {

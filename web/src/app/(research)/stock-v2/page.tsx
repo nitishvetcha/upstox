@@ -4,7 +4,7 @@ import { LineChart } from "@/components/research/LineChart";
 import { buildChartPayload, equityAndDrawdown, loadDevelopment, loadTradesFile, toChartTime, type TradeRecord } from "@/lib/stockV2Dashboard";
 
 // Stock V2 research explorer. Reads stored historical research only. No broker or market-data request is made.
-// Historical results are never presented as live. The two candidates below FAILED the pre-registered rule and are kept as they are.
+// Historical results are never presented as live. Failed candidates remain visible and are never promoted.
 export const dynamic = "force-dynamic";
 
 type Scenario = { metrics: Record<string, number | null | Record<string, number>>; sessionStatus: Record<string, number>; rejectionCounts: Record<string, number>; byMonth: Record<string, { trades: number; netPnl: number; expectancyR: number | null }> };
@@ -13,6 +13,7 @@ type Candidate = { strategy: string; base: Scenario; conservative: Scenario; adv
 const RULES: Record<string, string> = {
   TREND_RECLAIM: "LONG: EMA9 > EMA21 and close > session VWAP. SHORT: mirror. Signal on bar i close; entry at bar i+1 open (adverse slippage). Stop: session low (high for SHORT) minus 0.15 × ATR proxy. Target: close ± 1.2 × ATR proxy. Reward-to-risk must be ≥ 1.5.",
   PULLBACK_RECLAIM: "Trend as above, plus a touch of EMA21 within the previous 3 bars and a close back through EMA9 and VWAP. Same entry, stop, target and 1.5 minimum reward-to-risk.",
+  ORB_CONTINUATION: "First close beyond the completed 09:15–09:29 opening range, confirmed by EMA9/EMA21 direction and session VWAP. Entry is the next minute open with adverse slippage; the same causal stop, target and cost model applies.",
 };
 const fmt = (v: unknown, d = 2) => (typeof v === "number" && Number.isFinite(v) ? v.toFixed(d) : "N/A");
 const inr = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? `₹${Math.round(v).toLocaleString("en-IN")}` : "N/A");
@@ -67,7 +68,7 @@ export default async function StockV2Page({ searchParams }: { searchParams: Prom
       <header className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-semibold text-zinc-50">Stock V2 — historical research explorer</h1>
         <Badge tone="warn">HISTORICAL RESEARCH · NOT LIVE</Badge>
-        <Badge tone="bear">NO-GO · NO CANDIDATE SELECTED</Badge>
+        <Badge tone="bear">NO-GO · 3 CANDIDATES REJECTED</Badge>
         <Badge tone="warn">RECOMMENDATION-ONLY · NO ORDERS</Badge>
       </header>
 
@@ -79,12 +80,12 @@ export default async function StockV2Page({ searchParams }: { searchParams: Prom
             <div>
               <div className="text-xs uppercase tracking-wider text-zinc-400">Development (40 sessions)</div>
               <p className="text-zinc-300">
-                {dev.provenance.developmentDates[0]} → {dev.provenance.developmentDates.at(-1)} · {dev.provenance.symbols} stocks · completed. Selection rule applied once: no candidate passed.
+                {dev.provenance.developmentDates[0]} to {dev.provenance.developmentDates.at(-1)} · {dev.provenance.symbols} stocks · completed. Selection rule applied once: no candidate passed.
               </p>
             </div>
             <div>
               <div className="text-xs uppercase tracking-wider text-zinc-400">Validation (20 sessions)</div>
-              <p className="text-zinc-300">NOT RUN. Not run because no candidate passed development. The untouched validation sessions have not been used.</p>
+              <p className="text-zinc-300">NOT RUN. Trend Reclaim, Pullback Reclaim and ORB Continuation all failed development, so the protocol stopped before validation.</p>
             </div>
           </Card>
 

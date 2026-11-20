@@ -21,14 +21,14 @@ export function toneOf(label: string): Tone {
 export function Badge({ children, tone }: { children: ReactNode; tone?: Tone }) {
   const t = tone ?? toneOf(String(children));
   return (
-    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold tracking-wide ${TONES[t]}`}>
+    <span className={`inline-flex min-h-6 items-center rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide ${TONES[t]}`}>
       {children}
     </span>
   );
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-lg border border-zinc-800 bg-zinc-900/60 ${className}`}>{children}</section>;
+  return <section className={`app-surface rounded-2xl ${className}`}>{children}</section>;
 }
 
 export function Stat({
@@ -54,7 +54,7 @@ export function Stat({
           : "text-zinc-100";
   return (
     <div className="min-w-0" title={hint}>
-      <div className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-zinc-500">
+      <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-zinc-400">
         <span>{label}</span>
         {hint && (
           <span className="cursor-help text-zinc-600 hover:text-zinc-400 text-[10px]" title={hint}>
@@ -62,8 +62,8 @@ export function Stat({
           </span>
         )}
       </div>
-      <div className={`break-words font-mono text-sm tabular-nums ${color}`}>{value}</div>
-      {sub && <div className="text-[10px] text-zinc-400 truncate mt-0.5">{sub}</div>}
+      <div className={`mt-0.5 break-words font-mono text-base font-semibold tabular-nums ${color}`}>{value}</div>
+      {sub && <div className="mt-1 truncate text-xs text-zinc-400">{sub}</div>}
     </div>
   );
 }
@@ -86,7 +86,7 @@ const STATUS: Record<Status, string> = {
 };
 export function StatusPill({ status, children, title }: { status: Status; children: ReactNode; title?: string }) {
   return (
-    <span title={title} className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-semibold tracking-wide ${STATUS[status]}`}>
+    <span title={title} className={`inline-flex min-h-6 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide ${STATUS[status]}`}>
       <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />{children}
     </span>
   );
@@ -94,7 +94,7 @@ export function StatusPill({ status, children, title }: { status: Status; childr
 
 export function SectionTitle({ children, hint }: { children: ReactNode; hint?: string }) {
   return (
-    <h2 className="mb-2 flex items-baseline gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-zinc-400">
+    <h2 className="mb-3 flex items-baseline gap-2 text-sm font-semibold uppercase tracking-[0.12em] text-zinc-300">
       {children}{hint && <span className="normal-case tracking-normal text-zinc-500" title={hint}>ⓘ</span>}
     </h2>
   );

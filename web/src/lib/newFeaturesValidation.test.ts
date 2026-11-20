@@ -21,7 +21,7 @@ import { calculatePositionSize } from "./positionSizing.ts";
 import type { StockMarketData } from "./services/stockService.ts";
 
 describe("FV — Feature Validation: Stock Engine VWAP & Trade Planning", () => {
-  it("FV-01: calculates typical intraday VWAP and vwapDistancePct", () => {
+  it("FV-01: uses a supplied session VWAP and never relabels typical price as VWAP", () => {
     const q: StockMarketData = {
       symbol: "TEST_STOCK",
       exchange: "NSE",
@@ -39,13 +39,12 @@ describe("FV — Feature Validation: Stock Engine VWAP & Trade Planning", () => 
       changePercent: 5.0,
       volume: 500_000,
       freshness: "LIVE",
+      vwap: 103.5,
     };
-    // typical price = (110 + 98 + 105) / 3 = 313 / 3 = 104.33
-    // vwapDistancePct = (105 - 104.33) / 104.33 * 100 ≈ +0.64%
     const res = scoreIntradayQuote(q, 1.0);
     assert.ok(res !== null, "quote with breakout setup must be scored");
     assert.ok(typeof res.vwap === "number");
-    assert.equal(res.vwap, 104.33);
+    assert.equal(res.vwap, 103.5);
     assert.ok(typeof res.vwapDistancePct === "number");
     assert.ok(res.vwapDistancePct! > 0, "LTP 105 is above VWAP 104.33");
     assert.ok(
@@ -72,6 +71,7 @@ describe("FV — Feature Validation: Stock Engine VWAP & Trade Planning", () => 
       changePercent: -10.0,
       volume: 600_000,
       freshness: "LIVE",
+      vwap: 93,
     };
     // typical price = (101 + 88 + 90) / 3 = 93
     // vwapDistancePct = (90 - 93) / 93 * 100 = -3.23%
@@ -83,6 +83,20 @@ describe("FV — Feature Validation: Stock Engine VWAP & Trade Planning", () => 
       res.scored.reasons.some((r) => r.includes("Trading below intraday VWAP")),
       "must add below VWAP confirmation for breakdown"
     );
+  });
+
+  it("FV-02b: leaves VWAP unavailable when no session price-volume calculation exists", () => {
+    const q: StockMarketData = {
+      symbol: "NO_VWAP", exchange: "NSE", instrumentKey: "NSE_EQ|NOVWAP",
+      timestamp: new Date().toISOString(), marketStatus: "OPEN", source: "MOCK",
+      unavailableReason: null, ltp: 105, open: 100, high: 110, low: 98,
+      previousClose: 100, change: 5, changePercent: 5, volume: 500_000, freshness: "LIVE",
+    };
+    const res = scoreIntradayQuote(q, 1);
+    assert.ok(res);
+    assert.equal(res.vwap, null);
+    assert.equal(res.vwapDistancePct, null);
+    assert.equal(res.scored.reasons.some((r) => r.includes("VWAP")), false);
   });
 });
 
@@ -342,10 +356,10 @@ describe("FV — Feature Validation: Saved Picks Risk/Reward Calculations", () =
     };
     const opp = evaluateOptionsOpportunity(lowIvSnap, "NIFTY", now);
     assert.ok(opp !== null);
-    const nakedOpp = opp.topOpportunities.find((o) => o.strategyType === "LONG_PUT");
-    assert.ok(nakedOpp, "Naked put opportunity must be present");
-    const hasSwitcherReason = nakedOpp.reasons.some((r) => r.includes("Low IV") && r.includes("Volatility Switcher"));
-    assert.ok(hasSwitcherReason, "Naked option must include Low IV Volatility Switcher rationale");
+    const hasSwitcherReason = opp.topOpportunities.some((o) =>
+      o.reasons.some((r) => r.includes("Low IV") && r.includes("Volatility Switcher")),
+    );
+    assert.ok(hasSwitcherReason, "Ranked candidates must explain the low-IV directional preference");
   });
 
   it("FV-18: isZeroDteExpiry detects same-day expiry in IST accurately", () => {

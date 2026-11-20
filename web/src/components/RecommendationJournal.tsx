@@ -136,7 +136,7 @@ function DetailModal({ entry, onClose }: { entry: RecommendationJournalEntry; on
         )}
 
         <div className="text-xs text-zinc-500">
-          <div>Score: {r.score.total}/100 · Confidence: {r.confidence}% · Source: {r.source}</div>
+          <div>Score: {r.score.total}/100 · Rule agreement: {r.confidence}% · Source: {r.source}</div>
           {entry.paperTradeId && <div className="mt-1">Paper Trade: {entry.paperTradeId}</div>}
         </div>
 

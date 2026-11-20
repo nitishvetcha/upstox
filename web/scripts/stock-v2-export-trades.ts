@@ -7,13 +7,15 @@ import { SCENARIOS } from "../src/lib/stockV2/risk.ts";
 import { STRATEGIES } from "../src/lib/stockV2/signal.ts";
 
 const ROOT = path.resolve(process.cwd());
+const OUT_DIR = path.resolve(process.env.STOCK_V2_OUT_DIR ?? path.join(ROOT, ".research-data/stock-v2"));
 const ds = loadHistoricalDataset(path.join(ROOT, ".research-data/intraday-bars-historical"));
 const { development } = chronologicalSplit(ds.dates, 40, 20);
 const out: Record<string, unknown> = {};
 for (const strategy of STRATEGIES) {
-  const r = runExperiment(ds, { name: `${strategy} BASE`, phase: "DEVELOPMENT", strategy, scenario: SCENARIOS.BASE, gateMode: "CORE", dates: development });
+  const r = runExperiment(ds, { name: `${strategy} BASE`, phase: "DEVELOPMENT", strategy, scenario: SCENARIOS.BASE, gateMode: "CORE", dates: development, excludePlaceholders: true });
   out[strategy] = r.trades;
 }
-const target = path.join(ROOT, ".research-data/stock-v2/trades-development-base.json");
+fs.mkdirSync(OUT_DIR, { recursive: true });
+const target = path.join(OUT_DIR, "trades-development-base.json");
 fs.writeFileSync(target, JSON.stringify({ phase: "DEVELOPMENT", scenario: "BASE", gateMode: "CORE", trades: out }));
 console.log(target);

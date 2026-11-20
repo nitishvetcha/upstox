@@ -137,7 +137,7 @@ export function simulateStock(symbol: string, bars: Bar[], gates: Record<string,
       const minute = istMinute(b.timestamp);
       if (minute < WINDOW.entryFromMin || minute >= WINDOW.entryBeforeMin) continue;
       if (e200[gi] === null) continue; // EMA 200 warm-up
-      const side = signalFor(options.strategy, { i: gi, close: closes, low: lows, high: highs, e9, e21, vwap: vwapGlobal });
+      const side = signalFor(options.strategy, { i: gi, close: closes, low: lows, high: highs, e9, e21, vwap: vwapGlobal, sessionStart: idx[0] });
       if (!side) continue;
 
       const entryBar = sess[k + 1];

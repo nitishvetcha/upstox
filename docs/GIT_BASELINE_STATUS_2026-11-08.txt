@@ -1,0 +1,301 @@
+ M web/.env.example
+ M web/.gitignore
+ M web/eslint.config.mjs
+ M web/next.config.ts
+ M web/package-lock.json
+ M web/package.json
+ M web/scripts/paper-live.mjs
+ M web/scripts/run-paper-supervisor.mjs
+ M web/scripts/run-paper-supervisor.sh
+ M web/scripts/sync-constituents.mjs
+ M web/scripts/upstox-status.mjs
+ D web/src/app/[section]/page.tsx
+ M web/src/app/api/auth/health/route.ts
+ M web/src/app/api/auth/status/route.ts
+ M web/src/app/api/opportunities/daily-summary/route.ts
+ M web/src/app/api/opportunities/options/route.ts
+ M web/src/app/api/opportunities/top/route.ts
+ M web/src/app/api/paper-opportunities/collect/route.ts
+ M web/src/app/api/paper-opportunities/monitor/route.ts
+ M web/src/app/api/paper-opportunities/route.ts
+ M web/src/app/api/paper-trading/portfolio/route.ts
+ M web/src/app/api/recommendations/diagnostic/route.ts
+ M web/src/app/api/recommendations/generate/route.ts
+ M web/src/app/api/technical/[index]/route.ts
+ M web/src/app/error.tsx
+ M web/src/app/globals.css
+ M web/src/app/layout.tsx
+ D web/src/app/market-history/page.tsx
+ D web/src/app/opportunities/page.tsx
+ D web/src/app/opportunity-journal/page.tsx
+ D web/src/app/option-history/page.tsx
+ D web/src/app/page.tsx
+ D web/src/app/performance/page.tsx
+ D web/src/app/recommendation-debug/page.tsx
+ D web/src/app/strategy-evidence/page.tsx
+ M web/src/components/AnalysisPanels.tsx
+ M web/src/components/DataStatus.tsx
+ M web/src/components/DataTimestamps.tsx
+ M web/src/components/MarketCard.tsx
+ M web/src/components/PriceChart.tsx
+ M web/src/components/RecommendationCard.tsx
+ M web/src/components/RecommendationDiagnosticPanel.tsx
+ M web/src/components/RecommendationEvaluation.tsx
+ M web/src/components/SectionViews.tsx
+ M web/src/components/Sidebar.tsx
+ M web/src/components/TopBar.tsx
+ M web/src/components/performance/WhatIfTables.tsx
+ M web/src/components/ui.tsx
+ M web/src/lib/adapters/upstoxHistoricalOptionsAdapter.ts
+ M web/src/lib/backtestEngine.ts
+ M web/src/lib/backtestExecution.ts
+ M web/src/lib/backtestSnapshot.ts
+ M web/src/lib/backtestTypes.ts
+ M web/src/lib/dataStatus.ts
+ M web/src/lib/engine/opportunityEngine.ts
+ M web/src/lib/engine/stockOpportunityEngine.ts
+ M web/src/lib/marketHistory.ts
+ M web/src/lib/paperEngine.ts
+ M web/src/lib/paperStateMachine.ts
+ M web/src/lib/paperTypes.ts
+ M web/src/lib/phase13.test.ts
+ M web/src/lib/phase14.test.ts
+ M web/src/lib/phase19.test.ts
+ M web/src/lib/phase20.test.ts
+ M web/src/lib/phase22.test.ts
+ M web/src/lib/phase23.test.ts
+ M web/src/lib/phase24.test.ts
+ M web/src/lib/phase25.test.ts
+ M web/src/lib/phase27.test.ts
+ M web/src/lib/phase28.test.ts
+ M web/src/lib/phase29.test.ts
+ M web/src/lib/phase30_1.test.ts
+ M web/src/lib/recommendation.test.ts
+ M web/src/lib/recommendationDiagnostic.ts
+ M web/src/lib/recommendationEnricher.ts
+ M web/src/lib/services/backtestScenarios.ts
+ M web/src/lib/services/backtestStore.ts
+ M web/src/lib/services/breadthConfig.ts
+ M web/src/lib/services/breadthConstituents.generated.ts
+ M web/src/lib/services/breadthService.ts
+ M web/src/lib/services/cache.ts
+ M web/src/lib/services/futures.test.ts
+ M web/src/lib/services/futures.ts
+ M web/src/lib/services/instrumentRegistry.ts
+ M web/src/lib/services/liveOpportunityCollector.ts
+ M web/src/lib/services/market.ts
+ M web/src/lib/services/marketData.test.ts
+ M web/src/lib/services/mock.ts
+ M web/src/lib/services/news.test.ts
+ M web/src/lib/services/news.ts
+ M web/src/lib/services/newsApi.ts
+ M web/src/lib/services/newsConfig.ts
+ M web/src/lib/services/newsProvider.ts
+ M web/src/lib/services/opportunityTrackingStore.ts
+ M web/src/lib/services/optionChainAnalytics.ts
+ M web/src/lib/services/optionContractLTT.ts
+ M web/src/lib/services/paperOpportunityMonitor.ts
+ M web/src/lib/services/paperOpportunityStore.ts
+ M web/src/lib/services/paperStore.ts
+ M web/src/lib/services/paperTradeMonitorRunner.ts
+ M web/src/lib/services/paperTrading.test.ts
+ M web/src/lib/services/performance.test.ts
+ M web/src/lib/services/phase10.test.ts
+ M web/src/lib/services/phase9.test.ts
+ M web/src/lib/services/recommendationStore.ts
+ M web/src/lib/services/risk.test.ts
+ M web/src/lib/services/risk/riskConfig.ts
+ M web/src/lib/services/risk/riskService.ts
+ M web/src/lib/services/risk/riskTypes.ts
+ M web/src/lib/services/rss.test.ts
+ M web/src/lib/services/sessionEvidenceStore.ts
+ M web/src/lib/services/stockService.ts
+ M web/src/lib/services/technical.test.ts
+ M web/src/lib/services/upstoxAuth.ts
+ M web/src/lib/services/upstoxMarket.ts
+ M web/src/lib/services/walkForwardStore.ts
+ M web/src/lib/time.ts
+ M web/src/lib/types.ts
+ M web/tsconfig.json
+?? docs/
+?? web/.next-prod-verify/
+?? web/.next-saved-picks-verify/
+?? web/.nvmrc
+?? web/.research-data/
+?? web/docs/disk_crash_recovery_implementation_plan.md
+?? web/docs/disk_crash_recovery_specification.md
+?? web/docs/final_recommendation_quality_acceptance_report.md
+?? web/docs/full_application_audit.md
+?? web/docs/full_application_completion_tracker.md
+?? web/docs/full_dashboard_completion_report.md
+?? web/docs/fundamental_provider_comparison.md
+?? web/docs/intraday-evaluation-rules.md
+?? web/docs/intraday-replay-rules.md
+?? web/docs/inventory/
+?? web/docs/master-audit-and-implementation-plan.md
+?? web/docs/options-audit-1a.md
+?? web/docs/options-data-audit.md
+?? web/docs/per_stock_technicals_implementation_plan.md
+?? web/docs/phase2316_one_session_completion_report.md
+?? web/docs/phase2316_opus_independent_audit.md
+?? web/docs/phase2316_stage2_multisession_test_report.md
+?? web/docs/playwright_e2e_acceptance_report.md
+?? web/docs/positional-v2-hypothesis.md
+?? web/docs/round1_final_acceptance_report.md
+?? web/docs/round1_offline_completion_report.md
+?? web/docs/round2_correction_report.md
+?? web/docs/round2_final_consistency_audit.md
+?? web/docs/round2_final_corrections.md
+?? web/docs/round2_final_remediation_acceptance_report.md
+?? web/docs/round2_final_remediation_baseline.md
+?? web/docs/round2_final_safety_review.md
+?? web/docs/round2_remaining_gaps_report.md
+?? web/docs/strategy_11_4_baseline_verification.md
+?? web/e2e/
+?? web/ecosystem.config.cjs
+?? web/playwright-report/
+?? web/playwright.config.ts
+?? web/scripts/backfill-intraday-bars.mjs
+?? web/scripts/backtest-positional-v2.ts
+?? web/scripts/backtest-positional.ts
+?? web/scripts/check-research-token.ts
+?? web/scripts/collect-intraday-bars.mjs
+?? web/scripts/constituents/
+?? web/scripts/crosssectional-daily-a2.py
+?? web/scripts/crosssectional-daily-dev.py
+?? web/scripts/daily-equity-protocol.ts
+?? web/scripts/intraday-evaluation.ts
+?? web/scripts/intraday-hypotheses.ts
+?? web/scripts/intraday-i1-protocol.ts
+?? web/scripts/intraday-replay.ts
+?? web/scripts/lib/
+?? web/scripts/nse-bhavcopy-sweep-v2.py
+?? web/scripts/nse-bhavcopy-sweep.py
+?? web/scripts/nse-bhavcopy-verify.py
+?? web/scripts/nse-discovery-collect.ts
+?? web/scripts/options-audit-research.ts
+?? web/scripts/options-data-audit.ts
+?? web/scripts/options-data-quality-diagnostic.ts
+?? web/scripts/options-research-inventory.ts
+?? web/scripts/outbound-recorder.cjs
+?? web/scripts/phase15-options-reconstruction.ts
+?? web/scripts/predictive-g1-v2.ts
+?? web/scripts/predictive-g1.ts
+?? web/scripts/recover-intraday-bars.mjs
+?? web/scripts/research-audit-experiments.ts
+?? web/scripts/research-slot-runner.sh
+?? web/scripts/runner-lib.mjs
+?? web/scripts/stock-v2-export-trades.ts
+?? web/scripts/stock-v2-placeholder-comparison.ts
+?? web/scripts/stock-v2-research.ts
+?? web/scripts/upstox-collect.ts
+?? web/scripts/upstox-coverage.ts
+?? web/scripts/upstox-daily-universe-collect.ts
+?? web/scripts/upstox-discovery.mjs
+?? web/scripts/upstox-pilot-collect.ts
+?? web/scripts/upstox-verify-clean.ts
+?? web/scripts/verify-mock-news-offline.mjs
+?? web/src/app/(dashboard)/
+?? web/src/app/(research)/
+?? web/src/app/api/options-canary/
+?? web/src/app/api/research/
+?? web/src/app/api/saved-picks/
+?? web/src/app/route-isolation.test.ts
+?? web/src/app/saved-picks/
+?? web/src/components/OpsDetails.tsx
+?? web/src/components/OpsPanel.tsx
+?? web/src/components/research/
+?? web/src/lib/backfill-intraday-bars.test.ts
+?? web/src/lib/backtestTiming.ts
+?? web/src/lib/collect-intraday-bars.test.ts
+?? web/src/lib/dataQuality.ts
+?? web/src/lib/dataRoot.ts
+?? web/src/lib/dataStatus.breadth.test.ts
+?? web/src/lib/e2eOffline.test.ts
+?? web/src/lib/engine/intradayConfidence.test.ts
+?? web/src/lib/engine/intradayReplay.test.ts
+?? web/src/lib/engine/intradayReplay.ts
+?? web/src/lib/engine/positionalBacktest.test.ts
+?? web/src/lib/engine/positionalBacktest.ts
+?? web/src/lib/engine/positionalTrend.test.ts
+?? web/src/lib/engine/positionalTrend.ts
+?? web/src/lib/engine/positionalV2.test.ts
+?? web/src/lib/engine/positionalV2.ts
+?? web/src/lib/historicalProbeCodes.test.ts
+?? web/src/lib/intradayEvaluation.test.ts
+?? web/src/lib/intradayEvaluation.ts
+?? web/src/lib/mockLiveSafeguards.test.ts
+?? web/src/lib/ops/
+?? web/src/lib/options/
+?? web/src/lib/optionsAudit.test.ts
+?? web/src/lib/optionsAudit.ts
+?? web/src/lib/optionsAuditReport.ts
+?? web/src/lib/optionsDataQualityDiagnostic.test.ts
+?? web/src/lib/optionsDataQualityDiagnostic.ts
+?? web/src/lib/paperFillCharges.test.ts
+?? web/src/lib/paperIntegrity.test.ts
+?? web/src/lib/paperMath.ts
+?? web/src/lib/paperReport.ts
+?? web/src/lib/paperTradingHardening.test.ts
+?? web/src/lib/phase13OptionsVisibility.test.ts
+?? web/src/lib/productionReadinessAudit.test.ts
+?? web/src/lib/recommendationDiagnostic.b5.test.ts
+?? web/src/lib/recommendationDiagnostic.classification.test.ts
+?? web/src/lib/research/
+?? web/src/lib/runnerLib.test.ts
+?? web/src/lib/runtimeTrust.test.ts
+?? web/src/lib/savedPicks.test.ts
+?? web/src/lib/savedPicks.ts
+?? web/src/lib/scoreText.test.ts
+?? web/src/lib/scoreText.ts
+?? web/src/lib/services/apiIntegration.test.ts
+?? web/src/lib/services/breadthSetFreshness.test.ts
+?? web/src/lib/services/breadthTimestamps.test.ts
+?? web/src/lib/services/cacheBounds.test.ts
+?? web/src/lib/services/candleFreshness.ts
+?? web/src/lib/services/candleFreshnessAttribution.test.ts
+?? web/src/lib/services/candleFreshnessPolicy.test.ts
+?? web/src/lib/services/chainFreshness.test.ts
+?? web/src/lib/services/chainFreshness.ts
+?? web/src/lib/services/chainNormalization.test.ts
+?? web/src/lib/services/contractFreshnessReconciliation.test.ts
+?? web/src/lib/services/contractFreshnessSafeguards.test.ts
+?? web/src/lib/services/expiryCalendar.test.ts
+?? web/src/lib/services/expiryCalendarRules.test.ts
+?? web/src/lib/services/freshnessConsistency.test.ts
+?? web/src/lib/services/manualPaperOpportunityProtection.test.ts
+?? web/src/lib/services/mockExecutionGuard.test.ts
+?? web/src/lib/services/mockInputs.ts
+?? web/src/lib/services/multiSessionPaperEvaluation.test.ts
+?? web/src/lib/services/newsMockMode.test.ts
+?? web/src/lib/services/nextBarExecution.test.ts
+?? web/src/lib/services/nextBarExecutionRegression.test.ts
+?? web/src/lib/services/optionCandidateWindow.ts
+?? web/src/lib/services/optionLegGuard.ts
+?? web/src/lib/services/optionPriceConsistency.test.ts
+?? web/src/lib/services/optionPriceVerification.ts
+?? web/src/lib/services/optionQuoteCanary.ts
+?? web/src/lib/services/optionWindowLegs.test.ts
+?? web/src/lib/services/optionsV2IndexChecks.test.ts
+?? web/src/lib/services/optionsV3Completion.test.ts
+?? web/src/lib/services/paperLedgerStore.ts
+?? web/src/lib/services/paperPriceInput.ts
+?? web/src/lib/services/paperSettlementLifecycle.test.ts
+?? web/src/lib/services/phase11MarketReliability.test.ts
+?? web/src/lib/services/phase1Hardening.test.ts
+?? web/src/lib/services/phase2315Integration.test.ts
+?? web/src/lib/services/phase2316Hardening.test.ts
+?? web/src/lib/services/risk/riskCosts.test.ts
+?? web/src/lib/services/risk/riskService.test.ts
+?? web/src/lib/services/settlementIngestion.test.ts
+?? web/src/lib/services/settlementIngestion.ts
+?? web/src/lib/services/stockMasterMockGuard.test.ts
+?? web/src/lib/services/technicalFetchGate.test.ts
+?? web/src/lib/services/technicalMapping.ts
+?? web/src/lib/services/timestampValidation.test.ts
+?? web/src/lib/services/upstoxAuthSources.test.ts
+?? web/src/lib/stockSwingFreshness.test.ts
+?? web/src/lib/stockV2/
+?? web/src/lib/stockV2Dashboard.ts
+?? web/src/lib/testFixtures/
+?? web/test-results/

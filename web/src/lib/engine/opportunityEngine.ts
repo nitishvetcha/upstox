@@ -1,4 +1,4 @@
-// Phase 20 — Opportunity Engine v20.0 → 20.1
+// Opportunity Engine 20.2 — stricter paper-actionability and provenance policy.
 // Two-stage: underlying analysis (analyzeMarket) → contract selection & ranking.
 // Independent of 11.4-frozen strategy. Reuses existing analysis infrastructure.
 // No order execution; no strategy changes.
@@ -20,7 +20,7 @@ import {
   type LegPricingDetail,
 } from "../optionsPricingEngine.ts";
 
-export const OPPORTUNITY_ENGINE_VERSION = "20.1";
+export const OPPORTUNITY_ENGINE_VERSION = "20.2";
 
 // ── Configurable weights (must sum to 100) ────────────────────────────────────
 // Document purpose of each weight so they can be tuned from live results.
@@ -425,8 +425,8 @@ export function getIstHourMinute(now: Date): { hour: number; minute: number; isA
 // ── Strategy selection ────────────────────────────────────────────────────────
 // Choose the simplest defined-risk strategy that suits current conditions.
 
-function selectStrategy(type: "CE" | "PE", ivp = 50): StrategyType {
-  if (ivp > 60) {
+function selectStrategy(type: "CE" | "PE", ivp: number | null): StrategyType {
+  if (ivp !== null && ivp > 60) {
     return type === "CE" ? "BULL_CALL_SPREAD" : "BEAR_PUT_SPREAD";
   }
   return type === "CE" ? "LONG_CALL" : "LONG_PUT";
@@ -443,19 +443,36 @@ function calcTradePoints(
   chain: ChainMetrics,
   atr: number,
   referenceLtp?: number,
+  gamma?: number | null,
+  theta?: number | null,
 ): { stop: number; target1: number; target2: number; rr: number; breakeven: number } {
   const d = Math.abs(delta ?? 0.35);
-  // Stop: 50% of premium (or reference LTP when available)
-  const stopBase = referenceLtp && referenceLtp > 0 ? referenceLtp : entry;
-  const stop = r2(stopBase * 0.50) ?? r2Strict(entry * 0.50);
+
+  // 1. Structural Stop Loss:
+  // Stop loss is strictly anchored to executable entry price (never above entry).
+  // Calculate adverse move to underlying technical invalidation (support for CE, resistance for PE):
+  const invalLevel = type === "CE" ? chain.support : chain.resistance;
+  const rawAdverseMove = type === "CE" ? Math.max(spot - invalLevel, atr * 0.3) : Math.max(invalLevel - spot, atr * 0.3);
+  const adverseMove = Math.min(Math.max(rawAdverseMove, atr * 0.3), atr * 1.0);
+
+  // Delta-scaled option premium decay on technical invalidation:
+  const deltaLoss = d * adverseMove;
+
+  // Bound the stop loss between 25% (noise floor) and 40% (delta-scaled ceiling):
+  // Replaces crude flat 50% haircut with structural invalidation bounded for capital protection.
+  const maxLossPct = d >= 0.50 ? 0.30 : d >= 0.40 ? 0.35 : 0.40;
+  const minLossPct = 0.25;
+  const boundedLoss = Math.min(Math.max(deltaLoss, entry * minLossPct), entry * maxLossPct);
+
+  const stop = r2(entry - boundedLoss) ?? r2Strict(entry * 0.65);
   const risk = Math.max(entry - stop, 0.01);
 
+  // 2. Realistic Targets:
   // Target based on room to structural level, scaled by delta.
+  // Bound room to realistic horizon (avoids excessively distant targets on intraday/tactical horizon).
   const level = type === "CE" ? chain.resistance : chain.support;
   const room = Math.abs(level - spot);
-  // Use at least 0.4× ATR as minimum room (avoids zero target when at structural level)
-  // Ceiling: bound room to 2.5× ATR (or 1.5× expected move) so targets stay realistic for intraday/tactical horizons.
-  const maxRoom = Math.max(atr * 2.5, (chain.expectedMove ?? 0) * 1.5, 120);
+  const maxRoom = Math.max(atr * 2.0, (chain.expectedMove ?? 0) * 1.2, 100);
   const useRoom = Math.min(Math.max(room, atr * 0.4), maxRoom);
 
   const t1 = r2(entry + d * useRoom * 0.45) ?? entry;
@@ -552,7 +569,9 @@ export function evaluateOptionsOpportunity(
   const chain = m.chain; // from chainMetrics() inside analyzeMarket
   const atm = atmStrike(s.chain, s.spot);
   const atr = s.indicators?.atr ?? (s.spot * 0.01);
-  const ivp = s.ivPercentile ?? 50;
+  // Missing IV history stays missing. It must not silently become the 50th percentile
+  // and influence strategy selection or attractiveness scoring.
+  const ivp = s.ivPercentile;
 
   const dq: Record<string, string> = {
     market: s.sources.market.source,
@@ -606,10 +625,11 @@ export function evaluateOptionsOpportunity(
       whyReasons.push("⚠ 0-DTE Afternoon Theta Guard (Post-12:00 IST): Rapid time decay active; scalp only with hard trailing stop or roll to next expiry");
     }
   }
-  if (ivp <= 50) {
+  if (ivp !== null && ivp <= 50) {
     whyReasons.push(`⚡ Low IV (${Math.round(ivp)}% percentile) Volatility Switcher: Directional naked option prioritized for maximum capital efficiency and uncapped upside`);
   }
-  if (ivp > 65) whyReasons.push(`⚠ Options are expensive now (IV percentile ${Math.round(ivp)}) — consider a spread to cut cost`);
+  if (ivp !== null && ivp > 65) whyReasons.push(`⚠ Options are expensive now (IV percentile ${Math.round(ivp)}) — consider a spread to cut cost`);
+  if (ivp === null) whyReasons.push("⚠ IV percentile unavailable: volatility-switcher scoring is disabled");
   if (ev.penalty > 0) whyReasons.push(`⚠ Event risk: ${ev.reason ?? "active"} (−${ev.penalty} pts)`);
 
   // Chain Greeks/IV carry no timestamp and are unverified unless the chain itself is verified LIVE (options-audit-1).
@@ -695,7 +715,7 @@ export function evaluateOptionsOpportunity(
     const vDelta = greeksUsable ? rawDelta : null;
     const d = Math.abs(vDelta ?? 0);
 
-    const pts = calcTradePoints(type, row.strike, executableEntry, vDelta, s.spot, chain, atr, q.ltp);
+    const pts = calcTradePoints(type, row.strike, executableEntry, vDelta, s.spot, chain, atr, q.ltp, q.gamma, q.theta);
     if (pts.rr < FILTERS.minRr) { rej(`R:R ${pts.rr} below ${FILTERS.minRr}`); continue; }
 
     const singlePayoff = calculateSingleLegPayoff({
@@ -734,7 +754,7 @@ export function evaluateOptionsOpportunity(
       : d >= 0.28 && d <= 0.65 ? Math.round(WEIGHTS.delta * 0.7)
       : d >= 0.18 && d <= 0.75 ? Math.round(WEIGHTS.delta * 0.4) : 0;
 
-    const ivScore = !ivUsable ? 0 : ivp > 80 ? Math.round(WEIGHTS.iv_attractiveness * 0.2)
+    const ivScore = !ivUsable || ivp === null ? 0 : ivp > 80 ? Math.round(WEIGHTS.iv_attractiveness * 0.2)
       : ivp > 65 ? Math.round(WEIGHTS.iv_attractiveness * 0.5)
       : ivp > 50 ? Math.round(WEIGHTS.iv_attractiveness * 0.7)
       : ivp > 30 ? Math.round(WEIGHTS.iv_attractiveness * 0.9)
@@ -832,6 +852,31 @@ export function evaluateOptionsOpportunity(
     if (finalGrade !== "REJECT" && sp !== null && sp > 5.0) {
       finalGrade = "C";
       gradeReasons.push(`Wide spread (${sp.toFixed(1)}% > 5.0% actionable limit): capped at watch-only grade C`);
+    }
+    // Initial paper-actionability gates are intentionally stricter than the diagnostic
+    // universe. Candidates can remain visible, but cannot be labelled tradable.
+    if (finalGrade !== "REJECT" && (q.oi < 1_000 || q.volume < 100)) {
+      finalGrade = "C";
+      gradeReasons.push(`Liquidity below paper-actionability minimum (OI ${q.oi}/1000, volume ${q.volume}/100): watch-only`);
+    }
+    if (finalGrade !== "REJECT" && pts.rr < 1.5) {
+      finalGrade = "C";
+      gradeReasons.push(`Gross risk/reward ${pts.rr}x below 1.5x paper-actionability minimum: watch-only`);
+    }
+    const singleNetRr = singlePayoff.payoff?.estimatedValues.netRewardToRisk ?? null;
+    if (finalGrade !== "REJECT" && (singleNetRr === null || singleNetRr < 1.5)) {
+      finalGrade = "C";
+      gradeReasons.push(singleNetRr === null
+        ? "Net risk/reward after slippage and charges is unavailable: watch-only"
+        : `Net risk/reward after slippage and charges is ${singleNetRr}x, below 1.5x: watch-only`);
+    }
+    if (finalGrade !== "REJECT" && ivp === null) {
+      finalGrade = "C";
+      gradeReasons.push("IV percentile history unavailable: volatility regime is not eligible for an actionable grade");
+    }
+    if (finalGrade !== "REJECT" && is0Dte) {
+      finalGrade = "C";
+      gradeReasons.push("0-DTE candidates are research-only until separately validated");
     }
     if (finalGrade !== "REJECT" && sp === null) {
       finalGrade = "C";
@@ -950,7 +995,7 @@ export function evaluateOptionsOpportunity(
               WEIGHTS.liquidity,
             );
             const spreadDeltaScore = spreadGreeksUsable ? Math.round(WEIGHTS.delta * 0.8) : 0;
-            const spreadIvScore = spreadIvUsable
+            const spreadIvScore = spreadIvUsable && ivp !== null
               ? (ivp > 60 ? WEIGHTS.iv_attractiveness : Math.round(WEIGHTS.iv_attractiveness * 0.7))
               : 0;
             const spreadRrScore = spPayoff.grossRewardToRisk >= 2.0 ? WEIGHTS.rr_quality : Math.round(WEIGHTS.rr_quality * 0.7);
@@ -980,7 +1025,7 @@ export function evaluateOptionsOpportunity(
               spPayoff.estimatedValues.isHypotheticalDiagnostic === true;
             const liveSourcesCount = Object.values(dq).filter((v) => v === "LIVE").length;
             const rawSpreadGrade = gradeOpportunity(spreadOppScore, spPayoff.grossRewardToRisk, confidence, liveSourcesCount);
-            const finalSpreadGrade = (!isChainUsable || !longLive || !shortLive || !spreadGreeksUsable || !spreadIvUsable || isSpreadHorizonInvalid)
+            let finalSpreadGrade: OpportunityGrade = (!isChainUsable || !longLive || !shortLive || !spreadGreeksUsable || !spreadIvUsable || isSpreadHorizonInvalid)
               ? "REJECT"
               : rawSpreadGrade;
 
@@ -999,6 +1044,25 @@ export function evaluateOptionsOpportunity(
             if ((!spreadGreeksUsable || !spreadIvUsable) && isChainUsable && longLive && shortLive) {
               spreadGradeReasons.push("Option IV/Greeks unavailable or vendor-reported only: cannot produce actionable grade");
             }
+            if (finalSpreadGrade !== "REJECT" && spPayoff.grossRewardToRisk < 1.5) {
+              finalSpreadGrade = "C";
+              spreadGradeReasons.push(`Gross risk/reward ${spPayoff.grossRewardToRisk}x below 1.5x paper-actionability minimum: watch-only`);
+            }
+            const spreadNetRr = spPayoff.estimatedValues.netRewardToRisk;
+            if (finalSpreadGrade !== "REJECT" && (spreadNetRr === null || spreadNetRr < 1.5)) {
+              finalSpreadGrade = "C";
+              spreadGradeReasons.push(spreadNetRr === null
+                ? "Net risk/reward after slippage and charges is unavailable: watch-only"
+                : `Net risk/reward after slippage and charges is ${spreadNetRr}x, below 1.5x: watch-only`);
+            }
+            if (finalSpreadGrade !== "REJECT" && ivp === null) {
+              finalSpreadGrade = "C";
+              spreadGradeReasons.push("IV percentile history unavailable: volatility regime is not eligible for an actionable grade");
+            }
+            if (finalSpreadGrade !== "REJECT" && is0Dte) {
+              finalSpreadGrade = "C";
+              spreadGradeReasons.push("0-DTE spreads are research-only until separately validated");
+            }
             if (liveSourcesCount < 3) {
               spreadGradeReasons.push(`Insufficient live data sources (${liveSourcesCount}/3 live: ${Object.entries(dq).filter(([_, v]) => v === "LIVE").map(([k]) => k).join(", ") || "none"})`);
             }
@@ -1010,7 +1074,7 @@ export function evaluateOptionsOpportunity(
             }
 
             const spreadReasons = [
-              ...(ivp > 60
+              ...(ivp !== null && ivp > 60
                 ? [`⚡ High IV (${Math.round(ivp)}% percentile) Volatility Switcher: Defined-risk debit spread prioritized over naked option to eliminate IV crush and reduce theta decay`]
                 : []),
               ...whyReasons,
@@ -1062,7 +1126,7 @@ export function evaluateOptionsOpportunity(
               support: chain.support,
               expectedMove: chain.expectedMove,
               grade: finalSpreadGrade,
-              gradeReasons: finalSpreadGrade === "REJECT" ? spreadGradeReasons : [],
+              gradeReasons: spreadGradeReasons,
               lastTradeTime: longQuote.lastTradeTime ?? null,
               independentQuoteLtp: longQuote.independentQuoteLtp ?? null,
               ltpDiscrepancy: longQuote.ltpDiscrepancy ?? null,
@@ -1094,7 +1158,7 @@ export function evaluateOptionsOpportunity(
 
   evaluated.sort((a, b) => {
     // High IV Switcher (>60): prioritize defined-risk spreads over naked options when scores are competitive (within 5 pts)
-    if (ivp > 60) {
+  if (ivp !== null && ivp > 60) {
       const aIsSpread = a.isMultiLeg || a.strategyType === "BULL_CALL_SPREAD" || a.strategyType === "BEAR_PUT_SPREAD";
       const bIsSpread = b.isMultiLeg || b.strategyType === "BULL_CALL_SPREAD" || b.strategyType === "BEAR_PUT_SPREAD";
       if (aIsSpread && !bIsSpread && a.opportunityScore >= b.opportunityScore - 5) return -1;

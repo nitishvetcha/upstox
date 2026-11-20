@@ -467,8 +467,8 @@ describe("AO30 — Safety: no orders, no collector bypass", () => {
 // ── SV30B: Strategy freeze and version integrity ──────────────────────────────
 
 describe("SV30B — Strategy freeze", () => {
-  it("SV30B-01 OPPORTUNITY_ENGINE_VERSION is still 20.1 (no version change from prototype)", () => {
-    assert.equal(OPPORTUNITY_ENGINE_VERSION, "20.1");
+  it("SV30B-01 OPPORTUNITY_ENGINE_VERSION reflects the current policy version", () => {
+    assert.equal(OPPORTUNITY_ENGINE_VERSION, "20.2");
   });
 
   it("SV30B-02 FILTERS.maxStrikesAtm is 7 (extractEvaluationKeys must match engine)", () => {

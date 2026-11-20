@@ -167,7 +167,7 @@ export function RecommendationSummary({ v }: { v: DashboardView }) {
     <Panel title="Recommendation of the day" right={<Badge>{r.status}</Badge>}>
       <div className="flex flex-wrap items-baseline gap-3">
         <span className="text-xl font-semibold text-zinc-100">{r.strategy ?? (r.status === "WAIT" ? "WAIT" : "NO TRADE")}</span>
-        <span className="text-xs text-zinc-500">Confidence {r.confidence}% (model confidence, not probability of profit)</span>
+        <span className="text-xs text-zinc-500">Rule agreement {r.confidence}% (not a probability of profit)</span>
       </div>
       {r.noPlanMessage && <p className="mt-1 text-sm text-zinc-400">{r.noPlanMessage}</p>}
       {!r.executable && r.strategy && <p className="mt-1 text-xs text-amber-400">Execution disabled: {r.status !== "TRADE" ? `status is ${r.status}` : `market data is ${freshnessDisplayLabel(v.market.source)}`}.</p>}

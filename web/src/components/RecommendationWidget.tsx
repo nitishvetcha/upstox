@@ -62,16 +62,20 @@ export function RecommendationWidget() {
     d === "TRADE" ? "bull" : d === "WAIT" ? "warn" : "neutral";
 
   return (
-    <Card className="p-4">
+    <Card className="p-5 sm:p-6">
       {/* Header / Controls */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h2 className="text-sm font-semibold text-zinc-100">Generate Recommendation</h2>
-        <div className="flex gap-1">
+      <div className="mb-5 flex flex-wrap items-end gap-3 border-b border-zinc-800 pb-5">
+        <div className="mr-auto">
+          <p className="app-kicker">On-demand analysis</p>
+          <h2 className="mt-1 text-lg font-semibold text-zinc-100">Generate an index recommendation</h2>
+          <p className="mt-1 text-sm text-zinc-400">Choose an underlying, then run a fresh manual analysis.</p>
+        </div>
+        <div className="flex rounded-xl border border-zinc-800 bg-zinc-950/70 p-1">
           {(["nifty", "banknifty"] as const).map((id) => (
             <button
               key={id}
               onClick={() => { setIndex(id); setRec(null); setError(null); }}
-              className={`rounded border px-3 py-1 text-xs font-semibold ${index === id ? "border-zinc-500 bg-zinc-800 text-zinc-100" : "border-zinc-800 text-zinc-400 hover:bg-zinc-900"}`}
+              className={`min-h-9 rounded-lg px-3 py-1.5 text-sm font-semibold ${index === id ? "bg-zinc-700 text-white shadow" : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"}`}
             >
               {id === "nifty" ? "NIFTY" : "BANK NIFTY"}
             </button>
@@ -80,7 +84,7 @@ export function RecommendationWidget() {
         <button
           onClick={generate}
           disabled={loading}
-          className="ml-auto rounded bg-zinc-700 px-4 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-600 disabled:opacity-50"
+          className="min-h-11 rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-zinc-950 shadow-lg shadow-sky-950/30 hover:bg-sky-400 disabled:opacity-50"
         >
           {loading ? "Analyzing…" : rec ? "Refresh Recommendation" : "Generate Recommendation"}
         </button>
@@ -88,7 +92,7 @@ export function RecommendationWidget() {
 
       {/* Empty state */}
       {!rec && !loading && !error && (
-        <p className="text-sm text-zinc-500">No recommendation generated yet. Select an underlying and click Generate Recommendation.</p>
+        <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-950/40 px-4 py-8 text-center"><p className="text-sm font-medium text-zinc-300">Ready for a fresh recommendation</p><p className="mt-1 text-sm text-zinc-500">Select an underlying above. Nothing runs automatically.</p></div>
       )}
 
       {/* Loading */}
@@ -96,8 +100,9 @@ export function RecommendationWidget() {
         <div className="space-y-1 text-xs text-zinc-400">
           <p className="font-semibold text-zinc-200">Analyzing market…</p>
           {["Spot", "Option Chain", "Technicals", "Breadth", "News", "Event Risk", "Risk"].map((s) => (
-            <p key={s} className="flex items-center gap-1"><span className="text-emerald-400">✓</span> Fetching {s}</p>
+            <p key={s} className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-zinc-500" aria-hidden /> Fetching {s}</p>
           ))}
+          <span className="sr-only" role="status">Recommendation analysis is in progress</span>
         </div>
       )}
 
@@ -129,7 +134,7 @@ export function RecommendationWidget() {
                 <Badge tone={rec.source === "LIVE" ? "bull" : "warn"}>{rec.source}</Badge>
               </div>
               <p className="mt-1 text-xs text-zinc-500">
-                {rec.underlying} · confidence {rec.confidence}% · regime {rec.market.regime}
+                {rec.underlying} · rule agreement {rec.confidence}% · regime {rec.market.regime}
               </p>
             </div>
           </div>
@@ -224,7 +229,7 @@ export function RecommendationWidget() {
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Option Chain / OI Analysis</h3>
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
               <Stat label="Spot" value={na(rec.market.spot, 0)} />
-              <Stat label="ATM Strike" value={na(rec.market.maxPain, 0)} />
+              <Stat label="ATM Strike" value={na(rec.market.atmStrike, 0)} />
               <Stat label="PCR (OI)" value={na(rec.market.pcr)} />
               <Stat label="Max Pain" value={na(rec.market.maxPain, 0)} />
               <Stat label="Support" value={na(rec.market.support, 0)} />

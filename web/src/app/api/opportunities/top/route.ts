@@ -7,6 +7,7 @@ import { getSnapshot } from "@/lib/services/market";
 import { evaluateOptionsOpportunity } from "@/lib/engine/opportunityEngine";
 import { scanStocks } from "@/lib/engine/stockOpportunityEngine";
 import { scanLongTerm } from "@/lib/engine/longTermEngine";
+import { selectBestRecommendation } from "@/lib/bestRecommendation";
 
 export async function GET() {
   try {
@@ -23,30 +24,36 @@ export async function GET() {
     const niftyOptions = evaluateOptionsOpportunity(niftySnap, "NIFTY", now);
     const bnOptions = evaluateOptionsOpportunity(bnSnap, "BANKNIFTY", now);
 
-    // Best options: higher of the two
-    const optionsBest = (niftyOptions.topOpportunities[0]?.opportunityScore ?? 0) >=
-      (bnOptions.topOpportunities[0]?.opportunityScore ?? 0)
-      ? { result: niftyOptions, top: niftyOptions.topOpportunities[0] ?? null }
-      : { result: bnOptions, top: bnOptions.topOpportunities[0] ?? null };
-
     const intradayBest = intradayResult.topOpportunities[0] ?? null;
     const swingBest = swingResult.topOpportunities[0] ?? null; // retired strategy: reported, never ranked as best
 
-    // Determine overall best across all engines (not by fixed bonus — use raw score comparison)
-    // Exclude candidates with grade === "REJECT" (e.g. from EOD scan with zero live data sources)
+    // Same grade-first policy as the dashboard. C and REJECT are watch-only, never "best".
     const candidates = [
-      { engine: "OPTIONS", score: optionsBest.top?.opportunityScore ?? 0, item: optionsBest.top },
-      { engine: "STOCK_INTRADAY", score: intradayBest?.opportunityScore ?? 0, item: intradayBest },
-    ].filter((c) => c.item !== null && c.item.grade !== "REJECT");
-    candidates.sort((a, b) => b.score - a.score);
-    const overall = candidates[0] ?? null;
+      ...[niftyOptions, bnOptions].flatMap((result) => result.topOpportunities.map((item) => ({
+        engine: "OPTIONS" as const,
+        grade: item.grade,
+        score: item.opportunityScore,
+        netRewardToRisk: item.estimatedValues?.netRewardToRisk ?? null,
+        item,
+      }))),
+      ...intradayResult.topOpportunities.map((item) => ({
+        engine: "STOCK_INTRADAY" as const,
+        grade: item.grade,
+        score: item.opportunityScore,
+        netRewardToRisk: null,
+        item,
+      })),
+    ];
+    const overall = selectBestRecommendation<unknown>(candidates);
 
     return Response.json({
       timestamp: now.toISOString(),
-      bestOpportunity: overall
-        ? { engine: overall.engine, score: overall.score, opportunity: overall.item }
+      recommendationStatus: overall.status,
+      bestOpportunity: overall.status === "RECOMMENDATION"
+        ? { engine: overall.candidate.engine, grade: overall.candidate.grade, score: overall.candidate.score, opportunity: overall.candidate.item }
         : null,
-      noOpportunityReason: overall === null ? "No opportunities found across all engines." : null,
+      noOpportunityReason: overall.status === "NO_TRADE" ? overall.reason : null,
+      watchOnlyCount: overall.watchOnlyCount,
       sections: {
         options: {
           nifty: {

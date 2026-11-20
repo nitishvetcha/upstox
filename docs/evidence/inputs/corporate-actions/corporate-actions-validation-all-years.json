@@ -1,0 +1,468 @@
+{
+ "records": 42972,
+ "yearFiles": 27,
+ "unparseableExDates": 0,
+ "duplicateRows": 31,
+ "exDateYearMismatch": 0,
+ "splitBonusEvents": 1202,
+ "unparsedSplitLikeSubjects": 231,
+ "unparsedSample": [
+  {
+   "isin": "INF189A01012",
+   "symbol": "UTIUS64-CI",
+   "exDate": "25-Oct-2002",
+   "subject": "Split Us 64 Into 2 Parts"
+  },
+  {
+   "isin": "INE165A01013",
+   "symbol": "UNIWESTBNK",
+   "exDate": "17-Jan-2006",
+   "subject": "Bonus - 1:5/Rights - 1:2"
+  },
+  {
+   "isin": "INE271B01025",
+   "symbol": "MAHSEAMLES",
+   "exDate": "18-Apr-2006",
+   "subject": "Fv Split Rs.10/- To Rs.5/"
+  },
+  {
+   "isin": "INE436A01026",
+   "symbol": "ANSALAPI",
+   "exDate": "10-May-2006",
+   "subject": "Fv Split Rs.10/- To Rs.5/"
+  },
+  {
+   "isin": "INE551A01022",
+   "symbol": "HINDDORROL",
+   "exDate": "26-May-2006",
+   "subject": "Fv Split Rs.10/- To Rs.2/"
+  },
+  {
+   "isin": "INE149A01025",
+   "symbol": "TUBEINVEST",
+   "exDate": "31-May-2006",
+   "subject": "Fv Split Rs.10/- To Rs.2/"
+  },
+  {
+   "isin": "INE255A01020",
+   "symbol": "EPL",
+   "exDate": "08-Jun-2006",
+   "subject": "Fv Split Rs.10/- To Rs.2/"
+  },
+  {
+   "isin": "INE003A01024",
+   "symbol": "SIEMENS",
+   "exDate": "13-Jun-2006",
+   "subject": "Fv Split Rs.10/- To Rs.2/"
+  },
+  {
+   "isin": "INE203A01020",
+   "symbol": "ASTRAZEN",
+   "exDate": "15-Jun-2006",
+   "subject": "Fv Split Rs.10/- To Rs.2/"
+  },
+  {
+   "isin": "INE197A01024",
+   "symbol": "JYOTISTRUC",
+   "exDate": "28-Jul-2006",
+   "subject": "Fv Split-Rs.10/-To Rs.2/-"
+  },
+  {
+   "isin": "INE067A01029",
+   "symbol": "CGPOWER",
+   "exDate": "10-Aug-2006",
+   "subject": "Fv Split Rs.10/- To Rs.2/"
+  },
+  {
+   "isin": "INE102D01028",
+   "symbol": "GODREJCP",
+   "exDate": "24-Aug-2006",
+   "subject": "Fv Split Rs.4/- To Re.1/-"
+  },
+  {
+   "isin": "INE233A01035",
+   "symbol": "GODREJIND",
+   "exDate": "25-Aug-2006",
+   "subject": "Fv Split Rs.6/- To Re.1/"
+  },
+  {
+   "isin": "INE662A01027",
+   "symbol": "SUPERSPIN",
+   "exDate": "01-Sep-2006",
+   "subject": "Fv Split Rs.10/- To Re.1/"
+  },
+  {
+   "isin": "INE302A01020",
+   "symbol": "EXIDEIND",
+   "exDate": "08-Sep-2006",
+   "subject": "Fv Split Rs.10/- To Re.1/"
+  }
+ ],
+ "universeEvents2022to2026": 30,
+ "verdicts": {
+  "CONTRADICTED": 26,
+  "AMBIGUOUS": 4
+ },
+ "tests": [
+  {
+   "isin": "INE059A01026",
+   "symbol": "CIPLA",
+   "exDate": "24-Apr-2006",
+   "subject": "Bonus 3:2",
+   "kind": "bonus",
+   "factor": 0.4,
+   "prevClose": 263.8,
+   "exOpen": 270,
+   "observedFactor": 1.0235,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE009A01021",
+   "symbol": "INFY",
+   "exDate": "13-Jul-2006",
+   "subject": "Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 211.61,
+   "exOpen": 218.5,
+   "observedFactor": 1.0326,
+   "verdict": "AMBIGUOUS"
+  },
+  {
+   "isin": "INE467B01029",
+   "symbol": "TCS",
+   "exDate": "28-Jul-2006",
+   "subject": "Intdiv-Rs 3persh/Bonus1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 233.82,
+   "exOpen": 231.42,
+   "observedFactor": 0.9897,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE018A01030",
+   "symbol": "LT",
+   "exDate": "28-Sep-2006",
+   "subject": "Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 287.73,
+   "exOpen": 299.31,
+   "observedFactor": 1.0402,
+   "verdict": "AMBIGUOUS"
+  },
+  {
+   "isin": "INE860A01027",
+   "symbol": "HCLTECH",
+   "exDate": "15-Mar-2007",
+   "subject": "Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 78.2,
+   "exOpen": 79.4,
+   "observedFactor": 1.0153,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE018A01030",
+   "symbol": "LT",
+   "exDate": "01-Oct-2008",
+   "subject": "Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 543.65,
+   "exOpen": 555.51,
+   "observedFactor": 1.0218,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE467B01029",
+   "symbol": "TCS",
+   "exDate": "16-Jun-2009",
+   "subject": "Bonus 1:1/Div-Rs.5 Per Sh",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 191.52,
+   "exOpen": 188.71,
+   "observedFactor": 0.9853,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE002A01018",
+   "symbol": "RELIANCE",
+   "exDate": "26-Nov-2009",
+   "subject": "Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 261.5,
+   "exOpen": 264.75,
+   "observedFactor": 1.0124,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE423A01024",
+   "symbol": "ADANIENT",
+   "exDate": "10-Dec-2009",
+   "subject": "Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 422.85,
+   "exOpen": 430,
+   "observedFactor": 1.0169,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE154A01025",
+   "symbol": "ITC",
+   "exDate": "03-Aug-2010",
+   "subject": "Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 103.69,
+   "exOpen": 105.21,
+   "observedFactor": 1.0147,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE917I01010",
+   "symbol": "BAJAJ-AUTO",
+   "exDate": "08-Sep-2010",
+   "subject": "Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 1498.7,
+   "exOpen": 1501.3,
+   "observedFactor": 1.0017,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE742F01042",
+   "symbol": "ADANIPORTS",
+   "exDate": "23-Sep-2010",
+   "subject": "Face Value Split From Rs.10/- To Rs.2/-",
+   "kind": "face-value split",
+   "factor": 0.2,
+   "prevClose": 167.4,
+   "exOpen": 170.55,
+   "observedFactor": 1.0188,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE155A01022",
+   "symbol": "TMPV",
+   "exDate": "12-Sep-2011",
+   "subject": "Face Value Split From Rs.10/- To Rs.2/-",
+   "kind": "face-value split",
+   "factor": 0.2,
+   "prevClose": 151.36,
+   "exOpen": 144.4,
+   "observedFactor": 0.954,
+   "verdict": "AMBIGUOUS"
+  },
+  {
+   "isin": "INE018A01030",
+   "symbol": "LT",
+   "exDate": "11-Jul-2013",
+   "subject": "Bonus 1:2",
+   "kind": "bonus",
+   "factor": 0.6666666666666666,
+   "prevClose": 628.31,
+   "exOpen": 646.53,
+   "observedFactor": 1.029,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE009A01021",
+   "symbol": "INFY",
+   "exDate": "02-Dec-2014",
+   "subject": "Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 543.73,
+   "exOpen": 541.24,
+   "observedFactor": 0.9954,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE860A01027",
+   "symbol": "HCLTECH",
+   "exDate": "19-Mar-2015",
+   "subject": "Bonus 1 : 1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 501.65,
+   "exOpen": 495,
+   "observedFactor": 0.9867,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE009A01021",
+   "symbol": "INFY",
+   "exDate": "15-Jun-2015",
+   "subject": "Annual General Meeting/ Dividend - Rs 29.50/- Per Share And Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 493.77,
+   "exOpen": 488.48,
+   "observedFactor": 0.9893,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE154A01025",
+   "symbol": "ITC",
+   "exDate": "01-Jul-2016",
+   "subject": " Bonus 1:2",
+   "kind": "bonus",
+   "factor": 0.6666666666666666,
+   "prevClose": 245.6,
+   "exOpen": 243.3,
+   "observedFactor": 0.9906,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE018A01030",
+   "symbol": "LT",
+   "exDate": "13-Jul-2017",
+   "subject": " Bonus 1:2",
+   "kind": "bonus",
+   "factor": 0.6666666666666666,
+   "prevClose": 1159.7,
+   "exOpen": 1165.1,
+   "observedFactor": 1.0047,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE002A01018",
+   "symbol": "RELIANCE",
+   "exDate": "07-Sep-2017",
+   "subject": " Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 392.1,
+   "exOpen": 392.25,
+   "observedFactor": 1.0004,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE101A01026",
+   "symbol": "M&M",
+   "exDate": "21-Dec-2017",
+   "subject": " Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 770.88,
+   "exOpen": 767,
+   "observedFactor": 0.995,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE467B01029",
+   "symbol": "TCS",
+   "exDate": "31-May-2018",
+   "subject": " Bonus 1:1 /Dividend- Rs 29 Per Share",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 1757.05,
+   "exOpen": 1734,
+   "observedFactor": 0.9869,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE009A01021",
+   "symbol": "INFY",
+   "exDate": "04-Sep-2018",
+   "subject": " Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 717.13,
+   "exOpen": 722,
+   "observedFactor": 1.0068,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE733E01010",
+   "symbol": "NTPC",
+   "exDate": "19-Mar-2019",
+   "subject": " Bonus 1:5",
+   "kind": "bonus",
+   "factor": 0.8333333333333334,
+   "prevClose": 132.29,
+   "exOpen": 133.95,
+   "observedFactor": 1.0125,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE860A01027",
+   "symbol": "HCLTECH",
+   "exDate": "05-Dec-2019",
+   "subject": " Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 562.75,
+   "exOpen": 563.8,
+   "observedFactor": 1.0019,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE752E01010",
+   "symbol": "POWERGRID",
+   "exDate": "29-Jul-2021",
+   "subject": " Bonus 1:3",
+   "kind": "bonus",
+   "factor": 0.75,
+   "prevClose": 124.75,
+   "exOpen": 124.7,
+   "observedFactor": 0.9996,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE118H01025",
+   "symbol": "BSE",
+   "exDate": "21-Mar-2022",
+   "subject": "Bonus 2:1",
+   "kind": "bonus",
+   "factor": 0.3333333333333333,
+   "prevClose": 314,
+   "exOpen": 300,
+   "observedFactor": 0.9554,
+   "verdict": "AMBIGUOUS"
+  },
+  {
+   "isin": "INE752E01010",
+   "symbol": "POWERGRID",
+   "exDate": "12-Sep-2023",
+   "subject": "Bonus 1:3",
+   "kind": "bonus",
+   "factor": 0.75,
+   "prevClose": 198.4,
+   "exOpen": 203,
+   "observedFactor": 1.0232,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE002A01018",
+   "symbol": "RELIANCE",
+   "exDate": "28-Oct-2024",
+   "subject": "Bonus 1:1",
+   "kind": "bonus",
+   "factor": 0.5,
+   "prevClose": 1327.85,
+   "exOpen": 1337,
+   "observedFactor": 1.0069,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  },
+  {
+   "isin": "INE118H01025",
+   "symbol": "BSE",
+   "exDate": "23-May-2025",
+   "subject": "Bonus 2:1",
+   "kind": "bonus",
+   "factor": 0.3333333333333333,
+   "prevClose": 2332,
+   "exOpen": 2358,
+   "observedFactor": 1.0111,
+   "verdict": "CONTRADICTED (no price step at ex-date)"
+  }
+ ]
+}
