@@ -178,11 +178,12 @@ function GradeChip({ grade }: { grade: OpportunityGrade | undefined }) {
   return <span className={cls}>grade {grade}</span>;
 }
 
-function Cell({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function Cell({ label, value, tone, sub }: { label: string; value: string; tone?: string; sub?: string }) {
   return (
     <div className="rounded bg-zinc-950/50 px-2 py-1.5 text-center">
       <div className={`font-mono text-xs ${tone ?? "text-zinc-100"}`}>{value}</div>
       <div className="text-[10px] text-zinc-500 mt-0.5">{label}</div>
+      {sub && <div className="text-[9px] text-zinc-400 mt-0.5">{sub}</div>}
     </div>
   );
 }
@@ -330,12 +331,12 @@ function StockCard({ stock, rank, horizon = "INTRADAY" }: { stock: StockOpportun
       <p className="mt-0.5 text-xs text-zinc-500">{setup} · LTP {fmt(stock.ltp)}{stock.changePercent != null ? ` (${fmtPct(stock.changePercent)})` : ""}</p>
 
       <div className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
-        <Cell label="Entry" value={fmt(stock.entry)} />
-        <Cell label="Stop" value={fmt(stock.stop)} tone="text-red-300" />
-        <Cell label="T1" value={fmt(stock.target1)} tone="text-green-300" />
-        <Cell label="T2" value={fmt(stock.target2)} tone="text-green-300" />
-        <Cell label="R:R" value={`${stock.rr}x`} tone={stock.rr >= 1.5 ? "text-green-300" : "text-zinc-100"} />
-        <Cell label="Score" value={`${stock.opportunityScore}/100`} />
+        <Cell label="Entry" value={fmt(stock.entry)} sub="Buy Price" />
+        <Cell label="Stop Loss" value={fmt(stock.stop)} tone="text-red-300" sub="Safety Exit" />
+        <Cell label="Target 1" value={fmt(stock.target1)} tone="text-green-300" sub="1st Profit Goal" />
+        <Cell label="Target 2" value={fmt(stock.target2)} tone="text-green-300" sub="Runner Goal" />
+        <Cell label="R:R" value={`${stock.rr}x`} tone={stock.rr >= 1.5 ? "text-green-300" : "text-zinc-100"} sub="Profit Multiple" />
+        <Cell label="Score" value={`${stock.opportunityScore}/100`} sub="Setup Edge" />
       </div>
 
       <div className="mt-2 grid grid-cols-2 gap-1 text-xs sm:grid-cols-3">
@@ -465,31 +466,37 @@ function LongTermStockCard({ stock, rank }: { stock: LongTermOpportunity; rank: 
 
       {/* Fundamental Ratios Matrix */}
       <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6 text-[11px]">
-        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
-          <div className="text-zinc-500 text-[10px]">ROCE</div>
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800" title="Return on Capital Employed: How efficiently company generates profits from capital">
+          <div className="text-zinc-500 text-[10px]">ROCE (Efficiency)</div>
           <div className="mt-0.5 font-mono font-bold text-emerald-400">{stock.roce ?? "—"}%</div>
+          <div className="text-[9px] text-zinc-400">Profit on Capital</div>
         </div>
-        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
-          <div className="text-zinc-500 text-[10px]">ROE</div>
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800" title="Return on Equity: Profit generated on shareholders equity">
+          <div className="text-zinc-500 text-[10px]">ROE (Equity Return)</div>
           <div className="mt-0.5 font-mono font-bold text-emerald-400">{stock.roe ?? "—"}%</div>
+          <div className="text-[9px] text-zinc-400">Shareholder Return</div>
         </div>
-        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800" title="Debt to Equity: Lower is safer. <0.5 means very safe balance sheet">
           <div className="text-zinc-500 text-[10px]">Debt/Equity</div>
           <div className="mt-0.5 font-mono font-bold text-zinc-200">
             {stock.debtToEquity === 0 ? "0.0 (Zero)" : stock.debtToEquity ?? "—"}
           </div>
+          <div className="text-[9px] text-zinc-400">{stock.debtToEquity === 0 ? "Debt-Free" : "Low Leverage"}</div>
         </div>
-        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800" title="Operating Margin: Core business profitability margin">
           <div className="text-zinc-500 text-[10px]">Op. Margin</div>
           <div className="mt-0.5 font-mono font-bold text-sky-300">{stock.operatingMargin ?? "—"}%</div>
+          <div className="text-[9px] text-zinc-400">Core Profitability</div>
         </div>
-        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
-          <div className="text-zinc-500 text-[10px]">P/E Ratio</div>
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800" title="Price to Earnings ratio: Market valuation multiple">
+          <div className="text-zinc-500 text-[10px]">P/E (Valuation)</div>
           <div className="mt-0.5 font-mono font-bold text-zinc-300">{stock.pe ?? "—"}x</div>
+          <div className="text-[9px] text-zinc-400">Valuation Multiple</div>
         </div>
-        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800" title="Year-over-Year revenue/sales growth rate">
           <div className="text-zinc-500 text-[10px]">Sales Growth</div>
           <div className="mt-0.5 font-mono font-bold text-emerald-400">+{stock.revenueGrowthYoy ?? "—"}%</div>
+          <div className="text-[9px] text-zinc-400">Yearly Revenue</div>
         </div>
       </div>
 
@@ -612,11 +619,11 @@ function OptionRecCard({ contract, snapshotSource, lotSize, rank, daysLeft }: {
 
       <div className="mt-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">A · Trade setup</div>
       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
-        <Cell label={isMultiLeg ? "Net Debit" : "Entry premium"} value={fmt(isMultiLeg ? displayNetDebit : contract.entry)} />
-        <Cell label="Stop" value={fmt(contract.stop)} tone="text-red-300" />
-        <Cell label="T1" value={fmt(contract.target1)} tone="text-green-300" />
-        <Cell label="T2" value={fmt(contract.target2)} tone="text-green-300" />
-        <Cell label="R:R" value={`${contract.rr}x`} tone={contract.rr >= 1.5 ? "text-green-300" : "text-zinc-100"} />
+        <Cell label={isMultiLeg ? "Net Debit" : "Entry premium"} value={fmt(isMultiLeg ? displayNetDebit : contract.entry)} sub="Buy Price" />
+        <Cell label="Stop Loss" value={fmt(contract.stop)} tone="text-red-300" sub="Safety Cutoff" />
+        <Cell label="Target 1" value={fmt(contract.target1)} tone="text-green-300" sub="1st Profit Goal" />
+        <Cell label="Target 2" value={fmt(contract.target2)} tone="text-green-300" sub="Runner Goal" />
+        <Cell label="R:R" value={`${contract.rr}x`} tone={contract.rr >= 1.5 ? "text-green-300" : "text-zinc-100"} sub="Profit Multiple" />
       </div>
 
       <KvGroup title="B · Risk &amp; capital">

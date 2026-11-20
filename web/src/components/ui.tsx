@@ -31,12 +31,39 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
   return <section className={`rounded-lg border border-zinc-800 bg-zinc-900/60 ${className}`}>{children}</section>;
 }
 
-export function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: Tone }) {
-  const color = tone === "bull" ? "text-emerald-400" : tone === "bear" ? "text-red-400" : tone === "warn" ? "text-amber-400" : "text-zinc-100";
+export function Stat({
+  label,
+  value,
+  tone,
+  hint,
+  sub,
+}: {
+  label: string;
+  value: ReactNode;
+  tone?: Tone;
+  hint?: string;
+  sub?: string;
+}) {
+  const color =
+    tone === "bull"
+      ? "text-emerald-400"
+      : tone === "bear"
+        ? "text-red-400"
+        : tone === "warn"
+          ? "text-amber-400"
+          : "text-zinc-100";
   return (
-    <div className="min-w-0">
-      <div className="text-[11px] uppercase tracking-wider text-zinc-500">{label}</div>
+    <div className="min-w-0" title={hint}>
+      <div className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-zinc-500">
+        <span>{label}</span>
+        {hint && (
+          <span className="cursor-help text-zinc-600 hover:text-zinc-400 text-[10px]" title={hint}>
+            ⓘ
+          </span>
+        )}
+      </div>
       <div className={`break-words font-mono text-sm tabular-nums ${color}`}>{value}</div>
+      {sub && <div className="text-[10px] text-zinc-400 truncate mt-0.5">{sub}</div>}
     </div>
   );
 }

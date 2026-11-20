@@ -26,30 +26,30 @@ function PlanDetails({ plan, expiry }: { plan: TradePlan; expiry: string }) {
         <div className="mt-1 text-xs text-zinc-500">Expiry {fmtDate(expiry)} · prices per unit</div>
       </div>
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
-        <Stat label={plan.credit ? "Entry (credit)" : "Entry zone"} value={`${inr(plan.entryZone[0])} – ${inr(plan.entryZone[1])}`} />
-        <Stat label={`Stop loss${unit}`} value={inr(plan.stop)} tone="bear" />
-        <Stat label="Risk / reward" value={`1 : ${num(plan.rr)}`} />
-        <Stat label={`Target 1${unit}`} value={inr(plan.target1)} tone="bull" />
-        <Stat label={`Target 2${unit}`} value={inr(plan.target2)} tone="bull" />
-        <Stat label="Breakeven" value={plan.breakevens.map((b) => num(b)).join(" / ")} />
-        <Stat label="Max loss" value={plan.maxLoss === null ? "—" : inr(plan.maxLoss)} />
-        <Stat label="Max profit" value={plan.maxProfit === null ? "Open-ended" : inr(plan.maxProfit)} />
-        <Stat label="Strategy score" value={`${plan.score}/100`} />
+        <Stat label={plan.credit ? "Entry (credit)" : "Entry zone"} value={`${inr(plan.entryZone[0])} – ${inr(plan.entryZone[1])}`} hint="Target price range to enter this contract" sub="Buy Zone" />
+        <Stat label={`Stop loss${unit}`} value={inr(plan.stop)} tone="bear" hint="Strict safety exit. If price hits this, close the trade to limit loss" sub="Max Loss Exit" />
+        <Stat label="Risk / reward" value={`1 : ${num(plan.rr)}`} hint="For every ₹1 risked, how many rupees of profit is targeted" sub="Gain Multiple" />
+        <Stat label={`Target 1${unit}`} value={inr(plan.target1)} tone="bull" hint="First take-profit level. Book 50% profit here and trail stop to entry" sub="Primary Profit" />
+        <Stat label={`Target 2${unit}`} value={inr(plan.target2)} tone="bull" hint="Second take-profit level for extended runner lots" sub="Bonus Runner" />
+        <Stat label="Breakeven" value={plan.breakevens.map((b) => num(b)).join(" / ")} hint="Underlying index level where trade breaks even at expiry" sub="Zero-Loss Index" />
+        <Stat label="Max loss" value={plan.maxLoss === null ? "—" : inr(plan.maxLoss)} hint="Mathematically defined maximum loss possible on this setup" sub="Worst-Case Loss" />
+        <Stat label="Max profit" value={plan.maxProfit === null ? "Open-ended" : inr(plan.maxProfit)} hint="Maximum theoretical profit potential" sub="Peak Upside" />
+        <Stat label="Strategy score" value={`${plan.score}/100`} hint="Score indicating quantitative alignment across trend, volume, and Greeks" sub="Model Edge" />
       </div>
 
       {r && (
         <div className="rounded border border-zinc-800 bg-zinc-950/40 p-3">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Risk & Position Sizing</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Risk &amp; Position Sizing (Money Management)</span>
             <Badge tone={r.status === "APPROVED" ? "neutral" : "warn"}>{r.status}</Badge>
           </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
-            <Stat label="Risk / trade" value={`${r.riskPercent}% (${inr(r.totalRisk)})`} tone={r.totalRisk > 0 ? "bear" : undefined} />
-            <Stat label="Quantity / Lots" value={`${r.quantity} (${r.lots} ${r.lots === 1 ? "lot" : "lots"})`} />
-            <Stat label="Capital required" value={inr(r.capitalRequired)} />
-            <Stat label="Stop risk (total)" value={inr(r.totalRisk)} tone="bear" />
-            <Stat label="Max loss (total)" value={r.maxTheoreticalLoss === null ? "Open-ended" : inr(r.maxTheoreticalLoss)} />
-            <Stat label="Lot size" value={String(r.lotSize)} />
+            <Stat label="Risk / trade" value={`${r.riskPercent}% (${inr(r.totalRisk)})`} tone={r.totalRisk > 0 ? "bear" : undefined} hint="Controlled risk percentage of total account capital" sub="Account Risk" />
+            <Stat label="Quantity / Lots" value={`${r.quantity} (${r.lots} ${r.lots === 1 ? "lot" : "lots"})`} hint="Exact number of units/lots to buy to stay inside your risk limit" sub="Position Size" />
+            <Stat label="Capital required" value={inr(r.capitalRequired)} hint="Total money needed from your account balance to enter" sub="Cash Required" />
+            <Stat label="Stop risk (total)" value={inr(r.totalRisk)} tone="bear" hint="Maximum loss in rupees if stopped out" sub="Total Rupee Risk" />
+            <Stat label="Max loss (total)" value={r.maxTheoreticalLoss === null ? "Open-ended" : inr(r.maxTheoreticalLoss)} hint="Maximum possible loss on the entire position" sub="Max Drawdown" />
+            <Stat label="Lot size" value={String(r.lotSize)} hint="Exchange-mandated multiplier per lot" sub="Units Per Lot" />
           </div>
           {r.warnings.length > 0 && (
             <div className="mt-2 text-[11px] text-zinc-500">
@@ -105,8 +105,15 @@ export function RecommendationCard({ a }: { a: Analysis }) {
             <PlanDetails plan={a.plan} expiry={s.expiry} />
           ) : (
             <div className="rounded border border-zinc-800 bg-zinc-950/60 p-3">
-              <div className="text-xl font-semibold text-zinc-100">{a.status === "WAIT" ? "WAIT FOR CONFIRMATION" : "NO TRADE"}</div>
-              <p className="mt-1 text-sm text-zinc-400">No executable trade plan is available. The model will not force a trade.{a.blockers.length ? " Reasons:" : ""}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xl font-semibold text-zinc-100">{a.status === "WAIT" ? "WAIT FOR CONFIRMATION" : "NO TRADE"}</span>
+                <span className="rounded bg-zinc-800 border border-zinc-700 px-2 py-0.5 text-[10px] font-semibold text-zinc-300">
+                  Capital Protected
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-zinc-400">
+                The algorithm will not force a trade on incomplete or mixed data. In professional trading, staying in cash protects your money until high-probability conditions return.{a.blockers.length ? " Safety conditions:" : ""}
+              </p>
             </div>
           )}
 

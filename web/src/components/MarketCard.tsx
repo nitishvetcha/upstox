@@ -55,28 +55,30 @@ export function MarketCard({ a }: { a: Analysis }) {
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
-        <Stat label={t ? `Trend (${t.timeframe})` : "Trend"} value={trendLabel} tone={trendTone} />
-        <Stat label="OI support" value={num(c.support, 0)} />
-        <Stat label="OI resistance" value={num(c.resistance, 0)} />
-        <Stat label="OI PCR" value={c.pcrOi === null ? na : num(c.pcrOi)} />
-        <Stat label="Max pain" value={num(c.maxPain, 0)} />
-        <Stat label="ATM IV" value={c.atmIv.average === null ? na : `${num(c.atmIv.average, 1)}%`} />
-        <Stat label="IV percentile" value={s.ivPercentile === null ? "Not available" : String(s.ivPercentile)} />
-        <Stat label="Est. exp. move" value={c.expectedMove === null ? "Unavailable" : `±${num(c.expectedMove, 0)}`} />
-        <Stat label="Nearest expiry" value={fmtDate(s.expiry)} />
-        <Stat label="Volatility" value={a.volatilityRegime ? a.volatilityRegime.replace(" VOLATILITY", "").toLowerCase() : na} tone={a.volatilityRegime === "HIGH VOLATILITY" ? "warn" : undefined} />
+        <Stat label={t ? `Trend (${t.timeframe})` : "Trend"} value={trendLabel} tone={trendTone} hint="Current market direction based on moving averages" sub={trendTone === "bull" ? "Upward Momentum" : trendTone === "bear" ? "Downward Pressure" : "Sideways / Range"} />
+        <Stat label="OI support" value={num(c.support, 0)} hint="Open Interest Support: Strike price where option sellers provide a floor against falling" sub="Market Safety Floor" />
+        <Stat label="OI resistance" value={num(c.resistance, 0)} hint="Open Interest Resistance: Strike price where heavy call writing acts as a ceiling" sub="Overhead Ceiling" />
+        <Stat label="OI PCR" value={c.pcrOi === null ? na : num(c.pcrOi)} hint="Put-Call Ratio: >1.0 indicates bullish sentiment, <0.7 indicates bearish sentiment" sub={c.pcrOi !== null ? (c.pcrOi > 1.0 ? "Bullish Sentiment" : c.pcrOi < 0.7 ? "Bearish Sentiment" : "Neutral Balance") : undefined} />
+        <Stat label="Max pain" value={num(c.maxPain, 0)} hint="Strike price where option buyers lose the most money on expiry day" sub="Expiry Magnet Level" />
+        <Stat label="ATM IV" value={c.atmIv.average === null ? na : `${num(c.atmIv.average, 1)}%`} hint="Implied Volatility: Higher IV means options are more expensive; lower IV means options are cheap" sub={c.atmIv.average !== null ? (c.atmIv.average > 18 ? "High Premium Cost" : "Normal Premium") : undefined} />
+        <Stat label="IV percentile" value={s.ivPercentile === null ? "Not available" : String(s.ivPercentile)} hint="Percentile ranking of current volatility compared to past 1 year" sub="Volatility Rank" />
+        <Stat label="Est. exp. move" value={c.expectedMove === null ? "Unavailable" : `±${num(c.expectedMove, 0)}`} hint="Estimated Expected Move based on ATM straddle premium: statistical expected range for the session" sub="Expected Daily Range" />
+        <Stat label="Nearest expiry" value={fmtDate(s.expiry)} hint="Contract settlement and expiration date" sub="Contract Expiry" />
+        <Stat label="Volatility" value={a.volatilityRegime ? a.volatilityRegime.replace(" VOLATILITY", "").toLowerCase() : na} tone={a.volatilityRegime === "HIGH VOLATILITY" ? "warn" : undefined} hint="Current market turbulence level" sub="Market Swings" />
         <Stat
           label={s.sources.news.source === "MOCK" ? "Sentiment (mock)" : `News ${s.news.status?.toLowerCase() ?? ""}`}
           value={s.sources.news.source === "UNAVAILABLE" ? na : `${signed(s.news.score)}${s.news.confidence !== undefined ? ` · ${Math.round(s.news.confidence * 100)}%` : ""}`}
           tone={s.news.status === "STALE" || s.sources.news.source === "UNAVAILABLE" ? "warn" : s.news.score > 0.15 ? "bull" : s.news.score < -0.15 ? "bear" : undefined}
+          hint="Algorithmic news sentiment score from financial articles"
+          sub={s.news.score > 0.15 ? "Positive News Tone" : s.news.score < -0.15 ? "Negative News Tone" : "Neutral Headlines"}
         />
-        <Stat label="Overall" value={`${a.total}/100`} />
+        <Stat label="Overall Score" value={`${a.total}/100`} hint="Weighted score across Trend, OI, Price Action, Indicators, and Sentiment" sub="Multi-Factor Edge" />
       </div>
 
       <div className="mt-4 border-t border-zinc-800 pt-3">
         <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-wider text-zinc-500">
           <div className="flex items-center gap-2">
-            Market Breadth
+            Market Breadth (Stock Participation)
             {/* G1: a MOCK or unavailable breadth source never shows LIVE. */}
             <Badge tone={breadthBadge(s.sources.breadth, s.breadth?.status).tone}>
               {breadthBadge(s.sources.breadth, s.breadth?.status).text}
@@ -89,12 +91,12 @@ export function MarketCard({ a }: { a: Analysis }) {
         </div>
         {s.breadth && s.breadth.status !== "UNAVAILABLE" ? (
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
-            <Stat label="Adv / Dec / Unch" value={`${s.breadth.advances} / ${s.breadth.declines} / ${s.breadth.unchanged}`} />
-            <Stat label="A/D Ratio" value={s.breadth.advanceDeclineRatio.toFixed(2)} />
-            <Stat label="Breadth %" value={`${signed(s.breadth.breadthPercent, 1)}%`} tone={s.breadth.breadthPercent > 10 ? "bull" : s.breadth.breadthPercent < -10 ? "bear" : undefined} />
-            <Stat label="Classification" value={s.breadth.classification.replace("_", " ")} tone={s.breadth.classification.includes("BULLISH") ? "bull" : s.breadth.classification.includes("BEARISH") ? "bear" : undefined} />
-            <Stat label="Price vs Breadth" value={s.breadth.priceBreadthState.replace("_", " ")} tone={s.breadth.priceBreadthState.includes("BULLISH_CONFIRMATION") ? "bull" : s.breadth.priceBreadthState.includes("BEARISH_CONFIRMATION") ? "bear" : s.breadth.priceBreadthState.includes("DIVERGENCE") ? "warn" : undefined} />
-            <Stat label="Coverage" value={`${s.breadth.total}/${s.breadth.expected} (${s.breadth.coverage}%)`} />
+            <Stat label="Adv / Dec / Unch" value={`${s.breadth.advances} / ${s.breadth.declines} / ${s.breadth.unchanged}`} hint="Advances (Rising) / Declines (Falling) / Unchanged stocks in this index" sub="Green vs Red Stocks" />
+            <Stat label="A/D Ratio" value={s.breadth.advanceDeclineRatio.toFixed(2)} hint="Ratio of advancing stocks to declining stocks (>1.0 is healthy broad market participation)" sub={s.breadth.advanceDeclineRatio >= 1.0 ? "More Stocks Rising" : "More Stocks Falling"} />
+            <Stat label="Breadth %" value={`${signed(s.breadth.breadthPercent, 1)}%`} tone={s.breadth.breadthPercent > 10 ? "bull" : s.breadth.breadthPercent < -10 ? "bear" : undefined} hint="Net percent of stocks advancing minus declining" sub="Participation Strength" />
+            <Stat label="Classification" value={s.breadth.classification.replace("_", " ")} tone={s.breadth.classification.includes("BULLISH") ? "bull" : s.breadth.classification.includes("BEARISH") ? "bear" : undefined} hint="Overall market health across underlying index constituents" sub="Breadth Health" />
+            <Stat label="Price vs Breadth" value={s.breadth.priceBreadthState.replace("_", " ")} tone={s.breadth.priceBreadthState.includes("BULLISH_CONFIRMATION") ? "bull" : s.breadth.priceBreadthState.includes("BEARISH_CONFIRMATION") ? "bear" : s.breadth.priceBreadthState.includes("DIVERGENCE") ? "warn" : undefined} hint="Whether index price movement is confirmed by its member stocks" sub="Signal Alignment" />
+            <Stat label="Coverage" value={`${s.breadth.total}/${s.breadth.expected} (${s.breadth.coverage}%)`} hint="Percentage of index constituents successfully loaded from exchange feed" sub="Constituent Data" />
           </div>
         ) : (
           <div className="text-xs text-zinc-500">Breadth data unavailable: {s.breadth?.reason ?? "No constituent quotes"}</div>
