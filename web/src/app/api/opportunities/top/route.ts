@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 import { getSnapshot } from "@/lib/services/market";
 import { evaluateOptionsOpportunity } from "@/lib/engine/opportunityEngine";
 import { scanStocks } from "@/lib/engine/stockOpportunityEngine";
-import { scanLongTerm, NO_FUNDAMENTAL_PROVIDER } from "@/lib/engine/longTermEngine";
+import { scanLongTerm } from "@/lib/engine/longTermEngine";
 
 export async function GET() {
   try {
@@ -17,7 +17,7 @@ export async function GET() {
       getSnapshot("banknifty"),
       scanStocks("intraday", now),
       scanStocks("swing", now),
-      scanLongTerm(NO_FUNDAMENTAL_PROVIDER),
+      scanLongTerm(),
     ]);
 
     const niftyOptions = evaluateOptionsOpportunity(niftySnap, "NIFTY", now);

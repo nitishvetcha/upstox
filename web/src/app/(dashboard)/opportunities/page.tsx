@@ -7,7 +7,7 @@ import { INDICES, INSTRUMENTS } from "@/lib/services/instrumentRegistry";
 import { evaluateOptionsOpportunity, validateSpreadIntegrity } from "@/lib/engine/opportunityEngine";
 import { scanStocks } from "@/lib/engine/stockOpportunityEngine";
 import { POSITIONAL_RETIRED_NOTE } from "@/lib/engine/positionalTrend";
-import { scanLongTerm, NO_FUNDAMENTAL_PROVIDER } from "@/lib/engine/longTermEngine";
+import { scanLongTerm, type LongTermOpportunity } from "@/lib/engine/longTermEngine";
 import { listOpportunityRecords } from "@/lib/services/opportunityTrackingStore";
 import type { ContractOpportunity, OpportunityGrade, OptionsOpportunityResult, RejectedContract } from "@/lib/engine/opportunityEngine";
 import type { StockOpportunity, SectorBreadthSummary } from "@/lib/engine/stockOpportunityEngine";
@@ -88,7 +88,7 @@ async function loadData() {
       Promise.allSettled(INDICES.map((i) => getSnapshot(i))),
       scanStocks("intraday", now),
       scanStocks("swing", now),
-      scanLongTerm(NO_FUNDAMENTAL_PROVIDER),
+      scanLongTerm(),
     ]);
     const indexOptions = snaps.flatMap((r, k) =>
       r.status === "fulfilled" ? [evaluateOptionsOpportunity(r.value, INSTRUMENTS[INDICES[k]].symbol, now)] : [],
@@ -416,6 +416,115 @@ function StockCard({ stock, rank, horizon = "INTRADAY" }: { stock: StockOpportun
           {stock.gradeReasons?.map((r, i) => <p key={i} className="text-xs text-red-400">⛔ {r}</p>)}
         </div>
       </details>
+    </article>
+  );
+}
+
+// ── Long-term stock card (Multi-month fundamental investment) ──────────────────
+
+function LongTermStockCard({ stock, rank }: { stock: LongTermOpportunity; rank: number }) {
+  const isAccumulate = stock.rating === "ACCUMULATE";
+  const score = stock.fundamentalScore ?? 0;
+
+  return (
+    <article className="rounded-xl border border-zinc-700/80 bg-zinc-900/60 p-4 transition-all hover:border-zinc-500 shadow-md">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-zinc-800 pb-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-zinc-100 text-base">#{rank} {stock.symbol}</span>
+            <span className="text-xs text-zinc-400 font-medium">{stock.name}</span>
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-500">
+            <span>Reference Price: <strong className="text-zinc-300 font-mono">₹{stock.ltpRef ?? "—"}</strong></span>
+            <span>·</span>
+            <span>Zone: <strong className="text-emerald-400 font-mono">{stock.accumulationZone ?? "Dips"}</strong></span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded bg-zinc-800 border border-zinc-700 px-2 py-0.5 text-[10px] font-semibold text-zinc-300">
+            LONG-TERM (MONTHS+)
+          </span>
+          <span
+            className={`rounded px-2 py-0.5 text-[10px] font-bold border ${
+              isAccumulate
+                ? "bg-emerald-950 text-emerald-400 border-emerald-800"
+                : "bg-sky-950 text-sky-400 border-sky-800"
+            }`}
+          >
+            {stock.rating}
+          </span>
+          <span className="rounded bg-teal-950/70 border border-teal-800 px-2 py-0.5 text-[10px] font-bold text-teal-300 font-mono">
+            {score}/100 SCORE
+          </span>
+          <span className="rounded bg-zinc-800/80 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+            {stock.technicalTrend}
+          </span>
+        </div>
+      </div>
+
+      {/* Fundamental Ratios Matrix */}
+      <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6 text-[11px]">
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
+          <div className="text-zinc-500 text-[10px]">ROCE</div>
+          <div className="mt-0.5 font-mono font-bold text-emerald-400">{stock.roce ?? "—"}%</div>
+        </div>
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
+          <div className="text-zinc-500 text-[10px]">ROE</div>
+          <div className="mt-0.5 font-mono font-bold text-emerald-400">{stock.roe ?? "—"}%</div>
+        </div>
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
+          <div className="text-zinc-500 text-[10px]">Debt/Equity</div>
+          <div className="mt-0.5 font-mono font-bold text-zinc-200">
+            {stock.debtToEquity === 0 ? "0.0 (Zero)" : stock.debtToEquity ?? "—"}
+          </div>
+        </div>
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
+          <div className="text-zinc-500 text-[10px]">Op. Margin</div>
+          <div className="mt-0.5 font-mono font-bold text-sky-300">{stock.operatingMargin ?? "—"}%</div>
+        </div>
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
+          <div className="text-zinc-500 text-[10px]">P/E Ratio</div>
+          <div className="mt-0.5 font-mono font-bold text-zinc-300">{stock.pe ?? "—"}x</div>
+        </div>
+        <div className="rounded bg-zinc-950/80 p-2 border border-zinc-800">
+          <div className="text-zinc-500 text-[10px]">Sales Growth</div>
+          <div className="mt-0.5 font-mono font-bold text-emerald-400">+{stock.revenueGrowthYoy ?? "—"}%</div>
+        </div>
+      </div>
+
+      {/* Investment Thesis & Moat */}
+      <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-2.5 text-xs">
+        <div className="font-semibold text-zinc-300 text-[11px] mb-1">Fundamental Moat &amp; Thesis:</div>
+        <p className="text-zinc-400 leading-relaxed text-[11px]">{stock.thesis}</p>
+      </div>
+
+      {/* Risk Factors */}
+      {stock.riskFactors.length > 0 && (
+        <div className="mt-2 text-[11px] text-zinc-500">
+          <span className="font-semibold text-zinc-400">Monitor: </span>
+          {stock.riskFactors.join(" · ")}
+        </div>
+      )}
+
+      {/* Save Pick Button */}
+      <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2.5">
+        <span className="text-[10px] text-zinc-500 font-mono">
+          Long-Term Strategy · Evaluated on Audited Annual Reports
+        </span>
+        <SavePickButton
+          pick={{
+            instrument: stock.symbol,
+            instrumentType: "STOCK",
+            direction: "LONG",
+            entry: stock.ltpRef ?? null,
+            stopLoss: stock.ltpRef ? Math.round(stock.ltpRef * 0.85) : null,
+            targets: stock.ltpRef ? [Math.round(stock.ltpRef * 1.3), Math.round(stock.ltpRef * 1.6)] : [],
+            source: "RESEARCH",
+            note: `Long-term accumulation setup (${stock.rating}). Fundamental Score: ${score}/100. ROCE: ${stock.roce}%, ROE: ${stock.roe}%.`,
+          }}
+        />
+      </div>
     </article>
   );
 }
@@ -1067,12 +1176,29 @@ export default async function OpportunitiesPage() {
         </SubSection>
 
         <SubSection title="Long-Term Stocks (hold months+)" tone="text-zinc-300">
-          <Empty
-            msg={ltResult.fundamentalDataAvailable
-              ? ltResult.dataAvailabilityMessage
-              : "Not available: long-term picks need company fundamentals (profit, debt, growth), not connected yet."}
-            reason={ltResult.fundamentalDataAvailable ? null : ltResult.dataAvailabilityMessage}
-          />
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs">
+            <span className="text-emerald-300 font-medium">
+              Daily Fundamental Scoring · Moat, Capital Efficiency (ROCE/ROE) &amp; Solvency · Cached 24h (Static across 15-min Intraday Refreshes)
+            </span>
+            <span className="font-mono text-zinc-400 text-[11px]">
+              Universe: {ltResult.universe}
+            </span>
+          </div>
+
+          {ltResult.topOpportunities.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {ltResult.topOpportunities.map((stock, i) => (
+                <LongTermStockCard key={stock.symbol} stock={stock} rank={i + 1} />
+              ))}
+            </div>
+          ) : (
+            <Empty
+              msg={ltResult.fundamentalDataAvailable
+                ? ltResult.dataAvailabilityMessage
+                : "Not available: long-term picks need company fundamentals (profit, debt, growth), not connected yet."}
+              reason={ltResult.fundamentalDataAvailable ? null : ltResult.dataAvailabilityMessage}
+            />
+          )}
         </SubSection>
       </Section>
 
