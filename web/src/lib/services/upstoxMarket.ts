@@ -502,11 +502,21 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
           chosen,
         );
         const resolvedLotSize = resolveLotSize(norm.lotSize ?? null, contractLotSize ?? null);
+        const maxVerifiedLtt = (() => {
+          const verifiedLtts = verified.rows
+            .flatMap((r) => [r.call.lastTradeTime, r.put.lastTradeTime])
+            .filter((t): t is string => typeof t === "string" && Boolean(t))
+            .map((t) => Date.parse(t))
+            .filter((t) => Number.isFinite(t) && t >= MIN_LTT_EPOCH_MS);
+          return verifiedLtts.length ? new Date(Math.max(...verifiedLtts)).toISOString() : null;
+        })();
+        const effectiveLtt = norm.lastTradeTime ?? maxVerifiedLtt;
         return {
           ...norm,
           rows: verified.rows,
           lotSize: resolvedLotSize,
-          source: liveQuoteSource(norm.lastTradeTime),
+          lastTradeTime: effectiveLtt,
+          source: liveQuoteSource(effectiveLtt),
           optionPriceVerification: verified.summary,
         };
       });
