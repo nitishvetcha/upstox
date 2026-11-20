@@ -241,14 +241,54 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
         )}
       </div>
 
+      {/* Non-Trader Friendly 3-Step Plain English Translation */}
+      <div className="mt-3.5 rounded-lg border border-sky-800/40 bg-sky-950/20 p-3">
+        <div className="flex items-center gap-2 text-xs font-bold text-sky-300 uppercase tracking-wide">
+          <HelpCircle size={14} className="text-sky-400" />
+          <span>Simple 3-Step Guide (How This Trade Works in Plain English)</span>
+        </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3 text-xs">
+          <div className="rounded border border-zinc-800 bg-zinc-900/80 p-2.5">
+            <div className="text-[10px] uppercase font-bold text-sky-400">Step 1: Your Purchase</div>
+            <div className="mt-1 font-semibold text-white">
+              Buy {totalQuantity} units at <span className="font-mono text-sky-300">₹{entry}</span>
+            </div>
+            <div className="mt-0.5 text-[11px] text-zinc-400">
+              Total money needed to invest: <span className="font-mono font-bold text-zinc-200">{fmtInr(capitalRequired)}</span>.
+            </div>
+          </div>
+
+          <div className="rounded border border-red-900/40 bg-zinc-900/80 p-2.5">
+            <div className="text-[10px] uppercase font-bold text-red-400">Step 2: Safety Guard (Stop Loss)</div>
+            <div className="mt-1 font-semibold text-white">
+              Safety exit if price hits <span className="font-mono text-red-400">₹{stop}</span>
+            </div>
+            <div className="mt-0.5 text-[11px] text-zinc-400">
+              Maximum loss is capped at <span className="font-mono font-bold text-red-400">-{fmtInr(totalMaxRisk)}</span> (-{stopLossPct.toFixed(1)}%). Protects the rest of your money.
+            </div>
+          </div>
+
+          <div className="rounded border border-emerald-900/40 bg-zinc-900/80 p-2.5">
+            <div className="text-[10px] uppercase font-bold text-emerald-400">Step 3: Profit Goal (Target 1)</div>
+            <div className="mt-1 font-semibold text-white">
+              Take profit at <span className="font-mono text-emerald-300">₹{t1}</span>
+            </div>
+            <div className="mt-0.5 text-[11px] text-zinc-400">
+              Expected gain: <span className="font-mono font-bold text-emerald-400">+{fmtInr(totalGainT1)}</span> (+{gainT1Pct.toFixed(1)}% profit on your money).
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Target & Level Adjuster Section */}
       <div className="mt-3.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
           <div className="flex items-center gap-1.5">
             <Sliders size={14} className="text-sky-400" />
             <span className="text-xs font-semibold text-white">
-              Adjust Targets & Stop Loss (Make T1 / T2 Realistic)
+              Customize Levels (T1 / T2 / Stop Loss)
             </span>
+            <span className="text-[11px] text-zinc-400">· Adjust according to your risk tolerance</span>
           </div>
           <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
             <span className="text-zinc-500 font-medium">Quick R:R Presets:</span>
@@ -261,7 +301,7 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
                   : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
               }`}
             >
-              1:1.0 Scalp
+              1:1.0 Scalp (Quick Profit)
             </button>
             <button
               type="button"
@@ -283,7 +323,7 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
                   : "bg-emerald-950/80 text-emerald-300 border border-emerald-800/80 hover:bg-emerald-900"
               }`}
             >
-              1:2.0 Moderate
+              1:2.0 Moderate Swing
             </button>
             <button
               type="button"
@@ -300,9 +340,9 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {/* Entry Price */}
           <div className="rounded border border-zinc-800 bg-zinc-950/80 p-2.5">
-            <label htmlFor={entryId} className="block text-[10px] font-semibold uppercase text-zinc-400">
-              Entry Price (₹)
-            </label>
+            <div className="text-[10px] font-semibold uppercase text-zinc-400">
+              Entry Price (Buying Price)
+            </div>
             <div className="mt-1 flex items-center gap-1">
               <input
                 id={entryId}
@@ -317,17 +357,17 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
                 className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-xs font-bold text-white focus:border-sky-500 focus:outline-none"
               />
             </div>
-            <div className="mt-1 text-[10px] text-zinc-500">
-              Per unit base cost
+            <div className="mt-1 text-[10px] text-zinc-400">
+              Cost per single share or option unit
             </div>
           </div>
 
           {/* Stop Loss */}
           <div className="rounded border border-red-900/40 bg-zinc-950/80 p-2.5">
             <div className="flex items-center justify-between">
-              <label htmlFor={stopId} className="block text-[10px] font-semibold uppercase text-red-400">
-                Stop Loss (₹)
-              </label>
+              <div className="text-[10px] font-semibold uppercase text-red-400">
+                Stop Loss (Safety Exit)
+              </div>
               <div className="flex gap-1">
                 <button
                   type="button"
@@ -362,15 +402,15 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
               />
             </div>
             <div className="mt-1 text-[10px] text-red-400 font-mono">
-              Risk: -₹{round2(perUnitRisk)} (-{stopLossPct.toFixed(1)}%)
+              Max loss: -₹{round2(perUnitRisk)} (-{stopLossPct.toFixed(1)}%)
             </div>
           </div>
 
           {/* Target 1 */}
           <div className="rounded border border-emerald-900/40 bg-zinc-950/80 p-2.5">
-            <label htmlFor={t1Id} className="block text-[10px] font-semibold uppercase text-emerald-400">
-              Target 1 (T1) (₹)
-            </label>
+            <div className="text-[10px] font-semibold uppercase text-emerald-400">
+              Target 1 (Primary Goal)
+            </div>
             <div className="mt-1 flex items-center gap-1">
               <input
                 id={t1Id}
@@ -386,15 +426,15 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
               />
             </div>
             <div className="mt-1 text-[10px] text-emerald-400 font-mono">
-              +{gainT1Pct.toFixed(1)}% (R:R {rr1.toFixed(2)}x)
+              Gain: +{gainT1Pct.toFixed(1)}% (R:R {rr1.toFixed(2)}x)
             </div>
           </div>
 
           {/* Target 2 */}
           <div className="rounded border border-emerald-900/30 bg-zinc-950/80 p-2.5">
-            <label htmlFor={t2Id} className="block text-[10px] font-semibold uppercase text-emerald-300">
-              Target 2 (T2) (₹)
-            </label>
+            <div className="text-[10px] font-semibold uppercase text-emerald-300">
+              Target 2 (Extended Runner)
+            </div>
             <div className="mt-1 flex items-center gap-1">
               <input
                 id={t2Id}
@@ -410,7 +450,7 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
               />
             </div>
             <div className="mt-1 text-[10px] text-emerald-300 font-mono">
-              {t2 > 0 ? `+${gainT2Pct.toFixed(1)}% (R:R ${rr2.toFixed(2)}x)` : "Optional runner"}
+              {t2 > 0 ? `Gain: +${gainT2Pct.toFixed(1)}% (R:R ${rr2.toFixed(2)}x)` : "Optional runner"}
             </div>
           </div>
         </div>

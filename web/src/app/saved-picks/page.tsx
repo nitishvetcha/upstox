@@ -158,12 +158,23 @@ export default function SavedPicksPage() {
       <div className="relative overflow-x-auto rounded border border-zinc-800">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="bg-zinc-900 text-xs uppercase tracking-wider text-zinc-500">
-            <tr><th className="px-3 py-2">Saved At (IST)</th><th className="px-3 py-2">Instrument</th><th className="px-3 py-2">Dir</th><th className="px-3 py-2">Entry</th><th className="px-3 py-2">Stop</th><th className="px-3 py-2">Target</th><th className="px-3 py-2">Source</th><th className="px-3 py-2">Status</th><th className="px-3 py-2"><span className="sr-only">Actions</span></th></tr>
+            <tr>
+              <th className="px-3 py-2">Saved At (IST)</th>
+              <th className="px-3 py-2">Instrument</th>
+              <th className="px-3 py-2">Dir (Upside/Downside)</th>
+              <th className="px-3 py-2">Entry (Buy Price)</th>
+              <th className="px-3 py-2">Stop Loss (Safety Exit)</th>
+              <th className="px-3 py-2">Target (Profit Goal)</th>
+              <th className="px-3 py-2">Data Source</th>
+              <th className="px-3 py-2">Validation Status</th>
+              <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
+            </tr>
           </thead>
           <tbody>
             {loading && <tr><td colSpan={9} className="px-3 py-6 text-center text-zinc-500">Loading saved picks…</td></tr>}
             {!loading && visible.map((p) => {
               const ist = fmtIstDateTime(p.savedAt);
+              const isLong = p.direction === "LONG" || p.direction === "BULLISH";
               return (
                 <Fragment key={p.id}>
                   <tr className="border-t border-zinc-800/70 text-zinc-300">
@@ -171,8 +182,24 @@ export default function SavedPicksPage() {
                     <div className="font-semibold text-zinc-200">{ist.date}</div>
                     {ist.time && <div className="text-[11px] text-zinc-400">{ist.time}</div>}
                   </td>
-                  <td className="px-3 py-2">{p.instrument} <span className="text-xs text-zinc-500">({p.instrumentType})</span></td>
-                  <td className="px-3 py-2">{p.direction}</td>
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-white">{p.instrument}</div>
+                    <div className="text-[11px] text-zinc-400">
+                      {p.instrumentType === "INDEX_OPTION" ? "Index Option (Derivative)" : p.instrumentType === "STOCK" ? "Equity Share" : p.instrumentType}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                        isLong
+                          ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800/80"
+                          : "bg-red-950/80 text-red-400 border border-red-800/80"
+                      }`}
+                      title={isLong ? "Profits when underlying price goes UP" : "Profits when underlying price goes DOWN"}
+                    >
+                      {p.direction} {isLong ? "(BUY)" : "(SELL)"}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 font-mono">{p.entry ?? "–"}</td>
                   <td className="px-3 py-2 font-mono">
                     <div>{p.stopLoss ?? "–"}</div>
