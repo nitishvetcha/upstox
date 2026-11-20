@@ -224,6 +224,15 @@ export function evaluatePaperOpportunity(
   const mfeR = opp.riskPerUnit > 0 ? r2(newMfe / opp.riskPerUnit) : null;
   const maeR = opp.riskPerUnit > 0 ? r2(newMae / opp.riskPerUnit) : null;
 
+  // Part 2 Real-world Risk Safeguard: Option Theta Decay Monitoring
+  let thetaWarning: string | null = opp.thetaWarning ?? null;
+  if (opp.instrumentType === "OPTION") {
+    const elapsedMinutes = (new Date(timestamp).getTime() - new Date(opp.openedAt).getTime()) / 60000;
+    if (elapsedMinutes >= 45 && (newMfe === 0 || (mfeR !== null && mfeR < 0.5))) {
+      thetaWarning = `THETA DECAY RISK: Position held for ${Math.round(elapsedMinutes)}m without reaching 0.5R. Time-exit recommended to prevent option premium erosion.`;
+    }
+  }
+
   if (toStatus !== null) {
     const exitPrice = currentPrice;
     const realizedPnl = r2(pnlPerUnit(opp, exitPrice));
@@ -263,6 +272,7 @@ export function evaluatePaperOpportunity(
       underlyingMfe: newUnderlyingMfe,
       underlyingMae: newUnderlyingMae,
       durationSeconds,
+      thetaWarning,
       ...(source === "LIVE" ? { lastLivePrice: currentPrice, lastLivePriceAt: timestamp } : {}),
       events: [...opp.events, event],
     };
@@ -280,6 +290,7 @@ export function evaluatePaperOpportunity(
     maeR,
     underlyingMfe: newUnderlyingMfe,
     underlyingMae: newUnderlyingMae,
+    thetaWarning,
     ...(source === "LIVE" ? { lastLivePrice: currentPrice, lastLivePriceAt: timestamp } : {}),
   };
   savePaperOpportunity(noTransition);

@@ -211,6 +211,28 @@ export function PositionSizeCalculator({
               ⚠ Position size capped to prevent exceeding 50% of your account capital on a single intraday trade.
             </div>
           )}
+
+          {/* Real-World Execution Rules & Safeguards */}
+          <div className="rounded border border-zinc-800 bg-zinc-900/60 p-2 space-y-1 text-[11px] text-zinc-300">
+            <div className="flex items-center justify-between text-[10px] uppercase font-bold text-sky-400">
+              <span>Mandatory Execution Safeguards</span>
+              <span className="rounded bg-sky-950 px-1.5 py-0.2 border border-sky-800/60 text-sky-300">Order: LIMIT ONLY</span>
+            </div>
+            <div className="text-[10px] text-zinc-400 leading-relaxed">
+              • <strong className="text-zinc-200">Zero Slippage Rule:</strong> Place an Exchange <span className="text-sky-300 font-semibold">LIMIT order at ₹{entry}</span>. Do not use market orders.
+            </div>
+            <div className="text-[10px] text-zinc-400 leading-relaxed">
+              {type === "OPTION" ? (
+                <>
+                  • <strong className="text-amber-300">45–60m Theta Time-Stop:</strong> If Target 1 is not reached within 45–60 minutes, exit at breakeven/small loss to avoid option time decay.
+                </>
+              ) : (
+                <>
+                  • <strong className="text-amber-300">Intraday Cutoff:</strong> Square off before 3:15 PM IST. Never carry margin equity positions overnight.
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

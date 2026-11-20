@@ -6,8 +6,11 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Calculator,
+  Check,
   CheckCircle2,
   ChevronDown,
+  Clock,
+  Copy,
   DollarSign,
   HelpCircle,
   Percent,
@@ -61,6 +64,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps) {
   const isLong = pick.direction !== "SHORT";
+  const isOption = pick.instrumentType.includes("OPTION");
   const rawEntry = Number(pick.entry) || 0;
   const rawStop = Number(pick.stopLoss) || 0;
   const rawT1 = pick.targets?.[0] != null ? Number(pick.targets[0]) : 0;
@@ -72,6 +76,7 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
   const [t1, setT1] = useState<number>(rawT1);
   const [t2, setT2] = useState<number>(rawT2);
   const [activePreset, setActivePreset] = useState<string>("original");
+  const [slipCopied, setSlipCopied] = useState(false);
 
   const detectedLotSize = useMemo(
     () => defaultLotSize(pick.instrument, pick.instrumentType),
@@ -114,6 +119,49 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
 
   // Breakeven win rate: 1 / (1 + RR)
   const breakevenWinRate = rr1 > 0 ? (1 / (1 + rr1)) * 100 : 50;
+
+  // Slip generation with Part 2 Limit Order & Theta Time-Exit Safeguards
+  const generateAdjustedSlip = () => {
+    return [
+      `=== UPSTOX ORDER SLIP (${isOption ? "OPTIONS" : "EQUITY"}) ===`,
+      `ORDER TYPE: LIMIT ORDER ONLY (DO NOT USE MARKET ORDER - SLIPPAGE RISK)`,
+      `INSTRUMENT: ${pick.instrument}`,
+      `ACTION: ${isLong ? "BUY / LONG" : "SELL / SHORT"}`,
+      `QUANTITY: ${totalQuantity} units (${lots} lot${lots > 1 ? "s" : ""})`,
+      `LIMIT PRICE: ₹${entry}`,
+      `STOP LOSS: ₹${stop} (-${stopLossPct.toFixed(1)}% | -₹${totalMaxRisk.toLocaleString("en-IN")})`,
+      `TARGET 1 (Book 50%): ₹${t1} (+${gainT1Pct.toFixed(1)}% | +₹${totalGainT1.toLocaleString("en-IN")})`,
+      `TARGET 2 (Runner): ₹${t2 || t1}`,
+      `RISK/REWARD: 1 : ${rr1.toFixed(2)}x`,
+      `MANDATORY SAFEGUARDS:`,
+      `1. Place LIMIT order at ₹${entry} (avoids bid-ask slippage).`,
+      `2. Place system Stop Loss at ₹${stop} immediately upon fill.`,
+      isOption
+        ? `3. ⏱️ TIME STOP (45-60m Rule): If Target 1 is not reached within 45-60 min, close position at breakeven/small loss to avoid Theta decay.`
+        : `3. Intraday Exit: Square off before 3:15 PM IST. Never hold leveraged positions overnight.`,
+      `==============================================`,
+    ].join("\n");
+  };
+
+  const handleCopyAdjustedSlip = async () => {
+    try {
+      const text = generateAdjustedSlip();
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+      } else if (typeof document !== "undefined") {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setSlipCopied(true);
+      setTimeout(() => setSlipCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  };
 
   // Quick Preset Handlers
   const applyPreset = (preset: "scalp" | "intraday" | "swing" | "original") => {
@@ -708,9 +756,20 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
 
       {/* Probabilistic Edge & "Will It Profit?" Intelligence Card */}
       <div className="mt-3.5 rounded-lg border border-sky-900/60 bg-sky-950/20 p-3 text-xs">
-        <div className="flex items-center gap-1.5 font-semibold text-sky-300">
-          <HelpCircle size={14} />
-          <span>Profit Realism & Probability Analysis:</span>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sky-900/40 pb-2">
+          <div className="flex items-center gap-1.5 font-semibold text-sky-300">
+            <HelpCircle size={14} />
+            <span>Profit Realism & Probability Analysis:</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopyAdjustedSlip}
+            className="inline-flex items-center gap-1.5 rounded border border-sky-600/80 bg-sky-950 px-2.5 py-1 text-[11px] font-semibold text-sky-200 transition-colors hover:bg-sky-900 hover:text-white"
+            title="Copy exchange-ready limit order slip with all safeguards to clipboard"
+          >
+            {slipCopied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} className="text-sky-400" />}
+            <span>{slipCopied ? "Order Slip Copied!" : "Copy Adjusted Limit Order Slip"}</span>
+          </button>
         </div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2 text-zinc-300">
           <div className="rounded border border-sky-900/40 bg-zinc-950/60 p-2.5">
@@ -735,6 +794,56 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
               <span className="font-mono text-zinc-200 font-semibold">₹{entry}</span>).<br />
               • Let the remaining lots ride to Target 2 (
               <span className="font-mono text-emerald-300 font-semibold">₹{t2 || t1}</span>) completely risk-free!
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Part 2: Real-World Execution Safeguards */}
+      <div className="mt-3.5 rounded-lg border border-amber-900/40 bg-amber-950/15 p-3 text-xs">
+        <div className="flex items-center gap-1.5 font-semibold text-amber-300 uppercase tracking-wide">
+          <Shield size={14} className="text-amber-400" />
+          <span>Real-World Trading Safeguards (Mandatory Safety Controls)</span>
+        </div>
+        <div className="mt-2.5 grid gap-2.5 sm:grid-cols-3 text-zinc-300">
+          {/* Safeguard 1: Theta Decay / Time-Stop */}
+          <div className="rounded border border-amber-900/40 bg-zinc-950/80 p-2.5">
+            <div className="flex items-center gap-1.5 font-semibold text-amber-300">
+              <Clock size={13} className="text-amber-400" />
+              <span>{isOption ? "45–60m Theta Time-Stop" : "Intraday Square-off"}</span>
+            </div>
+            <div className="mt-1 text-[11px] text-zinc-400 leading-relaxed">
+              {isOption ? (
+                <>
+                  Options suffer from <span className="text-amber-300 font-semibold">Theta (time decay)</span>. If this trade does not move toward Target 1 within <span className="font-mono text-white font-semibold">45–60 minutes</span>, close at breakeven or small loss. Do NOT hold stagnant options all day.
+                </>
+              ) : (
+                <>
+                  Intraday equity leverage carries overnight penalty risks. All day trades must be closed before <span className="font-mono text-white font-semibold">3:15 PM IST</span> regardless of target status.
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Safeguard 2: Limit Orders */}
+          <div className="rounded border border-sky-900/40 bg-zinc-950/80 p-2.5">
+            <div className="flex items-center gap-1.5 font-semibold text-sky-300">
+              <Target size={13} className="text-sky-400" />
+              <span>Limit Orders Only (Slippage Guard)</span>
+            </div>
+            <div className="mt-1 text-[11px] text-zinc-400 leading-relaxed">
+              Never use <span className="text-red-300 font-semibold">Market Orders</span>. Fast-moving strikes have wide bid-ask spreads that fill 2–5% worse than the screen price. Always place an Exchange <span className="text-sky-300 font-semibold">LIMIT order at ₹{entry}</span>.
+            </div>
+          </div>
+
+          {/* Safeguard 3: Validation Transparency */}
+          <div className="rounded border border-emerald-900/40 bg-zinc-950/80 p-2.5">
+            <div className="flex items-center gap-1.5 font-semibold text-emerald-300">
+              <CheckCircle2 size={13} className="text-emerald-400" />
+              <span>Why "NOT VALIDATED"?</span>
+            </div>
+            <div className="mt-1 text-[11px] text-zinc-400 leading-relaxed">
+              This setup is an algorithmic candidate. Quantitative models require <span className="text-emerald-300 font-semibold">≥30 forward paper trades</span> in the Journal to establish statistical proof (p &lt; 0.05). This prevents false profit promises.
             </div>
           </div>
         </div>

@@ -156,6 +156,9 @@ export interface PaperOpportunity {
 
   durationSeconds: number | null;
 
+  // Real-world risk tracking: Theta decay warning when an option trade is held >45m without reaching 0.5R
+  thetaWarning?: string | null;
+
   // Last exchange-verified LIVE monitoring price (basis for EOD_EXIT). Absent on legacy records.
   lastLivePrice?: number | null;
   lastLivePriceAt?: string | null;

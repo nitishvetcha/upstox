@@ -407,7 +407,7 @@ function StockCard({ stock, rank, horizon = "INTRADAY" }: { stock: StockOpportun
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <SavePickButton pick={pickFromStock(stock)} />
-        <CopyOrderSlipButton slipText={`BUY ${stock.symbol} @ ₹${stock.entry} | SL: ₹${stock.stop} | T1: ₹${stock.target1} | T2: ₹${stock.target2} | R:R: ${stock.rr}x`} />
+        <CopyOrderSlipButton slipText={`ORDER: LIMIT ONLY | BUY ${stock.symbol} | LIMIT PRICE: ₹${stock.entry} (Entry Range: ₹${stock.entryLow} - ₹${stock.entryHigh}) | SL: ₹${stock.stop} | T1: ₹${stock.target1} | T2: ₹${stock.target2} | R:R: ${stock.rr}x | TIME-EXIT: Close before 3:15 PM IST`} />
       </div>
       <details className="mt-2">
         <summary className="cursor-pointer text-xs text-zinc-400 hover:text-zinc-200">Signals, reasons &amp; invalidation</summary>
@@ -746,8 +746,8 @@ function OptionRecCard({ contract, snapshotSource, lotSize, rank, daysLeft }: {
         <CopyOrderSlipButton
           slipText={
             isMultiLeg
-              ? `${stratLabel} ${contract.underlying} ${contract.expiry} | Net Debit: ₹${effectiveCapitalUnit} | SL: ₹${contract.stop} | T1: ₹${contract.target1} | T2: ₹${contract.target2} | Lot: ${lotSize ?? 65}`
-              : `BUY ${contract.underlying} ${contract.strike} ${contract.optionType} @ ₹${contract.entry} | SL: ₹${contract.stop} | T1: ₹${contract.target1} | T2: ₹${contract.target2} | Lot: ${lotSize ?? 65}`
+              ? `ORDER: LIMIT ONLY (DO NOT USE MARKET ORDER) | ${stratLabel} ${contract.underlying} ${contract.expiry} | Net Debit: ₹${effectiveCapitalUnit} | SL: ₹${contract.stop} | T1: ₹${contract.target1} | T2: ₹${contract.target2} | Lot: ${lotSize ?? 65} | ⏱️ TIME-STOP: Exit after 45-60m if stagnant (Theta Guard)`
+              : `ORDER: LIMIT ONLY (NO MARKET ORDER) | BUY ${contract.underlying} ${contract.strike} ${contract.optionType} | LIMIT PRICE: ₹${contract.entry} (Entry Range: ₹${contract.entryLow} - ₹${contract.entryHigh}) | SL: ₹${contract.stop} | T1: ₹${contract.target1} | T2: ₹${contract.target2} | Lot: ${lotSize ?? 65} | ⏱️ TIME-STOP: Exit after 45-60m if T1 not reached (Theta Guard)`
           }
         />
       </div>

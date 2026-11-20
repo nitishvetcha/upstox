@@ -80,3 +80,33 @@ test("Target adjustment presets correctly recalculate achievable intraday profit
   const swingGain = (t1Swing - entry) * lotSize;
   assert.ok(Math.abs(swingGain - 5493.00) < 1.0);
 });
+
+test("Part 2 Safeguards: Limit order requirement & Theta Time-Stop rules are verified", () => {
+  // 1. Limit order text format
+  const optionSlip = [
+    "=== UPSTOX ORDER SLIP (OPTIONS) ===",
+    "ORDER TYPE: LIMIT ORDER ONLY (DO NOT USE MARKET ORDER - SLIPPAGE RISK)",
+    "INSTRUMENT: NIFTY 2026-11-23 25650 CE",
+    "LIMIT PRICE: ₹72.15",
+    "STOP LOSS: ₹35.53",
+    "TARGET 1 (Book 50%): ₹148.87",
+    "3. ⏱️ TIME STOP (45-60m Rule): If Target 1 is not reached within 45-60 min, close position at breakeven/small loss to avoid Theta decay.",
+  ].join("\n");
+
+  assert.match(optionSlip, /LIMIT ORDER ONLY/);
+  assert.match(optionSlip, /SLIPPAGE RISK/);
+  assert.match(optionSlip, /TIME STOP \(45-60m Rule\)/);
+  assert.match(optionSlip, /Theta decay/);
+
+  // 2. Stock order format
+  const stockSlip = [
+    "=== UPSTOX ORDER SLIP (EQUITY) ===",
+    "ORDER TYPE: LIMIT ORDER ONLY (DO NOT USE MARKET ORDER - SLIPPAGE RISK)",
+    "INSTRUMENT: EICHERMOT",
+    "LIMIT PRICE: ₹7904",
+    "3. Intraday Exit: Square off before 3:15 PM IST. Never hold leveraged positions overnight.",
+  ].join("\n");
+
+  assert.match(stockSlip, /LIMIT ORDER ONLY/);
+  assert.match(stockSlip, /Square off before 3:15 PM IST/);
+});

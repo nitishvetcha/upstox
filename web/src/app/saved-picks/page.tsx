@@ -227,10 +227,15 @@ export default function SavedPicksPage() {
                               ? "border-emerald-600 bg-emerald-950/60 text-emerald-300"
                               : "border-zinc-700 bg-zinc-800 text-zinc-300"
                           }`}
-                          title="Validation Status: Research setup saved from Opportunity Scanner. Requires forward paper tracking or walk-forward backtesting for statistical validation."
+                          title="Validation Status: Research setup saved from Opportunity Scanner. Requires forward paper tracking (≥30 trades) in the journal for statistical validation."
                         >
                           {p.statusLabel}
                         </span>
+                        {p.validation !== "VALIDATED" && (
+                          <span className="text-[10px] text-zinc-400 font-normal">
+                            (Awaiting 30+ forward journal trades)
+                          </span>
+                        )}
                         {p.source === "LIVE" ? (
                           <span className="inline-flex items-center gap-1 rounded border border-emerald-800 bg-emerald-950/50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> Live Data
@@ -264,6 +269,13 @@ export default function SavedPicksPage() {
                         <Calculator size={12} aria-hidden />
                         {selectedPickId === p.id ? "Hide" : "Calculate"}
                       </button>
+                      <a
+                        href="/opportunity-journal"
+                        title="Forward-track this setup in the Opportunity Journal to build statistical validation"
+                        className="inline-flex min-h-[32px] items-center gap-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
+                      >
+                        Track
+                      </a>
                       <button
                         type="button"
                         aria-label={`Delete ${p.instrument}`}
