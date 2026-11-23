@@ -48,7 +48,7 @@ registerProcess(nextChild, "NEXT-WEB");
 // 2. Start Telegram Market Bot & Schedule Runner
 if (process.env.TELEGRAM_BOT_TOKEN) {
   console.log("[RENDER] Spawning Telegram Market Bot & Schedule Runner...");
-  const botChild = spawn(process.execPath, ["--import", "tsx", "scripts/run-telegram-market-bot.ts"], {
+  const botChild = spawn(process.execPath, ["--no-warnings", "--import", "tsx", "scripts/run-telegram-market-bot.ts"], {
     cwd: webDir,
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"],
