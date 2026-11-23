@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { isMarketOpen, marketStatus } from "./liveSessionController.ts";
+import { notifyOpportunitySignal } from "./notificationService.ts";
 import {
   listPaperOpportunities,
   savePaperOpportunity,
@@ -337,6 +338,9 @@ export async function runLiveOpportunityCollection(
         result.created++;
         if (label === "NIFTY") result.niftyCount++;
         else result.bankNiftyCount++;
+
+        // Broadcast real-time signal to Telegram / Discord (non-blocking)
+        void notifyOpportunitySignal(paper, { underlying: label, lotSize: label === "NIFTY" ? 65 : 30 });
       }
     } catch (e) {
       result.errors.push(`${label}: ${(e as Error).message}`);

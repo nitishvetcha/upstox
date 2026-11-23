@@ -14,6 +14,7 @@ import { openDeps } from "@/lib/services/paperOpenDeps";
 import { isIndexId } from "@/lib/services/instrumentRegistry";
 import { serverProvenance } from "@/lib/services/paperOpportunityProvenance";
 import { decideOpen, publicEngineReason, type OpenDecision, type OpenFacts } from "@/lib/services/paperOpportunityOpen";
+import { circuitBreaker } from "@/lib/services/portfolioCircuitBreaker";
 import { getPaperTradingEngine } from "@/lib/services/paperStore";
 import { analyze } from "@/lib/engine/strategy";
 import { logEvent } from "@/lib/ops/structuredLog";
@@ -46,6 +47,13 @@ async function attemptOpen(id: string, opp: PaperOpportunity, earlyFacts: OpenFa
 
   // Fresh server-side snapshot, provenance and strategy analysis.
   const now = openDeps.now();
+
+  // Portfolio Circuit Breaker Gate
+  const cb = circuitBreaker.canOpenTrade();
+  if (!cb.allowed) {
+    return finish(id, decideOpen({ ...earlyFacts, circuitBreakerRejected: cb.reason }));
+  }
+
   const snapshot = await openDeps.getSnapshot(index);
   // Breadth status lives on the snapshot, not in its sources map.
   const provenance = serverProvenance({ ...snapshot.sources, breadth: { status: snapshot.breadth?.status ?? null, source: snapshot.sources.breadth } } as never);

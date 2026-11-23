@@ -22,6 +22,9 @@ export interface PositionSizeResult {
   target1Profit: number;
   target2Profit: number;
   isCappedByCapital: boolean;
+  isCapitalConstrained?: boolean;
+  minCapitalNeeded?: number;
+  riskWarning?: string | null;
 }
 
 export function calculatePositionSize(params: PositionSizeParams): PositionSizeResult {
@@ -49,7 +52,30 @@ export function calculatePositionSize(params: PositionSizeParams): PositionSizeR
     const riskPerLot = riskPerUnit * effectiveLotSize;
     const capitalPerLot = effectiveUnitPrice * effectiveLotSize;
 
-    let lots = Math.max(1, Math.floor(riskBudget / riskPerLot));
+    // Strict 1% (or user riskPercent) risk enforcement:
+    // If risk per lot exceeds the entire risk budget, do NOT force 1 lot (which would risk 15%-30% on small accounts).
+    // Instead return 0 lots with an explicit capital shortfall calculation.
+    const rawLots = Math.floor(riskBudget / riskPerLot);
+    if (rawLots < 1) {
+      const minCapitalNeeded = Math.ceil(riskPerLot / (riskPercent / 100));
+      return {
+        recommendedLots: 0,
+        recommendedUnits: 0,
+        riskBudget,
+        totalRisk: 0,
+        totalRiskPercent: 0,
+        capitalRequired: 0,
+        capitalRequiredPercent: 0,
+        target1Profit: 0,
+        target2Profit: 0,
+        isCappedByCapital: false,
+        isCapitalConstrained: true,
+        minCapitalNeeded,
+        riskWarning: `Account capital (₹${validCapital.toLocaleString("en-IN")}) is insufficient to trade 1 lot within your ${riskPercent}% risk budget (₹${riskBudget.toLocaleString("en-IN")}). Risk per lot is ₹${Math.round(riskPerLot).toLocaleString("en-IN")}. Minimum capital needed: ₹${minCapitalNeeded.toLocaleString("en-IN")}.`,
+      };
+    }
+
+    let lots = rawLots;
     let isCappedByCapital = false;
 
     // Capital allocation guard (e.g. max 50% account capital deployed)
@@ -78,10 +104,34 @@ export function calculatePositionSize(params: PositionSizeParams): PositionSizeR
       target1Profit,
       target2Profit,
       isCappedByCapital,
+      isCapitalConstrained: false,
+      minCapitalNeeded: undefined,
+      riskWarning: null,
     };
   } else {
-    // STOCK sizing
-    let units = Math.max(1, Math.floor(riskBudget / riskPerUnit));
+    // STOCK sizing:
+    // If risk per share exceeds the entire risk budget, return 0 shares with capital shortfall details.
+    const rawUnits = Math.floor(riskBudget / riskPerUnit);
+    if (rawUnits < 1) {
+      const minCapitalNeeded = Math.ceil(riskPerUnit / (riskPercent / 100));
+      return {
+        recommendedLots: 0,
+        recommendedUnits: 0,
+        riskBudget,
+        totalRisk: 0,
+        totalRiskPercent: 0,
+        capitalRequired: 0,
+        capitalRequiredPercent: 0,
+        target1Profit: 0,
+        target2Profit: 0,
+        isCappedByCapital: false,
+        isCapitalConstrained: true,
+        minCapitalNeeded,
+        riskWarning: `Account capital (₹${validCapital.toLocaleString("en-IN")}) is insufficient to buy 1 share within your ${riskPercent}% risk budget (₹${riskBudget.toLocaleString("en-IN")}). Risk per share is ₹${riskPerUnit.toFixed(2)}. Minimum capital needed: ₹${minCapitalNeeded.toLocaleString("en-IN")}.`,
+      };
+    }
+
+    let units = rawUnits;
     let isCappedByCapital = false;
 
     if (units * effectiveUnitPrice > maxAllowedCapital) {
@@ -108,6 +158,9 @@ export function calculatePositionSize(params: PositionSizeParams): PositionSizeR
       target1Profit,
       target2Profit,
       isCappedByCapital,
+      isCapitalConstrained: false,
+      minCapitalNeeded: undefined,
+      riskWarning: null,
     };
   }
 }

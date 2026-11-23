@@ -76,8 +76,8 @@ test("API-9. DELETE with ?purgeCompleted=true purges completed intraday picks", 
   };
   fs.writeFileSync(process.env.SAVED_PICKS_FILE!, JSON.stringify([pastPick], null, 2));
 
-  // Also add an active pick via POST
-  await POST(req({ ...body, instrument: "NIFTY 2026-11-23 25600 CE", instrumentType: "INDEX_OPTION" }));
+  // Also add an active pick via POST (future expiry so not expired today)
+  await POST(req({ ...body, instrument: "NIFTY 2026-12-31 25600 CE", instrumentType: "INDEX_OPTION" }));
 
   const res = await DELETE(new Request("http://x/api/saved-picks?purgeCompleted=true", { method: "DELETE" }));
   assert.equal(res.status, 200);
@@ -89,7 +89,7 @@ test("API-9. DELETE with ?purgeCompleted=true purges completed intraday picks", 
   // GET should now only return the active option
   const list = await (await GET()).json();
   assert.equal(list.picks.length, 1);
-  assert.equal(list.picks[0].instrument, "NIFTY 2026-11-23 25600 CE");
+  assert.equal(list.picks[0].instrument, "NIFTY 2026-12-31 25600 CE");
   assert.equal(list.picks[0].isCompleted, false);
 });
 

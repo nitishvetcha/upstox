@@ -66,7 +66,9 @@ export function PositionSizeCalculator({
           <span className="text-sky-400">⚖</span>
           <span>Position Sizing &amp; Lot Calculator</span>
           <span className="rounded bg-sky-950/60 border border-sky-800/40 px-1.5 py-0.2 text-[10px] text-sky-300 font-mono">
-            {type === "OPTION" ? `${sizing.recommendedLots} lot${sizing.recommendedLots > 1 ? "s" : ""}` : `${sizing.recommendedUnits} shares`}
+            {sizing.recommendedLots > 0
+              ? (type === "OPTION" ? `${sizing.recommendedLots} lot${sizing.recommendedLots > 1 ? "s" : ""}` : `${sizing.recommendedUnits} shares`)
+              : "0 (Capital Shortfall)"}
           </span>
         </span>
         <span className="text-[10px] text-zinc-500 font-mono">
@@ -205,6 +207,23 @@ export function PositionSizeCalculator({
               </div>
             </div>
           </div>
+
+          {sizing.isCapitalConstrained && (
+            <div className="text-[11px] text-amber-300 bg-amber-950/40 border border-amber-800/60 rounded px-2.5 py-1.5 space-y-1">
+              <div className="font-semibold flex items-center gap-1.5 text-amber-200">
+                <span>⚠</span>
+                <span>Account Capital Shortfall ({riskPercent}% Risk Enforcement)</span>
+              </div>
+              <div className="text-[10px] text-zinc-300 leading-relaxed">
+                {sizing.riskWarning}
+              </div>
+              {sizing.minCapitalNeeded && (
+                <div className="text-[10px] text-amber-400 font-mono">
+                  Minimum account capital required: ₹{sizing.minCapitalNeeded.toLocaleString("en-IN")}
+                </div>
+              )}
+            </div>
+          )}
 
           {sizing.isCappedByCapital && (
             <div className="text-[10px] text-amber-400 bg-amber-950/30 border border-amber-800/40 rounded px-2 py-1">

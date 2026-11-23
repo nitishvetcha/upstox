@@ -16,6 +16,7 @@ import {
   savePaperOpportunity,
 } from "./paperOpportunityStore.ts";
 import { expiryInstant } from "../paperMath.ts";
+import { notifyTradeExit } from "./notificationService.ts";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -277,6 +278,7 @@ export function evaluatePaperOpportunity(
       events: [...opp.events, event],
     };
     savePaperOpportunity(updated);
+    void notifyTradeExit(updated, reason, realizedPnl, realizedR);
     return { transitioned: true, toStatus, reason, mfe: newMfe, mae: newMae };
   }
 

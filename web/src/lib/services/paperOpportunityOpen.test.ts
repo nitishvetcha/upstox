@@ -67,3 +67,11 @@ test("paper-engine risk or sizing refusal is returned as the engine reason, neve
 test("an engine that was not consulted cannot open a trade", () => {
   assert.equal(decideOpen(base({ engine: null })).code, "ENGINE_REJECTED");
 });
+
+test("a trade refused by circuit breaker returns CIRCUIT_BREAKER_TRIPPED", () => {
+  const d = decideOpen(base({ circuitBreakerRejected: "HEAT STOP ACTIVE: 2 consecutive losses" }));
+  assert.equal(d.code, "CIRCUIT_BREAKER_TRIPPED");
+  assert.equal(d.ok, false);
+  assert.equal(d.status, 422);
+  assert.match(d.reasons[0], /HEAT STOP ACTIVE/);
+});

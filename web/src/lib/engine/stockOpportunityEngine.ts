@@ -388,6 +388,25 @@ export function extractPreviousDayLevelsFromDaily(
 }
 
 /**
+ * Compute Opening Range High and Low from 5-minute candles.
+ * The opening range covers the first 15 minutes of the session (first 3 five-minute bars: 09:15, 09:20, 09:25).
+ * Returns null for both when fewer than 2 valid bars exist.
+ */
+export function computeOrbLevels(candles: Candle[], sessionDate: string): { orbHigh: number | null; orbLow: number | null } {
+  const sessionBars = candles
+    .filter((c) => candleSessionDate(c.timestamp) === sessionDate)
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .slice(0, 3); // first 3 bars = first 15 minutes
+  if (sessionBars.length < 2) return { orbHigh: null, orbLow: null };
+  const highs = sessionBars.map((c) => c.high).filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
+  const lows = sessionBars.map((c) => c.low).filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
+  if (!highs.length || !lows.length) return { orbHigh: null, orbLow: null };
+  const orbHigh = Math.max(...highs);
+  const orbLow = Math.min(...lows);
+  return orbHigh > orbLow ? { orbHigh, orbLow } : { orbHigh: null, orbLow: null };
+}
+
+/**
  * Calculate 14-period True Range ATR from completed daily candles.
  * Fails safe by returning null if insufficient valid candles (< 2).
  */
@@ -1112,9 +1131,13 @@ export async function scanStocks(kind: "intraday" | "swing", now = new Date(), d
     instrumentKey: c.instrumentKey, kind: "EQUITY" as const,
   }));
 
-  // Also fetch NIFTY index quote for relative strength calculation.
-  // We include it in the batch — NSE_INDEX|13 is NIFTY 50.
-  const quotes = await (deps.quotes ?? batchQuotes)(instruments, now);
+  // Include the NIFTY 50 index in the batch for a direct change reading (vs the crude constituent mean).
+  const niftyInst: StockInstrument = { symbol: "NIFTY", name: "NIFTY 50", exchange: "NSE", instrumentKey: NIFTY_KEY, kind: "EQUITY" };
+  const allInstruments = [niftyInst, ...instruments];
+  const allQuotes = await (deps.quotes ?? batchQuotes)(allInstruments, now);
+  const niftyIndexQuote = allQuotes.find((q) => q.instrumentKey === NIFTY_KEY);
+  const quotes = allQuotes.filter((q) => q.instrumentKey !== NIFTY_KEY);
+
   const diagnostics = stockDiagnostics(quotes, instruments.length);
   const available = quotes.filter((q) => q.ltp !== null && q.freshness !== "UNAVAILABLE");
   // Derived from the quotes' own provider, never a constant. Mixed providers are reported as MIXED.
@@ -1126,11 +1149,11 @@ export async function scanStocks(kind: "intraday" | "swing", now = new Date(), d
   const freshness = available.length === 0 ? "UNAVAILABLE"
     : available.every((q) => q.freshness === "LIVE") ? "LIVE" : "MIXED";
 
-  // Estimate NIFTY change from constituent moves (proxy when index not in batch)
+  // Prefer the real NIFTY index change; fall back to the constituent-mean proxy.
   const niftyChanges = available
     .filter((q) => q.changePercent !== undefined)
     .map((q) => q.changePercent!);
-  const niftyChgPct = niftyProxyChange(niftyChanges);
+  const niftyChgPct = niftyIndexQuote?.changePercent ?? niftyProxyChange(niftyChanges);
 
   const opportunities: StockOpportunity[] = [];
   let rejected = 0;
@@ -1196,6 +1219,39 @@ export async function scanStocks(kind: "intraday" | "swing", now = new Date(), d
   if (kind === "intraday" && available.length > 0) {
     const token = await getAccessToken();
     await enrichQuotesWithPreviousDayLevels(available, now, deps.daily, token);
+
+    // Enrich top candidates with ORB levels from 5-min intraday candles (first 15 min of session).
+    // Limited to top 10 by absolute move to cap API calls. Skipped when deps.daily is injected
+    // (test mode: the test controls all candle data via deps.daily).
+    if (token && !deps.daily) {
+      const sessionDate = istToday(now);
+      const orbKeys = [...available]
+        .filter((q) => q.changePercent !== undefined)
+        .sort((a, b) => Math.abs(b.changePercent ?? 0) - Math.abs(a.changePercent ?? 0))
+        .slice(0, 10)
+        .map((q) => q.instrumentKey)
+        .filter((k): k is string => Boolean(k));
+      const orb5mMap = new Map<string, Candle[]>();
+      await Promise.all(orbKeys.map(async (key) => {
+        const c = await cached(`stock-5m-candles:${key}:${sessionDate}`, 6 * 3600_000, async () => {
+          try {
+            const { candles } = await loadHistory(key, "5m", "1M", upstoxHistoryFetcher(token!), { now });
+            return candles;
+          } catch {
+            return [] as Candle[];
+          }
+        });
+        if (c.length > 0) orb5mMap.set(key, c);
+      }));
+      for (const q of available) {
+        if (!q.instrumentKey) continue;
+        const c5m = orb5mMap.get(q.instrumentKey);
+        if (!c5m) continue;
+        const { orbHigh, orbLow } = computeOrbLevels(c5m, sessionDate);
+        if (orbHigh !== null) { q.openingRangeHigh = orbHigh; q.orbHigh = orbHigh; }
+        if (orbLow !== null) { q.openingRangeLow = orbLow; q.orbLow = orbLow; }
+      }
+    }
   }
 
   for (const q of available) {

@@ -431,7 +431,7 @@ describe("FV — Feature Validation: Saved Picks Risk/Reward Calculations", () =
   it("FV-22: calculatePositionSize sizes option lots within 1.5% max account risk budget", () => {
     // ₹1,00,000 account capital, 1.5% risk budget = ₹1,500
     // Option entry = 100, stop = 50 -> risk per unit = 50. Lot size = 65 -> risk per lot = 3,250
-    // If risk per lot (3,250) > budget (1,500), minimum lots is 1
+    // If risk per lot (3,250) > budget (1,500), recommended lots is 0 to enforce the risk budget strictly.
     const res1 = calculatePositionSize({
       type: "OPTION",
       accountCapital: 100_000,
@@ -442,9 +442,11 @@ describe("FV — Feature Validation: Saved Picks Risk/Reward Calculations", () =
       target2: 200,
       lotSize: 65,
     });
-    assert.equal(res1.recommendedLots, 1);
-    assert.equal(res1.recommendedUnits, 65);
+    assert.equal(res1.recommendedLots, 0);
+    assert.equal(res1.recommendedUnits, 0);
     assert.equal(res1.riskBudget, 1500);
+    assert.equal(res1.isCapitalConstrained, true);
+    assert.equal(res1.minCapitalNeeded, 216667);
 
     // ₹5,00,000 account capital, 1.5% risk budget = ₹7,500
     // Option entry = 40, stop = 25 -> risk per unit = 15. Lot size = 65 -> risk per lot = 975

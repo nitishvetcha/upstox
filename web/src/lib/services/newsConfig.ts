@@ -10,7 +10,8 @@ export const NEWS_QUERY = [
   '"RBI"', '"repo rate"', '"FPI"', '"FII"', '"rupee"', '"crude oil"', '"Federal Reserve"',
 ].join(" OR ");
 export const NEWS_PAGE_SIZE = 100;
-export const newsCacheMs = () => Math.max(2, Number(process.env.NEWS_CACHE_MINUTES ?? 20)) * 60_000;
+// NewsAPI free plan delays articles ~24 h, so re-fetching every 20 min wastes quota. Default 60 min.
+export const newsCacheMs = () => Math.max(2, Number(process.env.NEWS_CACHE_MINUTES ?? 60)) * 60_000;
 
 // Freshness: weight = 0.5 ^ (ageHours / HALF_LIFE_HOURS). Status from the newest relevant article's age.
 export const FRESHNESS = { halfLifeHours: 12, liveHours: 6, agingHours: 24, eventWindowHours: 72 };
@@ -115,17 +116,19 @@ export const EVENT_RULES: { category: EventCategory; any: string[]; with?: strin
   { category: "CONSTITUENT", any: ["q1 results", "q2 results", "q3 results", "q4 results", "earnings", "quarterly results"], nifty: "LOW", bank: "LOW", label: "Major constituent results" },
 ];
 
-// Real-time RSS feeds (public, publisher-provided; no HTML scraping). Verified live 2026-10-05: all carry
+// Real-time RSS feeds (public, publisher-provided; no HTML scraping). Verified live 2026-11-23: all carry
 // same-day pubDates. Moneycontrol's public RSS feeds were checked and are frozen at April 2024, so they are
-// not configured (they could only ever be STALE). Set NEWS_RSS_FEEDS=none to disable RSS.
+// not configured (they could only ever be STALE). Business Standard started returning 403 as of 2026-11-23
+// (verified). Set NEWS_RSS_FEEDS=none to disable RSS.
 export const RSS_FEEDS: { name: string; publisher: string; url: string; categories: string[] }[] = [
   { name: "ET Markets", publisher: "Economic Times", url: "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms", categories: ["market", "india"] },
   { name: "ET Stocks", publisher: "Economic Times", url: "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms", categories: ["market", "stocks"] },
   { name: "ET Economy", publisher: "Economic Times", url: "https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms", categories: ["macro"] },
-  { name: "BS Markets", publisher: "Business Standard", url: "https://www.business-standard.com/rss/markets-106.rss", categories: ["market", "india"] },
-  { name: "BS Economy", publisher: "Business Standard", url: "https://www.business-standard.com/rss/economy-102.rss", categories: ["macro"] },
+  { name: "ET Banking", publisher: "Economic Times", url: "https://economictimes.indiatimes.com/industry/banking/finance/rssfeeds/13358259.cms", categories: ["market", "banking"] },
   { name: "Mint Markets", publisher: "LiveMint", url: "https://www.livemint.com/rss/markets", categories: ["market", "india"] },
+  { name: "Mint Economy", publisher: "LiveMint", url: "https://www.livemint.com/rss/economy", categories: ["macro"] },
   { name: "BusinessLine Markets", publisher: "BusinessLine", url: "https://www.thehindubusinessline.com/markets/feeder/default.rss", categories: ["market", "india"] },
+  { name: "The Hindu Markets", publisher: "The Hindu", url: "https://www.thehindu.com/business/markets/feeder/default.rss", categories: ["market", "india"] },
 ];
 export const RSS = { cacheMs: 8 * 60_000, failureBackoffMs: 2 * 60_000, timeoutMs: 8_000, maxItemsPerFeed: 60 };
 export const rssFeeds = () => (process.env.NEWS_RSS_FEEDS === "none" ? [] : RSS_FEEDS);

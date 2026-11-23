@@ -5,6 +5,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { OpportunityGrade } from "../engine/opportunityEngine.ts";
+import {
+  saveOpportunityToSqlite,
+  getOpportunityFromSqlite,
+  listOpportunitiesFromSqlite,
+  deleteOpportunityFromSqlite,
+  syncFlatFilesToSqlite,
+} from "./sqliteLedger.ts";
 
 function getDir() {
   return (
@@ -178,7 +185,29 @@ function filePath(id: string) {
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
+let initialSyncDone = false;
+
+function ensureSqliteSynced(dir: string): void {
+  if (initialSyncDone) return;
+  initialSyncDone = true;
+  try {
+    syncFlatFilesToSqlite(dir);
+  } catch {
+    // ignore
+  }
+}
+
 export function savePaperOpportunity(opp: PaperOpportunity): void {
+  // 1. Save to SQLite ACID ledger (production only; test envs using custom directory stay isolated)
+  if (!process.env.PAPER_OPPORTUNITY_DIR) {
+    try {
+      saveOpportunityToSqlite(opp);
+    } catch {
+      // non-fatal fallback
+    }
+  }
+
+  // 2. Dual-write to flat file backup
   const dir = getDir();
   fs.mkdirSync(dir, { recursive: true });
   // Atomic replace: readers (and a crash) see either the old complete record or the new complete record.
@@ -212,6 +241,17 @@ export function listUnreadablePaperOpportunityFiles(): string[] {
 }
 
 export function getPaperOpportunity(id: string): PaperOpportunity | null {
+  // 1. Fast sub-millisecond SQLite indexed lookup (production only)
+  if (!process.env.PAPER_OPPORTUNITY_DIR) {
+    try {
+      const opp = getOpportunityFromSqlite(id);
+      if (opp) return opp;
+    } catch {
+      // fallback
+    }
+  }
+
+  // 2. Flat file fallback
   try {
     return JSON.parse(fs.readFileSync(filePath(id), "utf8"));
   } catch {
@@ -220,8 +260,23 @@ export function getPaperOpportunity(id: string): PaperOpportunity | null {
 }
 
 export function listPaperOpportunities(): PaperOpportunity[] {
+  const dir = getDir();
+
+  // 1. Fast SQLite indexed query (production only)
+  if (!process.env.PAPER_OPPORTUNITY_DIR) {
+    ensureSqliteSynced(dir);
+    try {
+      const sqliteOpps = listOpportunitiesFromSqlite();
+      if (sqliteOpps.length > 0) {
+        return sqliteOpps;
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  // 2. Flat file fallback
   try {
-    const dir = getDir();
     if (!fs.existsSync(/* turbopackIgnore: true */ dir)) return [];
     return fs
       .readdirSync(/* turbopackIgnore: true */ dir)
@@ -290,6 +345,72 @@ export function releaseOpportunityOpening(id: string, claimId: string): void {
   const opp = getPaperOpportunity(id);
   if (!opp || opp.openingClaimId !== claimId) return;
   updatePaperOpportunity(id, { openingClaimedAt: null, openingClaimId: null });
+}
+
+// ── Instrument-level summary ─────────────────────────────────────────────────
+
+export interface InstrumentSummary {
+  instrumentType: InstrumentType;
+  underlying: string;
+  optionType: "CE" | "PE" | null;
+  completedTrades: number;
+  sampleSizeLabel: SampleSizeLabel;
+  winRate: number | null;
+  averageR: number | null;
+  expectancyR: number | null;
+  profitFactor: number | null;
+  byExitReason: Record<string, number>;
+}
+
+export function buildInstrumentSummaries(opps: PaperOpportunity[]): InstrumentSummary[] {
+  const completed = opps.filter(
+    (o) => TERMINAL_STATES.includes(o.status) && o.status !== "EOD_UNPRICED" && !isFixture(o),
+  );
+
+  const groups = new Map<string, PaperOpportunity[]>();
+  for (const opp of completed) {
+    const key = `${opp.instrumentType}|${opp.underlying}|${opp.optionType ?? ""}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(opp);
+  }
+
+  return Array.from(groups.entries())
+    .map(([key, group]) => {
+      const parts = key.split("|");
+      const instrumentType = parts[0] as InstrumentType;
+      const underlying = parts[1];
+      const optionType = parts[2] ? (parts[2] as "CE" | "PE") : null;
+
+      const wins = group.filter((o) => (o.realizedR ?? 0) > 0).length;
+      const rs = group.map((o) => o.realizedR).filter((r): r is number => r !== null);
+      const avgR = rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : null;
+      const grossProfit = group
+        .filter((o) => (o.realizedR ?? 0) > 0)
+        .reduce((s, o) => s + o.realizedR!, 0);
+      const grossLoss = group
+        .filter((o) => (o.realizedR ?? 0) <= 0)
+        .reduce((s, o) => s + Math.abs(o.realizedR!), 0);
+
+      const byExitReason: Record<string, number> = {};
+      for (const opp of group) {
+        const r = opp.exitReason ?? opp.status;
+        byExitReason[r] = (byExitReason[r] ?? 0) + 1;
+      }
+
+      return {
+        instrumentType,
+        underlying,
+        optionType,
+        completedTrades: group.length,
+        sampleSizeLabel: sampleSizeLabel(group.length),
+        winRate: group.length > 0 ? wins / group.length : null,
+        averageR: rs.length > 0 ? avgR : null,
+        expectancyR: rs.length > 0 ? avgR : null,
+        profitFactor: grossLoss > 0 ? grossProfit / grossLoss : null,
+        byExitReason,
+      };
+    })
+    .sort((a, b) => b.completedTrades - a.completedTrades);
 }
 
 // ── Analytics helpers ─────────────────────────────────────────────────────────
@@ -394,4 +515,42 @@ export function buildDailySummary(
     averageMfeR: mfeRs.length > 0 ? mfeRs.reduce((a, b) => a + b, 0) / mfeRs.length : null,
     averageMaeR: maeRs.length > 0 ? maeRs.reduce((a, b) => a + b, 0) / maeRs.length : null,
   };
+}
+
+export interface ScoreBandStat {
+  band: string;    // e.g. "50–60"
+  low: number;
+  high: number;
+  total: number;   // completed (non-open) trades in band
+  wins: number;
+  winRate: number | null;
+  avgR: number | null;
+  hasSufficientSample: boolean; // requires min 10 closed trades for statistical reliability
+}
+
+/** Win-rate and average-R bucketed by opportunity score, across all closed paper trades. */
+export function scoreBandAccuracy(opps: PaperOpportunity[]): ScoreBandStat[] {
+  const bands = [
+    { low: 70, high: 100, band: "70–100" },
+    { low: 60, high: 70,  band: "60–70"  },
+    { low: 50, high: 60,  band: "50–60"  },
+    { low: 40, high: 50,  band: "40–50"  },
+  ];
+  const closed = opps.filter(
+    (o) => TERMINAL_STATES.includes(o.status) && o.status !== "EOD_UNPRICED",
+  );
+  return bands.map(({ low, high, band }) => {
+    const group = closed.filter((o) => o.score >= low && o.score < high);
+    const wins = group.filter((o) => (o.realizedR ?? 0) > 0).length;
+    const rs = group.map((o) => o.realizedR).filter((r): r is number => r !== null);
+    const avgR = rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : null;
+    return {
+      band, low, high,
+      total: group.length,
+      wins,
+      winRate: group.length > 0 ? wins / group.length : null,
+      avgR,
+      hasSufficientSample: group.length >= 10,
+    };
+  });
 }

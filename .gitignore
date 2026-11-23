@@ -19,6 +19,7 @@ snscrape/
 # OS / IDE
 .DS_Store
 .env
+.playwright-mcp/
 
 
 # Raw research data (approved 2026-11-08). Evidence is copied to docs/evidence/ with hashes.

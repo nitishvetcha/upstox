@@ -1,9 +1,30 @@
 // Phase 9B Stage 3 — decoder for Upstox V3 market-data feed messages, using the official MarketDataFeed.proto.
 // Offline only: decodes bytes it is given. Opens no connection.
+import fs from "node:fs";
 import path from "node:path";
 import protobuf from "protobufjs";
 
-export const PROTO_FILE = path.join(import.meta.dirname, "proto", "MarketDataFeed.proto");
+function resolveProtoFile(): string {
+  const dir =
+    typeof import.meta !== "undefined" && import.meta.dirname
+      ? import.meta.dirname
+      : typeof __dirname !== "undefined"
+      ? __dirname
+      : path.resolve(process.cwd(), "src/lib/liveEvidence");
+
+  const candidates = [
+    path.join(dir, "proto", "MarketDataFeed.proto"),
+    path.resolve(process.cwd(), "src/lib/liveEvidence/proto/MarketDataFeed.proto"),
+    path.resolve(process.cwd(), "web/src/lib/liveEvidence/proto/MarketDataFeed.proto"),
+  ];
+
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return candidates[0];
+}
+
+export const PROTO_FILE = resolveProtoFile();
 export const PROTO_SHA256 = "3e1c939dce2c83a3fef91405c5ca268dfa089aae973319f56685f12a5afcf612";
 const TYPE = "com.upstox.marketdatafeederv3udapi.rpc.proto.FeedResponse";
 

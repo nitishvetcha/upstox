@@ -104,28 +104,34 @@ describe("Phase 1.1 market-data reliability", () => {
 
   it("reports partial stock coverage as a structured diagnostic", async () => {
     const result = await scanStocks("intraday", NOW, {
-      quotes: async (instruments, now) => instruments.map((inst, index) => ({
-        symbol: inst.symbol,
-        exchange: "NSE" as const,
-        instrumentKey: inst.instrumentKey,
-        timestamp: now.toISOString(),
-        ltp: index === 0 ? null : 100 + index,
-        marketStatus: "OPEN" as const,
-        freshness: index === 0 ? "UNAVAILABLE" as const : "LIVE" as const,
-        source: index === 0 ? null : "UPSTOX" as const,
-        unavailableReason: index === 0 ? "PARTIAL_COVERAGE: provider omitted requested instrument" : null,
-        open: 100,
-        high: 110,
-        low: 99,
-        previousClose: 100,
-        change: index,
-        changePercent: index,
-        volume: 1000,
-      })),
+      quotes: async (instruments, now) => instruments.map((inst, index) => {
+        // instruments[0] is the NIFTY index instrument (filtered from diagnostics after quote fetch).
+        // Mark the last instrument UNAVAILABLE so the stock diagnostics see one missing.
+        const isLast = index === instruments.length - 1;
+        return {
+          symbol: inst.symbol,
+          exchange: "NSE" as const,
+          instrumentKey: inst.instrumentKey,
+          timestamp: now.toISOString(),
+          ltp: isLast ? null : 100 + index,
+          marketStatus: "OPEN" as const,
+          freshness: isLast ? "UNAVAILABLE" as const : "LIVE" as const,
+          source: isLast ? null : "UPSTOX" as const,
+          unavailableReason: isLast ? "PARTIAL_COVERAGE: provider omitted requested instrument" : null,
+          open: 100,
+          high: 110,
+          low: 99,
+          previousClose: 100,
+          change: index,
+          changePercent: index,
+          volume: 1000,
+        };
+      }),
     });
+    // instruments = ALL_LIQUID_CONSTITUENTS (189 stocks); nifty index is excluded from diagnostics
     assert.deepEqual(result.diagnostics, {
-      requested: 50,
-      covered: 49,
+      requested: 189,
+      covered: 188,
       category: "PARTIAL_COVERAGE",
       providerCode: null,
       httpStatus: null,

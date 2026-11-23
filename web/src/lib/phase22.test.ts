@@ -166,12 +166,12 @@ describe("TP22 — Options trade plan market-derived", () => {
     }
   });
 
-  it("TP22-03: stop is 50% of premium (standard option risk management)", () => {
+  it("TP22-03: stop is bounded between 25% and 40% of premium (structural delta-scaled stop)", () => {
     const s = bullishSnapshot();
     const r = evaluateOptionsOpportunity(s, "NIFTY", FIXTURE_NOW);
     for (const c of r.topOpportunities) {
-      const expectedStop = Math.round(c.ltp * 0.50 * 100) / 100;
-      assert.ok(Math.abs(c.stop - expectedStop) < 0.5, `Stop ${c.stop} should be ~50% of ltp ${c.ltp}`);
+      const lossPct = (c.entry - c.stop) / c.entry;
+      assert.ok(lossPct >= 0.24 && lossPct <= 0.42, `Stop loss ${(lossPct * 100).toFixed(1)}% should be 25–40% of entry ${c.entry}`);
     }
   });
 

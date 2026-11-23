@@ -264,6 +264,8 @@ export interface OptionsOpportunityResult {
     doubleCountingNote: string | null; // explains sentiment + penalty from same articles
   };
   lotSize?: number | null;
+  /** True when this result was forced to evaluate the opposite market direction (alternative scenario). */
+  isAlternativeScenario?: boolean;
   contractPriceDiagnostics?: Pick<OptionPriceVerificationSummary,
     "requestedKeys" | "coveredKeys" | "liveKeys" | "agingKeys" | "staleKeys" |
     "unavailableKeys" | "mismatchedKeys" | "eligibleKeys"
@@ -542,6 +544,7 @@ export function evaluateOptionsOpportunity(
   s: Snapshot,
   underlyingLabel: string,
   now = new Date(),
+  forceEvaluationType?: "CE" | "PE",
 ): OptionsOpportunityResult {
   const timestamp = now.toISOString();
 
@@ -561,6 +564,7 @@ export function evaluateOptionsOpportunity(
       candidateEligibility: "NO_CANDIDATES",
       lotSize: s.lotSize ?? null,
       contractPriceDiagnostics: contractPriceDiagnostics(s.optionPriceVerification),
+      isAlternativeScenario: Boolean(forceEvaluationType !== undefined),
     };
   }
 
@@ -580,11 +584,19 @@ export function evaluateOptionsOpportunity(
     news: s.sources.news.source,
     breadth: s.sources.breadth?.source ?? "UNAVAILABLE",
   };
+  // Hard sources are the three trade-mechanical feeds. News and breadth are soft; their absence
+  // reduces confidence and score but must not force REJECT on its own.
+  const hardLiveSources = (["market", "optionChain", "technical"] as const).filter((k) => dq[k] === "LIVE").length;
+  const liveSourcesCount = Object.values(dq).filter((v) => v === "LIVE").length;
 
   const ev = eventRiskInfo(s);
   const dir = m.direction;
   const sideways = Math.abs(dir) < 0.15;
-  const type: "CE" | "PE" = dir >= 0 ? "CE" : "PE";
+  const marketType: "CE" | "PE" = dir >= 0 ? "CE" : "PE";
+  const type: "CE" | "PE" = forceEvaluationType ?? marketType;
+  // When forced to evaluate the counter-direction, invert the direction contribution so the
+  // score correctly reflects that underlying signals oppose this trade's direction.
+  const isCounter = forceEvaluationType !== undefined && forceEvaluationType !== marketType && !sideways;
   const regime = m.regime ?? "NEUTRAL";
   const strategyType = selectStrategy(type, ivp);
   const is0Dte = isZeroDteExpiry(s.expiry, now);
@@ -715,7 +727,9 @@ export function evaluateOptionsOpportunity(
     const vDelta = greeksUsable ? rawDelta : null;
     const d = Math.abs(vDelta ?? 0);
 
-    const pts = calcTradePoints(type, row.strike, executableEntry, vDelta, s.spot, chain, atr, q.ltp, q.gamma, q.theta);
+    // Gate expectedMove by ivUsable: when chain IV is unverified, omit it from target/stop calc.
+    const verifiedChain = ivUsable ? chain : { ...chain, expectedMove: null };
+    const pts = calcTradePoints(type, row.strike, executableEntry, vDelta, s.spot, verifiedChain, atr, q.ltp, q.gamma, q.theta);
     if (pts.rr < FILTERS.minRr) { rej(`R:R ${pts.rr} below ${FILTERS.minRr}`); continue; }
 
     const singlePayoff = calculateSingleLegPayoff({
@@ -740,7 +754,10 @@ export function evaluateOptionsOpportunity(
     });
 
     // ── Score breakdown ──────────────────────────────────────────────────────
-    const dirBase = clamp(Math.round((m.total / 100) * WEIGHTS.underlying_direction), 0, WEIGHTS.underlying_direction);
+    // Counter-direction: invert the direction fraction so the score reflects that
+    // underlying signals oppose the trade.
+    const dirFraction = isCounter ? (1 - m.total / 100) : (m.total / 100);
+    const dirBase = clamp(Math.round(dirFraction * WEIGHTS.underlying_direction), 0, WEIGHTS.underlying_direction);
 
     let liq = 0;
     if (q.oi > 50000) liq += 8; else if (q.oi > 10000) liq += 6; else if (q.oi > 1000) liq += 4; else if (q.oi > 50) liq += 1;
@@ -794,8 +811,7 @@ export function evaluateOptionsOpportunity(
       : `Spot breaks above ${r2(chain.resistance)} (OI resistance)`;
 
     // Fail closed: chain prices/IV/Greeks are unverified unless the chain itself is LIVE (options-audit-1a pending).
-    const liveSourcesCount = Object.values(dq).filter((v) => v === "LIVE").length;
-    const rawGrade = gradeOpportunity(oppScore, pts.rr, confidence, liveSourcesCount);
+    const rawGrade = gradeOpportunity(oppScore, pts.rr, confidence, hardLiveSources);
     // Production Upstox snapshots explicitly carry CHAIN_ANALYTICS_UNVERIFIED.
     // A fresh contract quote can verify only that contract's price, never the chain IV/Greeks/OI surface.
     // Complete REST field coverage is not proof that the option-chain snapshot is fresh.
@@ -825,8 +841,8 @@ export function evaluateOptionsOpportunity(
     if ((!greeksUsable || !ivUsable) && isChainAnalyticsUsable && isContractLive) {
       gradeReasons.push("Option IV/Greeks unavailable or vendor-reported only: cannot produce actionable grade");
     }
-    if (liveSourcesCount < 3) {
-      gradeReasons.push(`Insufficient live data sources (${liveSourcesCount}/3 live: ${Object.entries(dq).filter(([_, v]) => v === "LIVE").map(([k]) => k).join(", ") || "none"})`);
+    if (hardLiveSources < 3) {
+      gradeReasons.push(`Insufficient live hard sources (${hardLiveSources}/3: market, optionChain, technical — news and breadth are soft). Live: ${Object.entries(dq).filter(([, v]) => v === "LIVE").map(([k]) => k).join(", ") || "none"}`);
     }
     if (oppScore < 40) {
       gradeReasons.push(`Opportunity score ${oppScore}/100 below minimum threshold (40)`);
@@ -884,6 +900,11 @@ export function evaluateOptionsOpportunity(
     }
     if (finalGrade === "REJECT" && gradeReasons.length === 0) {
       gradeReasons.push("Did not meet quality thresholds for tradable grade");
+    }
+    // Counter-direction candidates are always watch-only (market signals oppose the trade).
+    if (isCounter && finalGrade !== "REJECT") {
+      finalGrade = "C";
+      gradeReasons.push("Counter-direction scenario: underlying market signals oppose this trade's direction");
     }
 
     evaluated.push({
@@ -956,11 +977,31 @@ export function evaluateOptionsOpportunity(
     const longCandidateRow = sortedByAtm.find((r) => window.strikeSet.has(r.strike));
     if (longCandidateRow) {
       const step = s.strikeStep ?? (s.index === "banknifty" ? 100 : 50);
-      const shortCandidateRow = type === "CE"
-        ? candidates.find((r) => r.strike > longCandidateRow.strike && r.strike <= longCandidateRow.strike + step * 3)
-        : candidates.find((r) => r.strike < longCandidateRow.strike && r.strike >= longCandidateRow.strike - step * 3);
+      // Pick the short leg with the best (spreadWidth - netDebit) / netDebit across all same-direction candidates.
+      // Wider spreads with enough short premium are preferable to the nearest available strike.
+      const longQ = type === "CE" ? longCandidateRow.call : longCandidateRow.put;
+      // Guard: when long leg greeks are verified (LIVE chain), require a finite delta — same rule as single-leg rejection.
+      const longLegLegacyVerified = !s.optionPriceVerification && dq.optionChain === "LIVE";
+      const longLegGreeksVerified = longLegLegacyVerified || longQ.greeksProvenance === "INDEPENDENTLY_DERIVED" || longQ.greeksProvenance === "VERIFIED";
+      const longRawDelta = typeof longQ.delta === "number" && Number.isFinite(longQ.delta) ? longQ.delta : null;
+      const longLegDeltaValid = !longLegGreeksVerified || longRawDelta !== null;
+      const longAsk = longQ.ask;
+      const shortPool = type === "CE"
+        ? candidates.filter((r) => r.strike > longCandidateRow.strike && r.strike <= longCandidateRow.strike + step * 5)
+        : candidates.filter((r) => r.strike < longCandidateRow.strike && r.strike >= longCandidateRow.strike - step * 5);
+      const shortCandidateRow = shortPool.length <= 1 ? (shortPool[0] ?? null) :
+        shortPool.reduce<typeof shortPool[0] | null>((best, row) => {
+          const sq = type === "CE" ? row.call : row.put;
+          if (!longAsk || !sq.bid || sq.bid <= 0 || longAsk - sq.bid <= 0) return best;
+          const rr = Math.abs(row.strike - longCandidateRow.strike) / (longAsk - sq.bid) - 1;
+          if (!best) return rr > 0 ? row : null;
+          const bq = type === "CE" ? best.call : best.put;
+          const bestRr = bq.bid && longAsk - bq.bid > 0
+            ? Math.abs(best.strike - longCandidateRow.strike) / (longAsk - bq.bid) - 1 : -Infinity;
+          return rr > bestRr ? row : best;
+        }, null);
 
-      if (shortCandidateRow) {
+      if (longLegDeltaValid && shortCandidateRow) {
         const longQuote = type === "CE" ? longCandidateRow.call : longCandidateRow.put;
         const shortQuote = type === "CE" ? shortCandidateRow.call : shortCandidateRow.put;
 
@@ -1023,8 +1064,7 @@ export function evaluateOptionsOpportunity(
               spPayoff.estimatedValues.horizonStatus === "EXPIRES_BEFORE_HORIZON" ||
               spPayoff.estimatedValues.underlyingMoveCalibrated === false ||
               spPayoff.estimatedValues.isHypotheticalDiagnostic === true;
-            const liveSourcesCount = Object.values(dq).filter((v) => v === "LIVE").length;
-            const rawSpreadGrade = gradeOpportunity(spreadOppScore, spPayoff.grossRewardToRisk, confidence, liveSourcesCount);
+            const rawSpreadGrade = gradeOpportunity(spreadOppScore, spPayoff.grossRewardToRisk, confidence, hardLiveSources);
             let finalSpreadGrade: OpportunityGrade = (!isChainUsable || !longLive || !shortLive || !spreadGreeksUsable || !spreadIvUsable || isSpreadHorizonInvalid)
               ? "REJECT"
               : rawSpreadGrade;
@@ -1063,8 +1103,8 @@ export function evaluateOptionsOpportunity(
               finalSpreadGrade = "C";
               spreadGradeReasons.push("0-DTE spreads are research-only until separately validated");
             }
-            if (liveSourcesCount < 3) {
-              spreadGradeReasons.push(`Insufficient live data sources (${liveSourcesCount}/3 live: ${Object.entries(dq).filter(([_, v]) => v === "LIVE").map(([k]) => k).join(", ") || "none"})`);
+            if (hardLiveSources < 3) {
+              spreadGradeReasons.push(`Insufficient live hard sources (${hardLiveSources}/3: market, optionChain, technical). Live: ${Object.entries(dq).filter(([, v]) => v === "LIVE").map(([k]) => k).join(", ") || "none"}`);
             }
             if (spreadOppScore < 40) {
               spreadGradeReasons.push(`Opportunity score ${spreadOppScore}/100 below minimum threshold (40)`);
@@ -1220,6 +1260,7 @@ export function evaluateOptionsOpportunity(
     lotSize: s.lotSize ?? null,
     contractPriceDiagnostics: contractPriceDiagnostics(s.optionPriceVerification),
     newsDiagnostic: buildNewsDiagnostic(s, m, ev),
+    isAlternativeScenario: isCounter || (forceEvaluationType !== undefined && sideways),
   };
 }
 

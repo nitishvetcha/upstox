@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultLotSize, type CalculatorPick } from "./SavedPickCalculator.tsx";
+import { defaultLotSize, type CalculatorPick } from "./savedPickUtils.ts";
 
 test("defaultLotSize correctly identifies exchange standard multipliers", () => {
   assert.equal(defaultLotSize("NIFTY 2026-11-23 25650 CE", "INDEX_OPTION"), 75);

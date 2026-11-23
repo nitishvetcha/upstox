@@ -5,7 +5,10 @@ import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { fmtIst, marketStatus } from "@/lib/time";
 import { Badge, num, signed } from "./ui";
+import { dataAge } from "./dataAgeUtils";
+import { StreamStatusPill } from "./StreamStatusPill";
 
+export { dataAge } from "./dataAgeUtils";
 
 export interface Ticker {
   name: string;
@@ -62,12 +65,14 @@ export function TopBar({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-zinc-800/60 pt-2 text-zinc-400">
         {status && <Badge tone="neutral">MARKET {status}</Badge>}
         <span className="font-mono font-semibold tabular-nums text-zinc-300">{now ? `${fmtIst(now)} IST` : "--:--:-- IST"}</span>
-        <span className="flex items-center gap-1">
+        <span className="flex items-center gap-1" title={`Data fetched at ${fmtIst(generatedAt)} IST`}>
           <RefreshCw size={12} aria-hidden /> {fmtIst(generatedAt)}
+          {now && <span className="text-zinc-600">({dataAge(now, generatedAt)})</span>}
         </span>
         <Link href="/system-health#data-sources" title="Which inputs are live, stale, mock or unavailable" className="inline-flex min-h-[24px] items-center rounded py-1">
           <Badge tone={dataLabel === "LIVE DATA" || dataLabel === "END OF DAY" ? "neutral" : "warn"}>{dataLabel}{dataLabel !== "LIVE DATA" && dataLabel !== "END OF DAY" ? " — why?" : ""}</Badge>
         </Link>
+        <StreamStatusPill />
         <span className="ml-auto" />
         {upstoxStatus === "VERIFIED_CONNECTED" ? (
           <span className="text-emerald-400">● Upstox Connected</span>

@@ -7,6 +7,8 @@ import { strikeStep, validExpiries } from "./optionChainAnalytics.ts";
 import { InvalidRequestError, UpstoxError } from "./errors.ts";
 import { FUTURE_TIMESTAMP_TOLERANCE_MS, istToday, marketStatus, MIN_LTT_EPOCH_MS, tradeFreshnessOf } from "../time.ts";
 import { CANDLE_PLAN, DAILY_TTL_MS, HISTORY_TTL_MS, mergeCandles, normalizeCandles } from "./candles.ts";
+import { loadHistory } from "../marketHistory.ts";
+import { VIX_MIN_HISTORY, VIX_PERCENTILE_LOOKBACK } from "./historicalContext.ts";
 import { classifyTechnicalSeries, completedDailyCandles, completedIntradayCandles, newestCandleUsable, newestRowShape } from "./candleFreshness.ts";
 import { analyzeTechnicals } from "./technicalAnalysis.ts";
 import type { ChunkFetcher } from "./historicalCandles.ts";
@@ -359,6 +361,19 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     }
   };
 
+  // Fetch India VIX daily candles and derive IV percentile. Cached 6h (daily candles don't change intraday).
+  const getVixIvPercentile = async (): Promise<number | null> => {
+    const today = istToday(now());
+    return cached(`vix-daily-ivp:${today}`, 6 * 3600_000, async () => {
+      try {
+        const { candles } = await loadHistory("NSE_INDEX|India VIX", "1d", "2Y", upstoxHistoryFetcher(token), { now: now() });
+        return computeIvPercentile(candles, now());
+      } catch {
+        return null;
+      }
+    });
+  };
+
   const getTechnicals = async (index: IndexId, timeframe: Timeframe = "15m"): Promise<Technicals> => {
     const unavailable = (why: string): Technicals => ({
       indicators: null,
@@ -370,11 +385,12 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     });
     try {
       const intradayTf = timeframe === "5m" || timeframe === "15m";
-      const [series, daily, opening, futuresVwap] = await Promise.all([
+      const [series, daily, opening, futuresVwap, ivPercentile] = await Promise.all([
         getCandles(index, timeframe),
         timeframe === "1d" ? null : getCandles(index, "1d"),
         intradayTf || timeframe === "1d" ? null : getCandles(index, "15m"),
         getFuturesVwap(index, timeframe),
+        getVixIvPercentile().catch(() => null),
       ]);
       // Unavailable (no completed candles, malformed newest candle, pre-open, no intraday yet, ...): carry the reason through.
       if (series.source.source === "UNAVAILABLE") {
@@ -389,7 +405,7 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
         now: now(),
       });
       const breadth = await getBreadth(index).catch(() => null);
-      return { indicators: toIndicators(analysis), breadth, ivPercentile: null, analysis, source: series.source, reasonCode: series.reasonCode ?? null, unavailableReason: series.unavailableReason ?? undefined };
+      return { indicators: toIndicators(analysis), breadth, ivPercentile, analysis, source: series.source, reasonCode: series.reasonCode ?? null, unavailableReason: series.unavailableReason ?? undefined };
     } catch (e) {
       // A dead session must still fall back as a whole; any other candle failure only blanks technicals.
       if (e instanceof UpstoxError && e.reason !== "UPSTOX_AUTH_EXPIRED") return unavailable(`Candles unavailable: ${e.message}`);
@@ -558,6 +574,22 @@ export function upstoxChunkFetcher(token: string): ChunkFetcher {
       get(token, `/v3/historical-candle/${key}/${plan.unit}/${plan.interval}/${chunk.to}/${chunk.from}`, {}, { index })
     );
   };
+}
+
+/**
+ * Compute India VIX IV percentile from daily VIX candles.
+ * Returns null until VIX_MIN_HISTORY (120) completed sessions of history exist.
+ * Uses the most recent completed session's VIX close ranked against the prior VIX_PERCENTILE_LOOKBACK sessions.
+ */
+export function computeIvPercentile(candles: Candle[], now: Date): number | null {
+  const today = istToday(now);
+  const completed = candles
+    .filter((c) => c.timestamp.slice(0, 10) < today)
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  if (completed.length < VIX_MIN_HISTORY) return null;
+  const current = completed[completed.length - 1].close;
+  const lookback = completed.slice(Math.max(0, completed.length - VIX_PERCENTILE_LOOKBACK));
+  return Math.round((lookback.filter((c) => c.close < current).length / lookback.length) * 100);
 }
 
 // Same endpoint and spacing for any instrument (equities/indices) and any v3 unit, incl. weeks/months.

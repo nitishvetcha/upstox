@@ -4,11 +4,12 @@ import type { ServerProvenance } from "./paperOpportunityProvenance.ts";
 
 export type OpenCode =
   | "NOT_FOUND" | "ALREADY_OPENED" | "NOT_OPEN" | "UNSUPPORTED" | "PROVENANCE"
-  | "NO_PLAN" | "PLAN_REJECTED" | "ENGINE_REJECTED" | "OPENED";
+  | "CIRCUIT_BREAKER_TRIPPED" | "NO_PLAN" | "PLAN_REJECTED" | "ENGINE_REJECTED" | "OPENED";
 
 export interface OpenFacts {
   opp: { status: string; openedPaperTradeId?: string | null; instrumentType: string } | null;
   provenance: ServerProvenance | null;
+  circuitBreakerRejected?: string | null;
   hasPlan: boolean;
   planRejected: string | null;
   engine: { created: boolean; reason: string; tradeId: string | null } | null;
@@ -31,6 +32,7 @@ export function decideOpen(f: OpenFacts): OpenDecision {
   if (f.opp.status !== "OPEN") return deny("NOT_OPEN", 422, [`opportunity status is ${f.opp.status}`]);
   if (f.opp.instrumentType !== "OPTION") return deny("UNSUPPORTED", 422, ["only index option opportunities can be opened"]);
   if (!f.provenance || !f.provenance.ok) return deny("PROVENANCE", 422, f.provenance?.reasons ?? ["no server snapshot"]);
+  if (f.circuitBreakerRejected) return deny("CIRCUIT_BREAKER_TRIPPED", 422, [f.circuitBreakerRejected]);
   if (!f.hasPlan) return deny("NO_PLAN", 422, ["fresh analysis produced no trade plan", ...(f.detail ?? [])]);
   if (f.planRejected) return deny("PLAN_REJECTED", 422, [f.planRejected]);
   if (!f.engine) return deny("ENGINE_REJECTED", 422, ["paper engine was not consulted"]);

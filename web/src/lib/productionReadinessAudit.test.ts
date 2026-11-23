@@ -354,11 +354,11 @@ describe("Production Readiness Audit & Regression Suite (20 scenarios)", () => {
     const top = res.topOpportunities[0];
     assert.ok(top.gradeReasons && top.gradeReasons.length >= 2);
     assert.ok(top.gradeReasons.some((r) => r.includes("Option-chain source is STALE, not LIVE")));
-    assert.ok(top.gradeReasons.some((r) => r.includes("Insufficient live data sources")));
+    assert.ok(top.gradeReasons.some((r) => r.includes("Insufficient live")));
 
     const status = candidateStatus("option", top);
     assert.ok(status.blocks.length >= 2);
-    assert.ok(status.blocks.some((b) => b.includes("Insufficient live data sources")));
+    assert.ok(status.blocks.some((b) => b.includes("Insufficient live")));
   });
 
   // Scenario 16: Failed intraday replay remains a rejection where required

@@ -9,12 +9,16 @@ import { scanStocks } from "@/lib/engine/stockOpportunityEngine";
 import { POSITIONAL_RETIRED_NOTE } from "@/lib/engine/positionalTrend";
 import { scanLongTerm, type LongTermOpportunity } from "@/lib/engine/longTermEngine";
 import { listOpportunityRecords } from "@/lib/services/opportunityTrackingStore";
+import { listPaperOpportunities, isFixture, scoreBandAccuracy, type ScoreBandStat } from "@/lib/services/paperOpportunityStore";
+import { gradeGap, scoreBreakdownRows, type GradeGap, type BreakdownRow } from "@/lib/engine/gradeGap";
 import type { ContractOpportunity, OpportunityGrade, OptionsOpportunityResult, RejectedContract } from "@/lib/engine/opportunityEngine";
 import type { StockOpportunity, SectorBreadthSummary } from "@/lib/engine/stockOpportunityEngine";
 import type { OpportunityRecord } from "@/lib/services/opportunityTrackingStore";
 
 import { SavePickButton } from "@/components/SavePickButton";
 import { AutoRefreshControl } from "@/components/AutoRefreshControl";
+import { NotificationControl } from "@/components/NotificationControl";
+import { CircuitBreakerBanner } from "@/components/CircuitBreakerBanner";
 import { CopyOrderSlipButton } from "@/components/CopyOrderSlipButton";
 import { OptionPayoffVisualizer } from "@/components/OptionPayoffVisualizer";
 import { PositionSizeCalculator } from "@/components/PositionSizeCalculator";
@@ -63,8 +67,8 @@ function DecisionFunnel({ options, stockScans }: {
         Rejections are not yet split into data-quality, strategy and risk categories; the rejected totals above are the engines&apos; own counts.
       </p>
       <ul className="space-y-0.5 text-xs text-zinc-400">
-        {options.map((o) => (
-          <li key={o.underlying}>
+        {options.map((o, idx) => (
+          <li key={`${o.underlying}-${idx}`}>
             {o.underlying}: {o.contractsEvaluated} evaluated, {o.contractsRejected} rejected, {o.topOpportunities.length} candidate{o.topOpportunities.length === 1 ? "" : "s"}
             {o.topOpportunities.length === 0 && o.noOpportunityReason ? ` — NO TRADE: ${o.noOpportunityReason}` : ""}
           </li>
@@ -91,9 +95,16 @@ async function loadData() {
       scanStocks("swing", now),
       scanLongTerm(),
     ]);
-    const indexOptions = snaps.flatMap((r, k) =>
-      r.status === "fulfilled" ? [evaluateOptionsOpportunity(r.value, INSTRUMENTS[INDICES[k]].symbol, now)] : [],
-    );
+    const indexOptions = snaps.flatMap((r, k) => {
+      if (r.status !== "fulfilled") return [];
+      const sym = INSTRUMENTS[INDICES[k]].symbol;
+      const primary = evaluateOptionsOpportunity(r.value, sym, now);
+      // Also evaluate the counter-direction so users see all three scenarios.
+      const counterType: "CE" | "PE" = primary.marketDirection === "BEARISH" ? "CE" : "PE";
+      const counter = evaluateOptionsOpportunity(r.value, sym, now, counterType);
+      counter.isAlternativeScenario = true;
+      return [primary, counter];
+    });
     const failedIndices = snaps.flatMap((r, k) =>
       r.status === "rejected" ? [`${INSTRUMENTS[INDICES[k]].symbol}: ${(r.reason as Error)?.message ?? "failed"}`] : [],
     );
@@ -634,12 +645,13 @@ function LongTermStockCard({ stock, rank }: { stock: LongTermOpportunity; rank: 
 
 // ── Options recommendation card ───────────────────────────────────────────────
 
-function OptionRecCard({ contract, snapshotSource, lotSize, rank, daysLeft }: {
+function OptionRecCard({ contract, snapshotSource, lotSize, rank, daysLeft, scoreBands }: {
   contract: ContractOpportunity;
   snapshotSource: string;
   lotSize: number | null | undefined;
   rank: number;
   daysLeft: number | null;
+  scoreBands: ScoreBandStat[];
 }) {
   const isMultiLeg = contract.strategyType === "BEAR_PUT_SPREAD" || contract.strategyType === "BULL_CALL_SPREAD" || Boolean(contract.isMultiLeg) || ((contract.legs?.length ?? 0) > 1);
   const isBullishSpread = contract.strategyType === "BULL_CALL_SPREAD";
@@ -744,11 +756,28 @@ function OptionRecCard({ contract, snapshotSource, lotSize, rank, daysLeft }: {
           <Kv label="Short leg" value={`${shortLeg.strike} ${contract.optionType} · LTP ${fmt(shortLeg.ltp)} · Bid/Ask ${fmt(shortLeg.bid)} / ${fmt(shortLeg.ask)}`} />
           <Kv label="Spread width" value={`₹${Math.abs(longLeg.strike - shortLeg.strike)}`} />
           <Kv label="Net spread debit" value={fmt(displayNetDebit)} />
+          <Kv label="Tier 1 Eligibility" value="Passed (OI ≥ 50, Vol ≥ 5)" />
+          <Kv
+            label="Tier 2 Quality"
+            value={
+              contract.spreadPct != null && contract.spreadPct <= 5.0
+                ? "Institutional (Spread ≤ 5%) ✓"
+                : "Moderate liquidity"
+            }
+          />
         </KvGroup>
       ) : (
-        <KvGroup title="C · Contract liquidity">
-          <Kv label="OI" value={contract.oi.toLocaleString("en-IN")} />
-          <Kv label="Volume" value={contract.volume.toLocaleString("en-IN")} />
+        <KvGroup title="C · Contract liquidity (Two-Tier)">
+          <Kv label="Tier 1 Eligibility" value="Passed ✓ (OI ≥ 50, Vol ≥ 5)" />
+          <Kv
+            label="Tier 2 Quality Gate"
+            value={
+              contract.oi >= 1000 && contract.volume >= 100 && (contract.spreadPct == null || contract.spreadPct <= 5.0)
+                ? "Tradable Quality ✓ (OI ≥ 1k, Vol ≥ 100)"
+                : "Eligible Only (Sub-1k OI or Low Vol)"
+            }
+          />
+          <Kv label="OI / Volume" value={`${contract.oi.toLocaleString("en-IN")} / ${contract.volume.toLocaleString("en-IN")}`} />
           <Kv label="Bid / Ask" value={`${fmt(contract.bid)} / ${fmt(contract.ask)}`} />
           <Kv label="Spread" value={contract.spreadPct != null ? `${contract.spreadPct.toFixed(2)}%` : "—"} />
         </KvGroup>
@@ -777,6 +806,90 @@ function OptionRecCard({ contract, snapshotSource, lotSize, rank, daysLeft }: {
           }
         />
       </KvGroup>
+
+      {/* E1 · Grade gap — what it takes to reach the next grade */}
+      {(() => {
+        const gap: GradeGap | null = gradeGap(grade, contract.opportunityScore, contract.rr, contract.confidence);
+        if (!gap) return null;
+        const all3 = gap.scoreOk && gap.rrOk && gap.confOk;
+        return (
+          <div className="mt-2 rounded border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs">
+            <div className="mb-1 font-semibold text-zinc-400">
+              Next grade: <span className={gap.nextGrade === "A+" || gap.nextGrade === "A" ? "text-green-400" : "text-sky-400"}>{gap.nextGrade}</span>
+              {all3 && <span className="ml-2 text-emerald-400">— all criteria met ✓</span>}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+              <span className={gap.scoreOk ? "text-emerald-400" : "text-amber-300"}>
+                Score {gap.scoreOk ? "✓" : `+${gap.scoreDelta} needed`} ({contract.opportunityScore}/100)
+              </span>
+              <span className={gap.rrOk ? "text-emerald-400" : "text-amber-300"}>
+                R:R {gap.rrOk ? "✓" : `${contract.rr.toFixed(2)}× → ${(contract.rr + gap.rrDelta).toFixed(2)}× needed`}
+              </span>
+              {gap.confDelta > 0 && (
+                <span className="text-amber-300">
+                  Confidence {contract.confidence}/100 → {contract.confidence + gap.confDelta} needed
+                </span>
+              )}
+              {gap.confDelta <= 0 && <span className="text-emerald-400">Confidence ✓</span>}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* E2 · Score sensitivity — sub-component breakdown */}
+      {contract.scoreBreakdown && Object.keys(contract.scoreBreakdown).length > 0 && (() => {
+        const rows: BreakdownRow[] = scoreBreakdownRows(contract.scoreBreakdown);
+        return (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-[11px] text-zinc-500 hover:text-zinc-300">
+              Score breakdown — which signals are strong vs weak
+            </summary>
+            <div className="mt-2 space-y-1">
+              {rows.map((r) => (
+                <div key={r.key} className="flex items-center gap-2 text-[11px]">
+                  <span className="w-36 shrink-0 text-zinc-500">{r.label}</span>
+                  <div className="relative h-2 w-24 overflow-hidden rounded-full bg-zinc-800">
+                    <div
+                      className={`absolute inset-y-0 left-0 rounded-full ${r.earned < 0 ? "bg-red-600" : r.pct >= 70 ? "bg-emerald-500" : r.pct >= 40 ? "bg-sky-500" : "bg-amber-500"}`}
+                      style={{ width: `${r.max > 0 ? Math.abs(r.pct) : 0}%` }}
+                    />
+                  </div>
+                  <span className={`font-mono ${r.earned < 0 ? "text-red-400" : "text-zinc-300"}`}>
+                    {r.earned > 0 ? "+" : ""}{r.earned}{r.max > 0 ? `/${r.max}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </details>
+        );
+      })()}
+
+      {/* E3 · Historical accuracy at this score band */}
+      {(() => {
+        const s = contract.opportunityScore;
+        const band = scoreBands.find((b) => s >= b.low && s < b.high);
+        if (!band) return null;
+        if (band.total < 10) {
+          return (
+            <div className="mt-2 text-[11px] text-zinc-500">
+              Historical ({band.band} band): <span className="text-zinc-400">Sample size too small ({band.total} closed paper trade{band.total === 1 ? "" : "s"}, min 10 required for statistical confidence)</span>
+            </div>
+          );
+        }
+        return (
+          <div className="mt-2 text-[11px] text-zinc-500">
+            Historical ({band.band} band, {band.total} trades):
+            <span className={`ml-1 font-semibold ${(band.winRate ?? 0) >= 0.6 ? "text-emerald-400" : (band.winRate ?? 0) >= 0.4 ? "text-amber-300" : "text-red-400"}`}>
+              {band.total > 0 ? `${band.wins}/${band.total} wins (${Math.round((band.winRate ?? 0) * 100)}%)` : "no data"}
+            </span>
+            {band.avgR != null && (
+              <span className={`ml-2 ${band.avgR >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                avg {band.avgR >= 0 ? "+" : ""}{band.avgR.toFixed(2)}R
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Option Payoff & Greeks Visualizer */}
       <OptionPayoffVisualizer
@@ -884,13 +997,14 @@ function NewsPanel({ nd }: { nd: NonNullable<OptionsOpportunityResult["newsDiagn
   const sColor = nd.overall === "BULLISH" ? "text-green-400" : nd.overall === "BEARISH" ? "text-red-400" : "text-zinc-400";
   const riskColor = nd.eventRiskLevel === "EXTREME" ? "text-red-400" : nd.eventRiskLevel === "HIGH" ? "text-red-300" : nd.eventRiskLevel === "MEDIUM" ? "text-amber-300" : "text-zinc-500";
   return (
-    <details className="mb-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-2 text-[11px]">
+    <details className="mb-3 rounded-lg border border-zinc-800 bg-zinc-950/50 p-2 text-[11px]" open={nd.newsConflictsWithMarket || nd.eventRiskLevel === "HIGH" || nd.eventRiskLevel === "EXTREME"}>
       <summary className="cursor-pointer font-semibold text-zinc-400 hover:text-zinc-200">
         News diagnostics
         {" · "}<span className={fColor}>{nd.freshness}</span>
         {" · "}<span className={sColor}>{nd.overall}</span>
         {nd.factorAvailable ? <span className="text-zinc-500"> · {nd.factorScore.toFixed(1)}/10 pts contributed</span> : <span className="text-zinc-600"> · not included in score</span>}
         {nd.eventRiskLevel !== "NONE" && <span className={riskColor}> · {nd.eventRiskLevel} event risk −{nd.eventRiskPenalty} pts</span>}
+        {nd.newsConflictsWithMarket && <span className="ml-1 text-amber-300">⚠ conflicts market</span>}
       </summary>
       <div className="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-3">
         <div className="rounded bg-zinc-900 px-1.5 py-1"><div className="text-zinc-500">Provider status</div><div className="mt-0.5 font-mono text-zinc-300">{nd.providerStatus}</div></div>
@@ -917,7 +1031,7 @@ function NewsPanel({ nd }: { nd: NonNullable<OptionsOpportunityResult["newsDiagn
 
 // ── Options index section ─────────────────────────────────────────────────────
 
-function OptionsIndexSection({ result, now }: { result: OptionsOpportunityResult; now: Date }) {
+function OptionsIndexSection({ result, altResult, now, scoreBands }: { result: OptionsOpportunityResult; altResult?: OptionsOpportunityResult; now: Date; scoreBands: ScoreBandStat[] }) {
   const calls = result.topOpportunities.filter((c) => c.optionType === "CE");
   const puts = result.topOpportunities.filter((c) => c.optionType === "PE");
   const rec = result.recommendedStrategy;
@@ -1032,11 +1146,16 @@ function OptionsIndexSection({ result, now }: { result: OptionsOpportunityResult
           </div>
         </div>
         <p className="mt-1.5 text-[10px] text-zinc-600">
-          Coverage: {counts.coveredKeys}/{counts.requestedKeys} · {counts.liveKeys} LIVE · {counts.agingKeys} AGING · {counts.staleKeys} STALE · {counts.unavailableKeys} UNAVAILABLE · {counts.mismatchedKeys} MISMATCHED
+          Coverage: {counts.coveredKeys}/{counts.requestedKeys} · {counts.liveKeys} LIVE · {counts.agingKeys} AGING · {counts.staleKeys} STALE · {counts.unavailableKeys} UNAVAILABLE · {counts.mismatchedKeys} MISMATCHED{counts.requestedKeys > 0 && counts.mismatchedKeys > 0 ? ` (${((counts.mismatchedKeys / counts.requestedKeys) * 100).toFixed(1)}%)` : ""}
           {" · "}contractsEvaluated: {result.contractsEvaluated} · contractsRejected: {result.contractsRejected}
         </p>
+        {counts.requestedKeys > 0 && counts.unavailableKeys / counts.requestedKeys > 0.5 && (
+          <p className="mt-0.5 text-[10px] text-amber-500/80">
+            ⚠ {Math.round((counts.unavailableKeys / counts.requestedKeys) * 100)}% contracts UNAVAILABLE — Upstox V3 live prices have limited coverage for BSE-listed ({result.underlying}) contracts. Evaluation accuracy is reduced; this is a provider limitation, not an engine failure.
+          </p>
+        )}
         <p className="mt-0.5 text-[10px] text-zinc-600">
-          OI/volume are bounded REST analytics, not an atomic or exchange-synchronised snapshot. Option chain source STALE = /v2/option/chain carries no LTT (provider limitation); per-contract V3 LTT verified independently.
+          OI/volume are bounded REST analytics, not an atomic or exchange-synchronised snapshot. Option chain source STALE = /v2/option/chain carries no LTT (provider limitation); per-contract V3 LTT verified independently. MISMATCH = V3 LTP vs chain LTP delta &gt; 2% + 1 tick; a small mismatch count is normal in live markets.
         </p>
         <p className="mt-0.5 text-[10px] text-amber-500/70">
           Options Data Audit INSUFFICIENT status is a separate collection process (≥5 live sessions needed). It does not mean this candidate failed live eligibility.
@@ -1065,6 +1184,7 @@ function OptionsIndexSection({ result, now }: { result: OptionsOpportunityResult
                 lotSize={result.lotSize}
                 rank={i + 1}
                 daysLeft={daysTo(c.expiry, now)}
+                scoreBands={scoreBands}
               />
             ))}
           </div>
@@ -1083,11 +1203,47 @@ function OptionsIndexSection({ result, now }: { result: OptionsOpportunityResult
                 lotSize={result.lotSize}
                 rank={i + 1}
                 daysLeft={daysTo(c.expiry, now)}
+                scoreBands={scoreBands}
               />
             ))}
           </div>
         </SubSection>
       )}
+
+      {altResult && (() => {
+        const altType = altResult.topOpportunities[0]?.optionType;
+        const altCands = altResult.topOpportunities;
+        if (altCands.length === 0) return null;
+        const isBearish = result.marketDirection === "BEARISH";
+        const isBullish = result.marketDirection === "BULLISH";
+        const title = altType === "CE"
+          ? "If Bullish (CE scenario)"
+          : "If Bearish (PE scenario)";
+        const note = isBearish || isBullish
+          ? "Counter-direction: market signals oppose this trade. All candidates are Grade C (watch-only)."
+          : "Neutral market: both directions shown for reference, no directional downgrade applied.";
+        return (
+          <details className="mt-3 rounded-lg border border-zinc-700/60 bg-zinc-950/40 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-semibold text-zinc-300">
+              {title} — {altCands.length} candidate{altCands.length > 1 ? "s" : ""}
+            </summary>
+            <p className="mt-1.5 text-[11px] text-zinc-500">{note}</p>
+            <div className="mt-2 grid gap-3 md:grid-cols-2">
+              {altCands.map((c, i) => (
+                <OptionRecCard
+                  key={`alt-${c.instrumentKey ?? c.underlying}-${c.expiry ?? ""}-${c.strike}-${c.optionType}-${c.strategyType}-${i}`}
+                  contract={c}
+                  snapshotSource={altResult.source}
+                  lotSize={altResult.lotSize}
+                  rank={i + 1}
+                  daysLeft={daysTo(c.expiry, now)}
+                  scoreBands={scoreBands}
+                />
+              ))}
+            </div>
+          </details>
+        );
+      })()}
 
       {calls.length === 0 && puts.length === 0 && rec === "NO_TRADE" && (
         <Empty msg="No candidates passed quality gates for this index." reason={result.noOpportunityReason} />
@@ -1138,6 +1294,7 @@ function OutcomeRow({ r }: { r: OpportunityRecord }) {
 export default async function OpportunitiesPage() {
   const result = await loadData();
   const outcomes: OpportunityRecord[] = listOpportunityRecords().slice(0, 5);
+  const scoreBands: ScoreBandStat[] = scoreBandAccuracy(listPaperOpportunities().filter((o) => !isFixture(o)));
 
   if ("error" in result) {
     return (
@@ -1153,11 +1310,18 @@ export default async function OpportunitiesPage() {
   const { indexOptions: rawIndexOptions, failedIndices, intradayResult, swingResult, ltResult, now } = result;
   // Primary indices sort first; others follow in declaration order
   const isPrimary = (o: OptionsOpportunityResult) => o.underlying === "NIFTY" || o.underlying === "BANKNIFTY";
-  const indexOptions = [...rawIndexOptions].sort((a, b) => (isPrimary(a) ? 0 : 1) - (isPrimary(b) ? 0 : 1));
+  const primaryByUnderlying = new Map<string, OptionsOpportunityResult>();
+  for (const o of rawIndexOptions.filter((o) => !o.isAlternativeScenario)) {
+    if (!primaryByUnderlying.has(o.underlying)) {
+      primaryByUnderlying.set(o.underlying, o);
+    }
+  }
+  const altByUnderlying = new Map(rawIndexOptions.filter((o) => o.isAlternativeScenario).map((o) => [o.underlying, o]));
+  const indexOptions = Array.from(primaryByUnderlying.values()).sort((a, b) => (isPrimary(a) ? 0 : 1) - (isPrimary(b) ? 0 : 1));
 
-  // REJECT candidates remain available in the diagnostics section, but must never be
-  // presented in the primary recommendation lanes.
-  const actionableStocks = (stocks: StockOpportunity[]) => stocks.filter((s) => s.grade !== "REJECT");
+  // REJECT and observation-only Grade C candidates remain available in the diagnostics section,
+  // but must never be presented in the primary recommendation lanes.
+  const actionableStocks = (stocks: StockOpportunity[]) => stocks.filter((s) => s.grade !== "REJECT" && s.grade !== "C");
   const intradayEligible = actionableStocks(intradayResult.topOpportunities);
   const swingEligible = actionableStocks(swingResult.topOpportunities);
   const intradayLong = intradayEligible.filter((s) => s.direction === "BULLISH");
@@ -1166,7 +1330,7 @@ export default async function OpportunitiesPage() {
   const swingShort = swingEligible.filter((s) => s.direction === "BEARISH");
 
   const recommendationCandidates: RecommendationCandidate<BestDisplay>[] = [
-    ...indexOptions.flatMap((result) => result.topOpportunities.map((item) => {
+    ...indexOptions.flatMap((result) => result.topOpportunities.map((item) => { // primary only
       const tradeAt = item.lastTradeTime ? Date.parse(item.lastTradeTime) : NaN;
       return {
         engine: "OPTIONS" as const,
@@ -1231,6 +1395,10 @@ export default async function OpportunitiesPage() {
           </nav>
         </div>
       </div>
+
+      <NotificationControl />
+
+      <CircuitBreakerBanner />
 
       <SafetyNotice />
 
@@ -1373,8 +1541,8 @@ export default async function OpportunitiesPage() {
           R:R, entry, stop, targets are engine outputs — not recomputed here.
         </p>
         <div className="space-y-6">
-          {indexOptions.map((o) => (
-            <OptionsIndexSection key={o.underlying} result={o} now={now} />
+          {indexOptions.map((o, idx) => (
+            <OptionsIndexSection key={`${o.underlying}-${idx}`} result={o} altResult={altByUnderlying.get(o.underlying)} now={now} scoreBands={scoreBands} />
           ))}
           {indexOptions.length === 0 && (
             <Empty msg="No index options data loaded." />
@@ -1388,11 +1556,11 @@ export default async function OpportunitiesPage() {
           Exact rejection reasons per contract and per index. Rejected contracts are excluded from recommendation sections above.
         </p>
 
-        {indexOptions.map((o) => {
+        {indexOptions.map((o, idx) => {
           const rej = o.rejectedContracts;
           if (rej.length === 0 && o.recommendedStrategy !== "NO_TRADE") return null;
           return (
-            <div key={o.underlying} className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <div key={`${o.underlying}-${idx}`} className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <h3 className="font-bold text-zinc-200">{o.underlying}</h3>
                 {o.recommendedStrategy === "NO_TRADE" && (
@@ -1418,18 +1586,47 @@ export default async function OpportunitiesPage() {
             ...intradayResult.topOpportunities.filter((s) => s.grade === "REJECT"),
             ...swingResult.topOpportunities.filter((s) => s.grade === "REJECT"),
           ];
-          if (rejStocks.length === 0) return null;
+          const obsStocks = [
+            ...intradayResult.topOpportunities.filter((s) => s.grade === "C"),
+            ...swingResult.topOpportunities.filter((s) => s.grade === "C"),
+          ];
           return (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-              <h3 className="font-bold text-zinc-200 mb-3">Stocks — REJECT grade ({rejStocks.length})</h3>
-              <div className="space-y-1">
-                {rejStocks.map((s, idx) => (
-                  <div key={`${s.symbol}-${idx}`} className="flex items-start gap-3 rounded bg-zinc-950/50 px-2 py-1.5 text-xs">
-                    <span className="font-mono text-zinc-400 w-20 shrink-0">{s.symbol}</span>
-                    <span className="text-red-400">{s.gradeReasons?.join(" · ") ?? "REJECT"}</span>
+            <div className="space-y-4">
+              {rejStocks.length > 0 && (
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+                  <h3 className="font-bold text-zinc-200 mb-3">Stocks — REJECT grade ({rejStocks.length})</h3>
+                  <div className="space-y-1">
+                    {rejStocks.map((s, idx) => (
+                      <div key={`${s.symbol}-${idx}`} className="flex items-start gap-3 rounded bg-zinc-950/50 px-2 py-1.5 text-xs">
+                        <span className="font-mono text-zinc-400 w-20 shrink-0">{s.symbol}</span>
+                        <span className="text-red-400">{s.gradeReasons?.join(" · ") ?? "REJECT"}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+              {obsStocks.length > 0 && (
+                <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="font-bold text-zinc-200">Stocks — Grade C Observation Only ({obsStocks.length})</h3>
+                    <span className="text-xs text-amber-400/80 bg-amber-950/50 border border-amber-800/40 px-2 py-0.5 rounded">Forward Paper Tracking</span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mb-3">
+                    Grade C stocks are kept out of active recommendation lanes due to sub-1.0 historical profit factor (PF 0.69). Tracked for research.
+                  </p>
+                  <div className="space-y-1">
+                    {obsStocks.map((s, idx) => (
+                      <div key={`${s.symbol}-${idx}`} className="flex items-start justify-between rounded bg-zinc-950/50 px-2.5 py-1.5 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-semibold text-zinc-200 w-20 shrink-0">{s.symbol}</span>
+                          <span className="text-zinc-400">{s.setup} · Score {s.opportunityScore}/100</span>
+                        </div>
+                        <span className="text-amber-300 font-mono text-[11px]">{s.gradeReasons?.join(" · ") || "Observation only"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}

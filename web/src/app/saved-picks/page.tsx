@@ -312,9 +312,7 @@ export default function SavedPicksPage() {
       setForm({ ...form, instrument: "", entry: "", stopLoss: "", target: "", note: "" });
       setShowAddForm(false);
       load();
-    } catch {
-      setError("could not save the pick (network or server error); nothing was saved");
-    }
+    } catch { setError("could not save the pick (network or server error); nothing was saved"); }
   };
 
   const remove = async (id: string) => {
@@ -330,9 +328,7 @@ export default function SavedPicksPage() {
         return;
       }
       load();
-    } catch {
-      setError("could not delete the pick (network or server error); it is still saved");
-    }
+    } catch { setError("could not delete the pick (network or server error); it is still saved"); }
   };
 
   const purgeCompleted = async () => {
@@ -683,9 +679,7 @@ export default function SavedPicksPage() {
 
       {error && (
         <div className="flex flex-wrap items-center gap-3">
-          <p role="alert" className="rounded-xl border border-red-900 bg-red-950/40 px-3.5 py-2.5 text-sm text-red-300">
-            {error}
-          </p>
+          <p role="alert" className="rounded-xl border border-red-900 bg-red-950/40 px-3.5 py-2.5 text-sm text-red-300">{error}</p>
           <button
             type="button"
             onClick={retry}

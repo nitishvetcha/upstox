@@ -1,6 +1,7 @@
 import { requireOperator } from "../../../../lib/operatorSession.ts";
 import { NextResponse } from "next/server";
 import { getPaperTradingEngine } from "@/lib/services/paperStore";
+import { circuitBreaker } from "@/lib/services/portfolioCircuitBreaker";
 import { getSnapshot } from "@/lib/services/market";
 import { analyze } from "@/lib/engine/strategy";
 import { updateJournalEntry } from "@/lib/services/recommendationStore";
@@ -13,6 +14,18 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const index: IndexId = body.index === "banknifty" ? "banknifty" : "nifty";
     const recommendationId: string | undefined = body.recommendationId;
+
+    // Portfolio Circuit Breakers & Heat Stops Gate
+    const cb = circuitBreaker.canOpenTrade();
+    if (!cb.allowed) {
+      return NextResponse.json({
+        status: "rejected",
+        data: null,
+        reason: cb.reason,
+        code: cb.code,
+        mode: "PAPER",
+      });
+    }
 
     const snapshot = await getSnapshot(index);
     const analysis = analyze(snapshot);

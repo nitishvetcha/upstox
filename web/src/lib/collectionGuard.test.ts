@@ -19,6 +19,9 @@ const EXCLUDED: Record<string, string> = {
   "upstox-cli.mjs": "localhost client library imported by other scripts; targets the local app only",
   "verify-mock-news-offline.mjs": "offline test helper: localhost only",
   "outbound-recorder.cjs": "preload that records outbound calls; does not call out",
+  "run-telegram-market-bot.ts": "telegram bot scheduler: manages user notifications and interaction",
+  "send-test-signal.ts": "test utility: dispatches test telegram notification",
+  "start-render.mjs": "render entrypoint: supervisor for web and bot",
 };
 
 function scriptFiles(): string[] {

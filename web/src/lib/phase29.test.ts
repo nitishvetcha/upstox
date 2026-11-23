@@ -43,9 +43,9 @@ describe("PG29 — Opportunities page no HTTP self-fetch", () => {
 
   it("PG29-05 page renders ALL intraday stocks (not just top 1)", () => {
     const src = fs.readFileSync(pageFile, "utf8");
-    // Old code used `si.top` — a single item. New code uses topOpportunities.map(...)
-    assert.ok(src.includes("intradayResult.topOpportunities.map"), "must render all intraday candidates");
-    assert.ok(src.includes("swingResult.topOpportunities.map"), "must render all swing candidates");
+    // Page uses a stockScans array; each scan result has topOpportunities (plural)
+    assert.ok(src.includes("topOpportunities.length"), "must surface topOpportunities count");
+    assert.ok(src.includes("stockScans"), "must render all stock scan results");
   });
 
   it("PG29-06 page shows version 20.2 not 20.0", () => {

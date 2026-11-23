@@ -76,7 +76,7 @@ test("1. Valid EOD data can produce an EOD watchlist result", async () => {
     const result = await scanStocks("swing", FIXTURE_NOW, eodDeps);
 
     assert.ok(result.topOpportunities.length > 0, "Valid EOD quotes must produce swing watchlist candidate opportunities");
-    assert.equal(result.stocksAvailable, 50, "All 50 constituent stocks must be available from EOD quotes");
+    assert.equal(result.stocksAvailable, 189, "All constituent stocks must be available from EOD quotes");
     assert.equal(result.topOpportunities[0].freshness, "END_OF_DAY", "Opportunity retains distinct END_OF_DAY freshness label");
     // Proves that EOD data is NOT dropped as UNAVAILABLE or STALE for watchlist purposes
     assert.notEqual(result.noOpportunityReason, "Upstox not connected — no stock data available");
@@ -185,7 +185,7 @@ test("3. Truly stale data is rejected where freshness is required", async () => 
     };
     const stockResult = await scanStocks("intraday", FIXTURE_NOW, staleDeps);
     assert.equal(stockResult.topOpportunities.length, 0, "No intraday opportunities can be produced from STALE quotes");
-    assert.equal(stockResult.stocksRejected, 50, "All 50 stale stock quotes must be rejected");
+    assert.equal(stockResult.stocksRejected, 189, "All stale stock quotes must be rejected");
   } finally {
     process.env.MARKET_DATA_PROVIDER = origProvider;
   }
