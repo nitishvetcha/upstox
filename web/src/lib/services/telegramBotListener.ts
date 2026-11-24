@@ -64,45 +64,74 @@ export class TelegramBotListener {
   public async handleCallbackQuery(cb: TelegramCallbackQuery): Promise<void> {
     const data = cb.data;
     if (!data) return;
-    const chatId = cb.message?.chat.id;
+    const chatId = cb.message?.chat.id ?? cb.from.id;
 
     if (data.startsWith("track:")) {
-      const targetId = data.slice(6);
+      const payload = data.slice(6);
       let createdPick: TrackedPick | null = null;
 
-      // 1. Try resolving from paper opportunity store
-      const opp = getPaperOpportunity(targetId);
-      if (opp) {
+      // 1. Check self-contained colon-delimited format: UNDERLYING:STRIKE:OPTTYPE:ENTRY:STOP:T1:T2
+      const colonParts = payload.split(":");
+      if (colonParts.length >= 7) {
+        const underlying = colonParts[0].toUpperCase();
+        const strike = Number(colonParts[1]) || 0;
+        const optType = (colonParts[2].toUpperCase() as "CE" | "PE") || "CE";
+        const entry = Number(colonParts[3]) || 100;
+        const stop = Number(colonParts[4]) || 80;
+        const target1 = Number(colonParts[5]) || 130;
+        const target2 = Number(colonParts[6]) || 160;
+
         createdPick = addTrackedPick({
-          underlying: opp.underlying,
-          strike: opp.strike ?? 0,
-          optionType: (opp.optionType as "CE" | "PE") || "CE",
-          strategyType: opp.strategyType,
-          entry: opp.entry,
-          stop: opp.stop,
-          target1: opp.target1,
-          target2: opp.target2,
-          lotSize: opp.underlying.includes("BANK") ? 30 : 65,
-          instrumentKey: opp.instrumentKey,
+          underlying,
+          strike,
+          optionType: optType,
+          entry,
+          stop,
+          target1,
+          target2,
+          lotSize: underlying.includes("BANK") ? 30 : 65,
           savedByChatId: cb.from.id,
         });
       } else {
-        // Fallback: parse format like "NIFTY_24200_CE"
-        const parts = targetId.split("_");
-        if (parts.length >= 3) {
-          const underlying = parts[0];
-          const strike = Number(parts[1]) || 24000;
-          const optType = (parts[2].toUpperCase() as "CE" | "PE") || "CE";
+        // 2. Try resolving from paper opportunity store
+        const opp = getPaperOpportunity(payload);
+        if (opp) {
           createdPick = addTrackedPick({
-            underlying,
-            strike,
-            optionType: optType,
-            entry: 100,
-            stop: 80,
-            target1: 130,
-            target2: 160,
+            underlying: opp.underlying,
+            strike: opp.strike ?? 0,
+            optionType: (opp.optionType as "CE" | "PE") || "CE",
+            strategyType: opp.strategyType,
+            entry: opp.entry,
+            stop: opp.stop,
+            target1: opp.target1,
+            target2: opp.target2,
+            lotSize: opp.underlying.includes("BANK") ? 30 : 65,
+            instrumentKey: opp.instrumentKey,
             savedByChatId: cb.from.id,
           });
+        } else {
+          // 3. Fallback: parse format like "NIFTY_24200_CE" or "NIFTY_24200_CE_145_115_195"
+          const parts = payload.split("_");
+          if (parts.length >= 3) {
+            const underlying = parts[0].toUpperCase();
+            const strike = Number(parts[1]) || 24000;
+            const optType = (parts[2].toUpperCase() as "CE" | "PE") || "CE";
+            const entry = parts[3] ? Number(parts[3]) || 100 : 100;
+            const stop = parts[4] ? Number(parts[4]) || 80 : 80;
+            const target1 = parts[5] ? Number(parts[5]) || 130 : 130;
+            const target2 = parts[6] ? Number(parts[6]) || 160 : 160;
+            createdPick = addTrackedPick({
+              underlying,
+              strike,
+              optionType: optType,
+              entry,
+              stop,
+              target1,
+              target2,
+              lotSize: underlying.includes("BANK") ? 30 : 65,
+              savedByChatId: cb.from.id,
+            });
+          }
         }
       }
 
@@ -199,12 +228,14 @@ export class TelegramBotListener {
     }
 
     if (update.message?.text) {
-      const text = update.message.text.trim();
+      const rawText = update.message.text.trim();
+      // In Telegram groups, commands may arrive as /command@BotUsername (e.g. /status@Upstox_analyzer_bot)
+      const command = rawText.split("@")[0].toLowerCase().trim();
       const chatId = update.message.chat.id;
 
-      if (text === "/picks" || text === "/status") {
+      if (command === "/picks" || command === "/status") {
         await this.handlePicksCommand(chatId);
-      } else if (text === "/start" || text === "/help") {
+      } else if (command === "/start" || command === "/help") {
         await sendTelegramMessage(
           [
             `🤖 <b>Upstox Options Terminal Bot</b>`,
@@ -222,7 +253,7 @@ export class TelegramBotListener {
           ].join("\n"),
           { telegramChatId: String(chatId) },
         );
-      } else if (text === "/clear") {
+      } else if (command === "/clear") {
         const active = listTrackedPicks(true);
         for (const p of active) {
           removeTrackedPick(p.id);

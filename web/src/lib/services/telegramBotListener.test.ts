@@ -86,4 +86,49 @@ describe("telegramBotListener", () => {
 
     assert.equal(listTrackedPicks(true).length, 0);
   });
+
+  it("handles self-contained colon-delimited track: callback with exact entry, stop, and targets", async () => {
+    await telegramBotListener.processUpdate({
+      update_id: 107,
+      callback_query: {
+        id: "cq_7",
+        from: { id: 1008179235, first_name: "Admin" },
+        message: { message_id: 400, chat: { id: -5143464220 } },
+        data: "track:NIFTY:24200:CE:145:115:195:240",
+      },
+    });
+
+    const active = listTrackedPicks(true);
+    assert.equal(active.length, 1);
+    assert.equal(active[0].underlying, "NIFTY");
+    assert.equal(active[0].strike, 24200);
+    assert.equal(active[0].optionType, "CE");
+    assert.equal(active[0].entry, 145);
+    assert.equal(active[0].stop, 115);
+    assert.equal(active[0].target1, 195);
+    assert.equal(active[0].target2, 240);
+  });
+
+  it("handles group commands with bot username suffix like /clear@Upstox_analyzer_bot", async () => {
+    await telegramBotListener.processUpdate({
+      update_id: 108,
+      callback_query: {
+        id: "cq_8",
+        from: { id: 1 },
+        data: "track:BANKNIFTY:52400:PE:320:250:420:510",
+      },
+    });
+    assert.equal(listTrackedPicks(true).length, 1);
+
+    await telegramBotListener.processUpdate({
+      update_id: 109,
+      message: {
+        message_id: 401,
+        chat: { id: -5143464220 },
+        text: "/clear@Upstox_analyzer_bot",
+      },
+    });
+
+    assert.equal(listTrackedPicks(true).length, 0);
+  });
 });

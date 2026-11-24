@@ -271,16 +271,13 @@ export async function notifyOpportunitySignal(
     });
   }
 
-  // Interactive Telegram Inline Keyboard
-  const contractId = "instrumentKey" in item && item.instrumentKey
-    ? item.instrumentKey
-    : `${underlying}_${strike}_${optType}`;
-  const oppId = "id" in item ? item.id : contractId;
+  // Interactive Telegram Inline Keyboard (self-contained tracking data < 45 bytes, well within 64-byte Telegram limit)
+  const selfContainedTrackData = `track:${underlying}:${strike}:${optType}:${Math.round(entry)}:${Math.round(stop)}:${Math.round(t1)}:${Math.round(t2)}`;
 
   const inlineKeyboard = {
     inline_keyboard: [
       [
-        { text: "📌 Save & Track Option", callback_data: `track:${oppId}` },
+        { text: "📌 Save & Track Option", callback_data: selfContainedTrackData },
         { text: "📊 View Tracked Picks", callback_data: "cmd:picks" },
       ],
     ],

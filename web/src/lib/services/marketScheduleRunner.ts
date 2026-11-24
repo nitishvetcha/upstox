@@ -72,14 +72,15 @@ export class MarketScheduleRunner {
   /**
    * Executes a scheduled market scan cycle.
    */
-  public async executeScan(label: string, now = new Date()): Promise<{ runCount: number; errors: string[] }> {
+  public async executeScan(label: string, now = new Date(), forceOpen = false): Promise<{ runCount: number; errors: string[] }> {
     try {
       // 1. Run live opportunity discovery across indices and stocks
       const run = await runLiveOpportunityCollection(
-        () => getSnapshot("nifty").then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "NIFTY", now))),
-        () => getSnapshot("banknifty").then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "BANKNIFTY", now))),
+        () => getSnapshot("nifty", undefined, now).then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "NIFTY", now))),
+        () => getSnapshot("banknifty", undefined, now).then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "BANKNIFTY", now))),
         () => scanStocks("intraday", now),
         now,
+        { forceMarketOpen: forceOpen },
       );
 
       // 2. Announce scan completion to Telegram group
@@ -158,6 +159,22 @@ export class MarketScheduleRunner {
       const quote = pick.instrumentKey ? quoteManager.getQuote(pick.instrumentKey) : null;
       if (quote && quote.ltp > 0) {
         currentPrice = quote.ltp;
+      } else {
+        // Fallback: check index snapshot chain for latest option LTP
+        try {
+          const idx = pick.underlying.toLowerCase().includes("bank") ? "banknifty" : "nifty";
+          const snap = await getSnapshot(idx, undefined, now);
+          const row = snap.chain?.find((r) => r.strike === pick.strike);
+          if (row) {
+            const sideQuote = pick.optionType === "CE" ? row.call : row.put;
+            if (sideQuote && sideQuote.ltp > 0) {
+              currentPrice = sideQuote.ltp;
+            }
+            if (sideQuote && sideQuote.instrumentKey && !pick.instrumentKey) {
+              pick.instrumentKey = sideQuote.instrumentKey;
+            }
+          }
+        } catch {}
       }
 
       const updated = updateTrackedPickQuote(pick.id, currentPrice, now);

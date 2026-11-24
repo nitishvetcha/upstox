@@ -217,14 +217,16 @@ export async function runLiveOpportunityCollection(
   fetchBankNifty: () => Promise<OptionsOpportunityResult>,
   fetchStocks: () => Promise<StockOpportunityResult>,
   now = new Date(),
+  options?: { forceMarketOpen?: boolean },
 ): Promise<CollectionResult> {
-  const mStatus = marketStatus(now);
+  const isForced = options?.forceMarketOpen || process.env.FORCE_MARKET_OPEN === "true";
+  const mStatus = isForced ? "OPEN" : marketStatus(now);
   if (mStatus !== "OPEN") {
     return { market: mStatus, source: "NONE", generated: 0, accepted: 0, created: 0, duplicates: 0, rejected: 0, niftyCount: 0, bankNiftyCount: 0, stockCount: 0, errors: [], reason: "MARKET_CLOSED" };
   }
   // Phase 2 evaluation rule (docs/intraday-evaluation-rules.md): no new entries at or after 14:30 IST.
   const istMin = Math.floor(((now.getTime() + 5.5 * 3600e3) % 86_400_000) / 60_000);
-  if (istMin >= ENTRY_CUTOFF_IST_MIN) {
+  if (!isForced && istMin >= ENTRY_CUTOFF_IST_MIN) {
     return { market: mStatus, source: "NONE", generated: 0, accepted: 0, created: 0, duplicates: 0, rejected: 0, niftyCount: 0, bankNiftyCount: 0, stockCount: 0, errors: [], reason: "ENTRY_CUTOFF" };
   }
 

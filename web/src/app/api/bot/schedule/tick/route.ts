@@ -38,7 +38,7 @@ export async function POST(request: Request): Promise<Response> {
   // 2. Execute schedule runner tick
   let scanResult: { ranScan: boolean; label?: string } = { ranScan: false };
   if (forceScan) {
-    await marketScheduleRunner.executeScan("Manual Triggered Scan");
+    await marketScheduleRunner.executeScan("Manual Triggered Scan", new Date(), true);
     scanResult = { ranScan: true, label: "Manual Triggered Scan" };
   } else {
     scanResult = await marketScheduleRunner.tick();
