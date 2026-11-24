@@ -6,7 +6,7 @@ import path from "node:path";
 import { validateHistoricalStrategy } from "@/lib/services/strategyHistoricalValidator";
 import { getAccessToken } from "@/lib/services/upstoxAuth";
 import { get } from "@/lib/services/upstoxMarket";
-import { normalizeCandles } from "@/lib/services/candles";
+import { normalizeCandles, mergeCandles } from "@/lib/services/candles";
 import { getTradingViewSymbol, getTradingViewChartUrl } from "@/lib/tradingView";
 import { dataRoot } from "@/lib/dataRoot";
 import type { Candle } from "@/lib/types";
@@ -25,54 +25,20 @@ const INSTRUMENT_MAP: Record<string, { key: string; name: string }> = {
   ICICIBANK: { key: "NSE_EQ|INE090A01021", name: "ICICI BANK" },
 };
 
-function generateDeterministicHistoricalCandles(symbol: string, timeframe: string, days = 30): Candle[] {
-  const candles: Candle[] = [];
-  const basePrice = symbol.includes("BANK") ? 51500 : symbol.includes("NIFTY") ? 23800 : 1500;
-  const barMins = timeframe === "5m" ? 5 : timeframe === "30m" ? 30 : 15;
-  const barsPerDay = Math.floor((6 * 60 + 15) / barMins); // 09:15 to 15:30 = 375 mins
+function planDateChunks(totalDays: number, maxChunkDays = 26): { to: string; from: string }[] {
+  const chunks: { to: string; from: string }[] = [];
+  const nowMs = Date.now();
+  let currentOffset = 0;
 
-  let currentPrice = basePrice;
-  const now = Date.now();
-
-  for (let d = days; d >= 0; d--) {
-    const dayDate = new Date(now - d * 86_400_000);
-    const dayOfWeek = dayDate.getUTCDay();
-    // Skip weekends (0 = Sunday, 6 = Saturday)
-    if (dayOfWeek === 0 || dayOfWeek === 6) continue;
-
-    const ymd = dayDate.toISOString().slice(0, 10);
-    // Intraday start: 09:15 IST (03:45 UTC)
-    let openTime = Date.parse(`${ymd}T03:45:00.000Z`);
-
-    // Daily drift based on deterministic pseudo-random seed
-    const seed = (d * 9301 + 49297) % 233280;
-    const dailyTrend = ((seed % 100) - 48) / 1000; // -4.8% to +5.2% daily bias
-
-    for (let b = 0; b < barsPerDay; b++) {
-      const barTime = new Date(openTime + b * barMins * 60_000).toISOString();
-      const vol = 10000 + Math.floor(((seed * (b + 1)) % 50000));
-      
-      const barDrift = dailyTrend * (b / barsPerDay) + (((seed * (b + 3)) % 100) - 50) / 10000;
-      const open = currentPrice;
-      const close = Math.round((open * (1 + barDrift)) * 100) / 100;
-      const spread = Math.abs(close - open) + (basePrice * 0.001);
-      const high = Math.round((Math.max(open, close) + spread * 0.6) * 100) / 100;
-      const low = Math.round((Math.min(open, close) - spread * 0.5) * 100) / 100;
-
-      candles.push({
-        timestamp: barTime,
-        open,
-        high,
-        low,
-        close,
-        volume: vol,
-      });
-
-      currentPrice = close;
-    }
+  while (currentOffset < totalDays) {
+    const chunkSpan = Math.min(maxChunkDays, totalDays - currentOffset);
+    const toDate = new Date(nowMs - currentOffset * 86_400_000).toISOString().slice(0, 10);
+    const fromDate = new Date(nowMs - (currentOffset + chunkSpan) * 86_400_000).toISOString().slice(0, 10);
+    chunks.push({ to: toDate, from: fromDate });
+    currentOffset += chunkSpan + 1;
   }
 
-  return candles;
+  return chunks;
 }
 
 export async function GET(req: Request) {
@@ -90,31 +56,42 @@ export async function GET(req: Request) {
   };
 
   let candles: Candle[] = [];
-  let dataSource = "DETERMINISTIC_HISTORICAL_MODEL";
+  let dataSource = "NONE";
 
-  // 1. Attempt to load from Upstox API if active token is available
+  // 1. Fetch Real Historical Market Data from Upstox Live API
   try {
     const token = await getAccessToken();
     if (token) {
       const encoded = encodeURIComponent(matched.key);
       const unit = timeframe === "1d" ? "days" : timeframe === "1h" ? "hours" : "minutes";
       const intervalVal = timeframe === "5m" ? "5" : timeframe === "30m" ? "30" : timeframe === "1h" ? "1" : timeframe === "1d" ? "1" : "15";
-      const toDate = new Date().toISOString().slice(0, 10);
-      const fromDate = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 
-      const endpoint = `/v3/historical-candle/${encoded}/${unit}/${intervalVal}/${toDate}/${fromDate}`;
-      const rawData = await get(token, endpoint, {}, { index: "nifty" });
-      const parsed = normalizeCandles(rawData);
-      if (parsed && parsed.length >= 20) {
-        candles = parsed;
+      const chunks = planDateChunks(days, 26);
+      let accumulated: Candle[] = [];
+
+      for (const chunk of chunks) {
+        try {
+          const endpoint = `/v3/historical-candle/${encoded}/${unit}/${intervalVal}/${chunk.to}/${chunk.from}`;
+          const rawData = await get(token, endpoint, {}, { index: matched.name.toLowerCase().includes("bank") ? "banknifty" : "nifty" });
+          const parsed = normalizeCandles(rawData);
+          if (parsed && parsed.length > 0) {
+            accumulated = mergeCandles(accumulated, parsed);
+          }
+        } catch {
+          // Individual chunk error; continue accumulating available chunks
+        }
+      }
+
+      if (accumulated.length >= 20) {
+        candles = accumulated;
         dataSource = "UPSTOX_LIVE_HISTORICAL_API";
       }
     }
   } catch {
-    // Upstox live historical fetch failed or was unauthenticated; continue to disk cache
+    // Upstox live fetch failed
   }
 
-  // 2. Check local historical cache on disk if live API didn't return
+  // 2. Fallback to Local Verified Historical NSE Datasets on Disk (No Synthetic Data)
   if (candles.length < 20) {
     try {
       const historyDir = path.join(dataRoot(), "history");
@@ -122,31 +99,37 @@ export async function GET(req: Request) {
         const files = fs.readdirSync(historyDir);
         const searchPattern = matched.key.replace(/[^\w]/g, "_");
         const matchingFiles = files.filter((f) => f.includes(searchPattern));
-        for (const f of matchingFiles.slice(0, 5)) {
+        let diskCandles: Candle[] = [];
+        for (const f of matchingFiles.slice(0, 10)) {
           const content = JSON.parse(fs.readFileSync(path.join(historyDir, f), "utf8"));
           if (content?.candles && Array.isArray(content.candles)) {
             const parsed = normalizeCandles(content);
-            candles.push(...parsed);
+            diskCandles = mergeCandles(diskCandles, parsed);
           }
         }
-        if (candles.length >= 20) {
-          // Sort and deduplicate
-          candles.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
-          dataSource = "HISTORICAL_CACHE_STORE";
+        if (diskCandles.length >= 20) {
+          candles = diskCandles;
+          dataSource = "REAL_NSE_HISTORICAL_CACHE";
         }
       }
     } catch {
-      // Disk cache read failed; fallback to generator
+      // Disk cache read failed
     }
   }
 
-  // 3. Fallback to authentic historical model if needed
+  // 3. Strict Check: If no real data is available, do NOT fabricate mock data
   if (candles.length < 20) {
-    candles = generateDeterministicHistoricalCandles(rawSymbol, timeframe, days);
-    dataSource = "HISTORICAL_REPLAY_ENGINE";
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `Real market data unavailable for ${matched.name}. Mock data fallback has been permanently removed. Please ensure your Upstox connection is active or select a supported instrument.`,
+        symbol: matched.name,
+      },
+      { status: 404 },
+    );
   }
 
-  // Run quantitative strategy validation
+  // Run quantitative strategy validation on pure real historical candles
   const report = validateHistoricalStrategy(candles, {
     symbol: matched.name,
     timeframe,
