@@ -1,11 +1,12 @@
 import { scoreExplanation } from "@/lib/scoreText";
 import Link from "next/link";
-import { Check, Minus, TriangleAlert, X } from "lucide-react";
+import { Check, Minus, TriangleAlert, X, BarChart3, ExternalLink } from "lucide-react";
 import type { Analysis, TradePlan } from "@/lib/types";
 import { fmtDate } from "@/lib/time";
 import { Badge, Card, Stat, inr, num } from "./ui";
 import { DataTimestamps } from "./DataTimestamps";
 import { dataLabel } from "@/lib/dataStatus";
+import { getTradingViewChartUrl } from "@/lib/tradingView";
 
 function legLine(l: TradePlan["legs"][number]) {
   return `${l.side} ${num(l.strike, 0)} ${l.type} @ ${inr(l.ltp)}`;
@@ -92,6 +93,17 @@ export function RecommendationCard({ a }: { a: Analysis }) {
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-lg font-semibold text-zinc-100">{s.name}</span>
+            <a
+              href={getTradingViewChartUrl(s.name, "15")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded border border-zinc-800 bg-zinc-900/80 px-2 py-0.5 text-xs font-medium text-sky-400 hover:text-sky-300 hover:border-sky-500 transition-colors"
+              title="Open TradingView Chart"
+            >
+              <BarChart3 size={12} />
+              <span>TradingView</span>
+              <ExternalLink size={10} />
+            </a>
             <Badge>{a.status}</Badge>
             <Badge>{a.bias}</Badge>
             <span className="text-xs text-zinc-500">Regime: {a.regime}</span>

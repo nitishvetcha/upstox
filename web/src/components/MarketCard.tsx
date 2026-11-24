@@ -3,6 +3,8 @@ import { fmtDate } from "@/lib/time";
 import { INSTRUMENTS } from "@/lib/services/instrumentRegistry";
 import { Badge, Card, Stat, num, signed } from "./ui";
 import { breadthBadge } from "@/lib/provenanceDisplay";
+import { getTradingViewChartUrl } from "@/lib/tradingView";
+import { BarChart3, ExternalLink } from "lucide-react";
 
 const emaText = (e: NonNullable<NonNullable<Analysis["snapshot"]["technical"]>["emaStructure"]>) =>
   ({ STRONG_BULLISH: "9 > 21 > 50", BULLISH: "9 > 21", RANGE: "flat", BEARISH: "9 < 21", STRONG_BEARISH: "9 < 21 < 50" })[e];
@@ -33,6 +35,17 @@ export function MarketCard({ a }: { a: Analysis }) {
           <div className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
             {s.name}
             <Badge tone={marketSrc === "LIVE" ? "neutral" : "warn"}>{marketSrc}</Badge>
+            <a
+              href={getTradingViewChartUrl(s.name, "15")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded border border-zinc-800 bg-zinc-900/60 px-1.5 py-0.5 text-[11px] font-medium text-sky-400 hover:text-sky-300 hover:border-sky-500 transition-colors"
+              title={`Open ${s.name} TradingView Chart`}
+            >
+              <BarChart3 size={11} />
+              <span>Chart</span>
+              <ExternalLink size={9} />
+            </a>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="font-mono text-2xl font-semibold tabular-nums text-zinc-50">{num(s.spot)}</span>

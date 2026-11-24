@@ -25,6 +25,9 @@ import { PositionSizeCalculator } from "@/components/PositionSizeCalculator";
 import { summarizeSources } from "@/lib/provenanceDisplay";
 import { pickFromStock, pickFromContract } from "@/lib/savedPickMapping";
 import { selectBestRecommendation, type RecommendationCandidate } from "@/lib/bestRecommendation";
+import { TradingViewChart } from "@/components/TradingViewChart";
+import { getTradingViewChartUrl } from "@/lib/tradingView";
+import { ExternalLink, BarChart3 } from "lucide-react";
 // ── Decision funnel: real engine counts only. Rejections are reported as one total; the engines do not split them into data-quality, strategy and risk categories. ──
 
 interface StockScanCounts {
@@ -515,6 +518,17 @@ function StockCard({ stock, rank, horizon = "INTRADAY" }: { stock: StockOpportun
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <SavePickButton pick={pickFromStock(stock)} />
         <CopyOrderSlipButton slipText={`ORDER: LIMIT ONLY | BUY ${stock.symbol} | LIMIT PRICE: ₹${stock.entry} (Entry Range: ₹${stock.entryLow} - ₹${stock.entryHigh}) | SL: ₹${stock.stop} | T1: ₹${stock.target1} | T2: ₹${stock.target2} | R:R: ${stock.rr}x | TIME-EXIT: Close before 3:15 PM IST`} />
+        <a
+          href={getTradingViewChartUrl(stock.symbol, "15")}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1.5 text-xs font-semibold text-zinc-300 hover:border-sky-500 hover:text-sky-300 transition-colors"
+          title={`Open ${stock.symbol} TradingView Chart`}
+        >
+          <BarChart3 size={13} className="text-sky-400" />
+          <span>TradingView</span>
+          <ExternalLink size={11} />
+        </a>
       </div>
       <details className="mt-2">
         <summary className="cursor-pointer text-xs text-zinc-400 hover:text-zinc-200">Signals, reasons &amp; invalidation</summary>
@@ -963,6 +977,17 @@ function OptionRecCard({ contract, snapshotSource, lotSize, rank, daysLeft, scor
               : `ORDER: LIMIT ONLY (NO MARKET ORDER) | BUY ${contract.underlying} ${contract.strike} ${contract.optionType} | LIMIT PRICE: ₹${contract.entry} (Entry Range: ₹${contract.entryLow} - ₹${contract.entryHigh}) | SL: ₹${contract.stop} | T1: ₹${contract.target1} | T2: ₹${contract.target2} | Lot: ${lotSize ?? 65} | ⏱️ TIME-STOP: Exit after 45-60m if T1 not reached (Theta Guard)`
           }
         />
+        <a
+          href={getTradingViewChartUrl(contract.underlying, "15")}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/80 px-2.5 py-1.5 text-xs font-semibold text-zinc-300 hover:border-sky-500 hover:text-sky-300 transition-colors"
+          title={`Open ${contract.underlying} TradingView Chart`}
+        >
+          <BarChart3 size={13} className="text-sky-400" />
+          <span>TradingView</span>
+          <ExternalLink size={11} />
+        </a>
       </div>
       <details className="mt-2">
         <summary className="cursor-pointer text-xs text-zinc-400 hover:text-zinc-200">Signals, reasons &amp; invalidation</summary>
@@ -1405,6 +1430,23 @@ export default async function OpportunitiesPage() {
       <BestAvailableNow candidates={recommendationCandidates} />
 
       <EngineGovernanceBanner />
+
+      {/* ── TradingView Live Terminal ── */}
+      <details className="app-surface rounded-2xl border border-zinc-800 p-5 group" open>
+        <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-zinc-200">
+          <div className="flex items-center gap-2">
+            <BarChart3 size={18} className="text-sky-400" />
+            <span>TradingView Live Terminal</span>
+            <span className="rounded bg-sky-950/60 border border-sky-800/50 px-2 py-0.5 text-[11px] font-medium text-sky-400">
+              NSE Live Charts
+            </span>
+          </div>
+          <span className="text-xs text-zinc-400 group-open:rotate-180 transition-transform">▼</span>
+        </summary>
+        <div className="mt-4">
+          <TradingViewChart symbol="NIFTY" timeframe="15" height={440} />
+        </div>
+      </details>
 
       <DecisionFunnel
         options={indexOptions}

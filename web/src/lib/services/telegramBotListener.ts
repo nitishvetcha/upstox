@@ -10,6 +10,7 @@ import {
   type TrackedPick,
 } from "./trackedPicksStore.ts";
 import { getNotificationConfig, sendTelegramMessage } from "./notificationService.ts";
+import { getTradingViewChartUrl } from "../tradingView.ts";
 
 export interface TelegramCallbackQuery {
   id: string;
@@ -138,12 +139,14 @@ export class TelegramBotListener {
       await this.answerCallbackQuery(cb.id, "✅ Option added to active tracking!");
 
       if (createdPick && chatId) {
+        const tvUrl = getTradingViewChartUrl(createdPick.underlying, "15");
         const text = [
           `🎯 <b>Option Tracked: ${createdPick.underlying} ${createdPick.strike} ${createdPick.optionType}</b>`,
           `• <b>Entry:</b> ₹${createdPick.entry.toFixed(1)}`,
           `• <b>Stop Loss:</b> ₹${createdPick.stop.toFixed(1)}`,
           `• <b>Target 1:</b> ₹${createdPick.target1.toFixed(1)}`,
           `• <b>Target 2:</b> ₹${createdPick.target2.toFixed(1)}`,
+          `• <b>Chart:</b> <a href="${tvUrl}">TradingView Live ${createdPick.underlying}</a>`,
           ``,
           `<i>Live price & risk updates (Hold / Trail / Cut) will post automatically. Tracking ends at 15:15 IST.</i>`,
         ].join("\n");
@@ -155,6 +158,9 @@ export class TelegramBotListener {
             inline_keyboard: [
               [
                 { text: "❌ Stop Tracking", callback_data: `untrack:${createdPick.id}` },
+                { text: "📈 TradingView Chart", url: tvUrl },
+              ],
+              [
                 { text: "📊 All Tracked Picks", callback_data: "cmd:picks" },
               ],
             ],
@@ -202,8 +208,9 @@ export class TelegramBotListener {
 
     for (const p of active) {
       const pnlSign = (p.lastPnl ?? 0) >= 0 ? "+" : "";
+      const tvUrl = getTradingViewChartUrl(p.underlying, "15");
       lines.push(
-        `• <b>${p.underlying} ${p.strike} ${p.optionType}</b>`,
+        `• <b>${p.underlying} ${p.strike} ${p.optionType}</b> (<a href="${tvUrl}">📈 TV Chart</a>)`,
         `  LTP: ₹${p.lastLtp ?? p.entry} | P&L: ${pnlSign}₹${p.lastPnl ?? 0} (${pnlSign}${p.lastPnlPct ?? 0}%)`,
         `  Stop: ₹${p.stop} | T1: ₹${p.target1}`,
         `  Advice: <i>${p.adviceReason}</i>`,

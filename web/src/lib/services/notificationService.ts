@@ -5,6 +5,7 @@
 
 import type { PaperOpportunity } from "./paperOpportunityStore.ts";
 import type { ContractOpportunity, OpportunityGrade } from "../engine/opportunityEngine.ts";
+import { getTradingViewChartUrl } from "../tradingView.ts";
 
 export interface NotificationConfig {
   enabled: boolean;
@@ -242,6 +243,8 @@ export async function notifyOpportunitySignal(
     `• Place LIMIT order at ₹${entry.toFixed(1)}. No market orders.`,
     `• <b>45m Theta Stop:</b> If T1 not reached in 45m, close near breakeven.`,
     item.reasons && item.reasons.length > 0 ? `• <i>${item.reasons.slice(0, 2).join(" · ")}</i>` : "",
+    ``,
+    `📈 <b>Chart:</b> <a href="${getTradingViewChartUrl(underlying, "15")}">TradingView Live ${underlying}</a>`,
   ].filter(Boolean).join("\n");
 
   // 2. Discord Embed format
@@ -259,6 +262,7 @@ export async function notifyOpportunitySignal(
       { name: "Targets (T1 / T2)", value: `₹${t1.toFixed(1)} / ₹${t2.toFixed(1)}`, inline: true },
       { name: "Risk per Lot", value: `₹${riskPerLot.toLocaleString("en-IN")}`, inline: true },
       { name: "Capital per Lot", value: `₹${capitalPerLot.toLocaleString("en-IN")}`, inline: true },
+      { name: "TradingView Chart", value: `[Open ${underlying} Chart](${getTradingViewChartUrl(underlying, "15")})`, inline: true },
       { name: "Mandatory Safeguard", value: "Zero slippage: Exchange LIMIT only. 45m Theta time-stop.", inline: false },
     ],
   };
@@ -273,11 +277,15 @@ export async function notifyOpportunitySignal(
 
   // Interactive Telegram Inline Keyboard (self-contained tracking data < 45 bytes, well within 64-byte Telegram limit)
   const selfContainedTrackData = `track:${underlying}:${strike}:${optType}:${Math.round(entry)}:${Math.round(stop)}:${Math.round(t1)}:${Math.round(t2)}`;
+  const tvUrl = getTradingViewChartUrl(underlying, "15");
 
   const inlineKeyboard = {
     inline_keyboard: [
       [
         { text: "📌 Save & Track Option", callback_data: selfContainedTrackData },
+        { text: "📈 TradingView Chart", url: tvUrl },
+      ],
+      [
         { text: "📊 View Tracked Picks", callback_data: "cmd:picks" },
       ],
     ],

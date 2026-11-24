@@ -39,9 +39,10 @@ export function buildNonceCsp(nonce: string, isDev: boolean): string {
     "style-src-attr 'unsafe-inline'", // approved: React style={} attributes cannot take a nonce; scripts stay nonce-only
     // Owner decision (stage C): the chart library injects a <style> element without a nonce. Styles only; scripts stay nonce-only.
     "style-src-elem 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    "img-src 'self' data: blob: https://*.tradingview.com",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    "connect-src 'self' https://*.tradingview.com wss://*.tradingview.com",
+    "frame-src 'self' https://*.tradingview.com https://*.tradingview-widget.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
