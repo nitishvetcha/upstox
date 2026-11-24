@@ -20,12 +20,20 @@ const children = [];
 
 function registerProcess(child, label) {
   children.push(child);
-  child.stdout?.on("data", (chunk) => {
-    process.stdout.write(`[${label}] ${chunk}`);
-  });
-  child.stderr?.on("data", (chunk) => {
-    process.stderr.write(`[${label}] ${chunk}`);
-  });
+  const pipeOutput = (chunk, isErr) => {
+    const text = chunk.toString();
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (i === lines.length - 1 && line === "") continue;
+      // Prevent duplicate [BOT-RUNNER] prefix if the runner script already logged it
+      const prefix = line.startsWith(`[${label}]`) ? "" : `[${label}${isErr ? ":warn" : ""}] `;
+      process.stdout.write(`${prefix}${line}\n`);
+    }
+  };
+
+  child.stdout?.on("data", (chunk) => pipeOutput(chunk, false));
+  child.stderr?.on("data", (chunk) => pipeOutput(chunk, true));
   child.on("exit", (code, signal) => {
     console.log(`[${label}] Process exited with code ${code ?? signal}`);
     if (!shuttingDown && label === "NEXT-WEB") {
