@@ -21,7 +21,10 @@ export async function POST(request: Request) {
   if (!operator || operator.length < 32) return Response.json({ error: "scheduler is not configured with an operator token" }, { status: 503 });
 
   const id = `scheduled_${Date.now()}`;
-  const origin = new URL(request.url).origin;
+  // This route runs inside the same Render web process as collect/monitor. Calling
+  // the public onrender.com hostname from that process can fail on free instances;
+  // use the bound local listener instead of creating a public network loop.
+  const origin = `http://127.0.0.1:${process.env.PORT ?? "10000"}`;
   const headers = { authorization: `Bearer ${operator}` };
   let stage = "restore";
   try {
