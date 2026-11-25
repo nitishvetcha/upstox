@@ -16,7 +16,7 @@ export const PAPER_READINESS_REQUIREMENTS = {
   setupQuarantineTrades: 30,
 } as const;
 
-export type ReadinessStrategy = "EQUITY_STOCKS" | "INDEX_OPTIONS" | "MCX_CRUDEOIL" | "MCX_NATURALGAS";
+export type ReadinessStrategy = "EQUITY_STOCKS" | "NIFTY_OPTIONS" | "BANKNIFTY_OPTIONS" | "OTHER_INDEX_OPTIONS" | "MCX_CRUDEOIL" | "MCX_NATURALGAS";
 export type PaperReadinessVerdict = "INSUFFICIENT_EVIDENCE" | "HOLD" | "PAPER_EVIDENCE_SUFFICIENT";
 
 export interface StrategyReadinessReport {
@@ -54,7 +54,9 @@ function categoryOf(opp: PaperOpportunity): ReadinessStrategy | null {
   if (opp.instrumentType === "STOCK") return "EQUITY_STOCKS";
   if (underlying === "CRUDEOIL") return "MCX_CRUDEOIL";
   if (underlying === "NATURALGAS") return "MCX_NATURALGAS";
-  return "INDEX_OPTIONS";
+  if (underlying === "NIFTY") return "NIFTY_OPTIONS";
+  if (underlying === "BANKNIFTY") return "BANKNIFTY_OPTIONS";
+  return "OTHER_INDEX_OPTIONS";
 }
 
 function isVerifiedCompletedLivePaper(opp: PaperOpportunity): boolean {
@@ -121,7 +123,7 @@ function setupEvidence(records: PaperOpportunity[]): SetupEvidence[] {
 
 export function buildStrategyReadiness(opportunities: PaperOpportunity[], options: ReadinessEvidenceOptions = {}): StrategyReadinessReport[] {
   const tradesById = new Map((options.costedTrades ?? []).map((trade) => [trade.id, trade]));
-  const strategies: ReadinessStrategy[] = ["EQUITY_STOCKS", "INDEX_OPTIONS", "MCX_CRUDEOIL", "MCX_NATURALGAS"];
+  const strategies: ReadinessStrategy[] = ["EQUITY_STOCKS", "NIFTY_OPTIONS", "BANKNIFTY_OPTIONS", "OTHER_INDEX_OPTIONS", "MCX_CRUDEOIL", "MCX_NATURALGAS"];
   return strategies.map((strategy) => {
     const all = opportunities.filter((opp) => categoryOf(opp) === strategy);
     const baseVerified = all.filter(isVerifiedCompletedLivePaper);
