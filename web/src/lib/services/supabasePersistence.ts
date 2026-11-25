@@ -28,7 +28,15 @@ export function supabasePersistenceIssue(): typeof lastPersistenceIssue {
 
 function db(): Pool | null {
   if (!supabaseEnabled()) return null;
-  if (!pool) pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 3, ssl: { rejectUnauthorized: true } });
+  // Supabase exposes its database root certificate in Database Settings. Render
+  // stores multiline secrets with literal \n escapes, so normalize those before
+  // giving the CA to node-postgres for full hostname/certificate verification.
+  const ca = process.env.SUPABASE_DB_CA?.replace(/\\n/g, "\n");
+  if (!pool) pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 3,
+    ssl: ca ? { rejectUnauthorized: true, ca } : { rejectUnauthorized: true },
+  });
   return pool;
 }
 

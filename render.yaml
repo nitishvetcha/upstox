@@ -35,6 +35,8 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: SUPABASE_DB_CA
+        sync: false
       - key: OPERATOR_TOKEN
         sync: false
       - key: SCHEDULER_TOKEN
