@@ -198,15 +198,18 @@ export function addTrackedPick(input: TrackedPickInput, now = new Date()): Track
 }
 
 /**
- * Removes or marks pick as removed.
+ * Removes or marks pick as removed (optionally filtered by user chat ID).
  */
-export function removeTrackedPick(idOrKey: string): boolean {
+export function removeTrackedPick(idOrKey: string, userChatId?: string | number): boolean {
   const all = loadTrackedPicks();
   let modified = false;
 
   for (const p of all) {
+    const matchesUser =
+      userChatId === undefined || userChatId === null || String(p.savedByChatId) === String(userChatId);
     if (
       p.status === "ACTIVE" &&
+      matchesUser &&
       (p.id.toLowerCase() === idOrKey.toLowerCase() ||
         p.instrumentKey?.toLowerCase() === idOrKey.toLowerCase() ||
         buildPickKey(p.underlying, p.strike, p.optionType).toLowerCase() === idOrKey.toLowerCase())
@@ -223,17 +226,31 @@ export function removeTrackedPick(idOrKey: string): boolean {
   return false;
 }
 
-/** Clears all tracked picks (testing helper). */
-export function clearAllTrackedPicks(): void {
-  saveTrackedPicks([]);
+/** Clears tracked picks (all picks if userChatId omitted, or user-specific picks if specified). */
+export function clearAllTrackedPicks(userChatId?: string | number): number {
+  const all = loadTrackedPicks();
+  if (userChatId === undefined || userChatId === null) {
+    saveTrackedPicks([]);
+    return all.length;
+  }
+  const targetStr = String(userChatId);
+  const remaining = all.filter((p) => String(p.savedByChatId) !== targetStr);
+  const removedCount = all.length - remaining.length;
+  saveTrackedPicks(remaining);
+  return removedCount;
 }
 
 /**
- * Returns all active tracked picks.
+ * Returns all active tracked picks (optionally filtered by user chat ID).
  */
-export function listTrackedPicks(onlyActive = true): TrackedPick[] {
+export function listTrackedPicks(onlyActive = true, userChatId?: string | number): TrackedPick[] {
   const all = loadTrackedPicks();
-  return onlyActive ? all.filter((p) => p.status === "ACTIVE") : all;
+  let filtered = onlyActive ? all.filter((p) => p.status === "ACTIVE") : all;
+  if (userChatId !== undefined && userChatId !== null) {
+    const targetStr = String(userChatId);
+    filtered = filtered.filter((p) => String(p.savedByChatId) === targetStr);
+  }
+  return filtered;
 }
 
 /**

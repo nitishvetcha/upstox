@@ -7,7 +7,7 @@ import { analyzeMarket } from "./analysis.ts";
 import { atmStrike, chainMetrics } from "../services/optionChainAnalytics.ts";
 import { CANDIDATE_MAX_STRIKES_ATM, candidateWindow } from "../services/optionCandidateWindow.ts";
 import type { ChainMetrics } from "../types.ts";
-import { tradeFreshnessOf } from "../time.ts";
+import { tradeFreshnessOf, commodityMarketStatus, marketStatus } from "../time.ts";
 import { aggregateRequiredSource } from "../dataQuality.ts";
 import type { ContractPriceQuality, OptionPriceVerificationSummary } from "../services/optionPriceVerification.ts";
 import {
@@ -53,17 +53,18 @@ export type StrategyType = "LONG_CALL" | "LONG_PUT" | "BULL_CALL_SPREAD" | "BEAR
 
 // ── Opportunity quality grade ─────────────────────────────────────────────────
 // Derived after scoring. Serves as a single actionability signal.
-// Rules: A+ = exceptional (score≥75, rr≥2.0, conf≥70), A = strong (≥65/1.5/60),
-//        B = tradable (≥50/1.2/50), C = watch-only (≥40/1.0), REJECT = fails filters.
+// Rules: A+ = exceptional (score>=80, rr>=2.0, conf>=70), A = strong (>=70/1.5/60),
+//        B = tradable (>=60/1.2/50), C = watch-only (>=40/1.0), REJECT = fails filters.
 export type OpportunityGrade = "A+" | "A" | "B" | "C" | "REJECT";
+export type ContractRole = "ATM" | "ITM_1" | "OTM_1" | "EXTENDED";
 
 export function gradeOpportunity(
   score: number, rr: number, confidence: number, liveSources: number,
 ): OpportunityGrade {
   if (liveSources < 3) return "REJECT";
-  if (score >= 75 && rr >= 2.0 && confidence >= 70) return "A+";
-  if (score >= 65 && rr >= 1.5 && confidence >= 60) return "A";
-  if (score >= 50 && rr >= 1.2 && confidence >= 50) return "B";
+  if (score >= 80 && rr >= 2.0 && confidence >= 70) return "A+";
+  if (score >= 70 && rr >= 1.5 && confidence >= 60) return "A";
+  if (score >= 60 && rr >= 1.2 && confidence >= 50) return "B";
   if (score >= 40 && rr >= 1.0) return "C";
   return "REJECT";
 }
@@ -147,6 +148,7 @@ export interface ContractOpportunity {
   netDebit?: number | null;
   isZeroDte?: boolean;
   afternoonThetaGuard?: boolean;
+  contractRole?: ContractRole;
 }
 
 export function validateSpreadIntegrity(contract: ContractOpportunity): { isValid: boolean; error?: string } {
@@ -230,6 +232,11 @@ export interface OptionsOpportunityResult {
   contractsEvaluated: number;
   contractsRejected: number;
   topOpportunities: ContractOpportunity[];
+  contractTriad?: {
+    atm: ContractOpportunity | null;
+    itm1: ContractOpportunity | null;
+    otm1: ContractOpportunity | null;
+  };
   rejectedContracts: RejectedContract[];
   eventRiskPenalty: number;
   eventRiskReason: string | null;
@@ -474,7 +481,8 @@ function calcTradePoints(
   // Bound room to realistic horizon (avoids excessively distant targets on intraday/tactical horizon).
   const level = type === "CE" ? chain.resistance : chain.support;
   const room = Math.abs(level - spot);
-  const maxRoom = Math.max(atr * 2.0, (chain.expectedMove ?? 0) * 1.2, 100);
+  const minMaxRoom = Math.max(spot * 0.005, atr * 0.5);
+  const maxRoom = Math.max(atr * 2.0, (chain.expectedMove ?? 0) * 1.2, minMaxRoom);
   const useRoom = Math.min(Math.max(room, atr * 0.4), maxRoom);
 
   const t1 = r2(entry + d * useRoom * 0.45) ?? entry;
@@ -615,6 +623,25 @@ export function evaluateOptionsOpportunity(
   );
   const candidates = sortedByAtm.filter((r) => window.strikeSet.has(r.strike)).slice(0, 15);
 
+  // Exact 3-contract triad calculation: ATM, ITM_1, and OTM_1
+  const allStrikesAsc = Array.from(new Set(s.chain.map((r) => r.strike))).sort((a, b) => a - b);
+  let resolvedAtmStrike = allStrikesAsc[0] ?? s.spot;
+  let minSpotDist = Infinity;
+  for (const st of allStrikesAsc) {
+    const dist = Math.abs(st - s.spot);
+    if (dist < minSpotDist) {
+      minSpotDist = dist;
+      resolvedAtmStrike = st;
+    }
+  }
+  const atmIdx = allStrikesAsc.indexOf(resolvedAtmStrike);
+  const itm1Strike = type === "CE"
+    ? (atmIdx > 0 ? allStrikesAsc[atmIdx - 1] : null)
+    : (atmIdx < allStrikesAsc.length - 1 ? allStrikesAsc[atmIdx + 1] : null);
+  const otm1Strike = type === "CE"
+    ? (atmIdx < allStrikesAsc.length - 1 ? allStrikesAsc[atmIdx + 1] : null)
+    : (atmIdx > 0 ? allStrikesAsc[atmIdx - 1] : null);
+
   // Pre-compute OI signals and S/R room (same for all contracts)
   const oiSig = oiSignalScore(type, chain, s.chain);
   const srInfo = srRoomScore(type, s.spot, chain, atr);
@@ -652,6 +679,8 @@ export function evaluateOptionsOpportunity(
   if (!chainAnalyticsVerified) whyReasons.push("⚠ Chain analytics unverified: OI/volume surface is diagnostic only");
 
   const expiryYears = s.expiry ? calculateExpiryYears(s.expiry, now) : null;
+  const isComm = s.index === "crudeoil" || s.index === "naturalgas" || underlyingLabel === "CRUDEOIL" || underlyingLabel === "NATURALGAS";
+  const mktStatus = isComm ? commodityMarketStatus(now) : marketStatus(now);
 
   for (const row of sideways ? [] : candidates) {
     const q = type === "CE" ? row.call : row.put;
@@ -821,7 +850,7 @@ export function evaluateOptionsOpportunity(
     // Contract freshness must be strictly evaluated independently.
     // A contract without its own valid exchange trade timestamp must NEVER inherit freshness from:
     // another strike, another option type, the underlying index, the chain's maximum timestamp, or local quote receipt time.
-    const contractFreshness = q.lastTradeTime ? tradeFreshnessOf(q.lastTradeTime, now).freshness : null;
+    const contractFreshness = q.lastTradeTime ? tradeFreshnessOf(q.lastTradeTime, now, 1, mktStatus).freshness : null;
     const hasIndependentVerification = Boolean(s.optionPriceVerification);
     const isContractLive = hasIndependentVerification
       ? q.contractPriceQuality === "CONTRACT_PRICE_LIVE" && q.ltpConsistent === true && contractFreshness === "LIVE"
@@ -871,9 +900,12 @@ export function evaluateOptionsOpportunity(
     }
     // Initial paper-actionability gates are intentionally stricter than the diagnostic
     // universe. Candidates can remain visible, but cannot be labelled tradable.
-    if (finalGrade !== "REJECT" && (q.oi < 1_000 || q.volume < 100)) {
+    // For large lot sizes (e.g. Natural Gas 1250, Crude Oil 100), scale liquidity thresholds appropriately.
+    const minActionableOi = (s.lotSize && s.lotSize >= 500) ? 200 : (s.lotSize && s.lotSize >= 100) ? 500 : 1_000;
+    const minActionableVol = (s.lotSize && s.lotSize >= 500) ? 20 : (s.lotSize && s.lotSize >= 100) ? 50 : 100;
+    if (finalGrade !== "REJECT" && (q.oi < minActionableOi || q.volume < minActionableVol)) {
       finalGrade = "C";
-      gradeReasons.push(`Liquidity below paper-actionability minimum (OI ${q.oi}/1000, volume ${q.volume}/100): watch-only`);
+      gradeReasons.push(`Liquidity below paper-actionability minimum (OI ${q.oi}/${minActionableOi}, volume ${q.volume}/${minActionableVol}): watch-only`);
     }
     if (finalGrade !== "REJECT" && pts.rr < 1.5) {
       finalGrade = "C";
@@ -907,6 +939,15 @@ export function evaluateOptionsOpportunity(
       gradeReasons.push("Counter-direction scenario: underlying market signals oppose this trade's direction");
     }
 
+    const contractRole: ContractRole =
+      row.strike === resolvedAtmStrike
+        ? "ATM"
+        : row.strike === itm1Strike
+        ? "ITM_1"
+        : row.strike === otm1Strike
+        ? "OTM_1"
+        : "EXTENDED";
+
     evaluated.push({
       rank: 0,
       underlying: underlyingLabel,
@@ -915,6 +956,7 @@ export function evaluateOptionsOpportunity(
       optionType: type,
       instrumentKey: q.instrumentKey ?? null,
       strategyType: (type === "CE" ? "LONG_CALL" : "LONG_PUT"),
+      contractRole,
       ltp: q.ltp, bid: q.bid, ask: q.ask, spreadPct: sp,
       oi: q.oi, volume: q.volume, iv: q.iv, delta: q.delta,
       theta: q.theta ?? null, gamma: q.gamma ?? null, vega: q.vega ?? null,
@@ -1056,8 +1098,8 @@ export function evaluateOptionsOpportunity(
             const spreadOppScore = clamp(spreadRaw, 0, 100);
 
             const isChainUsable = chainAnalyticsVerified && dq.optionChain === "LIVE";
-            const longF = longQuote.lastTradeTime ? tradeFreshnessOf(longQuote.lastTradeTime, now).freshness : null;
-            const shortF = shortQuote.lastTradeTime ? tradeFreshnessOf(shortQuote.lastTradeTime, now).freshness : null;
+            const longF = longQuote.lastTradeTime ? tradeFreshnessOf(longQuote.lastTradeTime, now, 1, mktStatus).freshness : null;
+            const shortF = shortQuote.lastTradeTime ? tradeFreshnessOf(shortQuote.lastTradeTime, now, 1, mktStatus).freshness : null;
             const longLive = longF === "LIVE";
             const shortLive = shortF === "LIVE";
             const isSpreadHorizonInvalid =
@@ -1189,6 +1231,7 @@ export function evaluateOptionsOpportunity(
               legs: spPayoff.observedValues.legs,
               isZeroDte: is0Dte,
               afternoonThetaGuard,
+              contractRole: "EXTENDED",
             });
           }
         }
@@ -1245,6 +1288,11 @@ export function evaluateOptionsOpportunity(
     contractsEvaluated: evaluated.filter((c) => !c.strategyType || c.strategyType === "LONG_CALL" || c.strategyType === "LONG_PUT").length,
     contractsRejected: rejected.length,
     topOpportunities: top3,
+    contractTriad: {
+      atm: evaluated.find((c) => c.contractRole === "ATM" && !c.isMultiLeg) ?? null,
+      itm1: evaluated.find((c) => c.contractRole === "ITM_1" && !c.isMultiLeg) ?? null,
+      otm1: evaluated.find((c) => c.contractRole === "OTM_1" && !c.isMultiLeg) ?? null,
+    },
     rejectedContracts: rejected,
     eventRiskPenalty: ev.penalty,
     eventRiskReason: ev.reason,

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { sourceMeta, withFallback } from "@/lib/services/market";
-import { INSTRUMENTS, isIndexId } from "@/lib/services/instrumentRegistry";
+import { getUnderlyingInstrument } from "@/lib/services/instrumentRegistry";
+import type { UnderlyingId } from "@/lib/types";
 import { InvalidRequestError } from "@/lib/services/errors";
 import { FALLBACK_LABELS } from "@/lib/fallback";
 import { atmFor, chainLotSize, chainStrikes } from "@/lib/optionChainPayload";
@@ -10,14 +11,15 @@ const DEFAULT_RANGE = Number(process.env.OPTION_CHAIN_RANGE ?? 10);
 // GET /api/option-chain/nifty?expiry=YYYY-MM-DD&range=10  (range = strikes either side of ATM, 1–50)
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/option-chain/[index]">) {
   const { index } = await ctx.params;
-  if (!isIndexId(index)) return Response.json({ error: `Unknown index: ${index}` }, { status: 404 });
+  const inst = getUnderlyingInstrument(index);
+  if (!inst) return Response.json({ error: `Unknown index: ${index}` }, { status: 404 });
   const expiry = req.nextUrl.searchParams.get("expiry") ?? undefined;
   const range = Math.min(50, Math.max(1, Number(req.nextUrl.searchParams.get("range")) || DEFAULT_RANGE));
 
   try {
-    const { data, fallbackReason } = await withFallback((p) => p.getOptionChain(index, expiry));
+    const { data, fallbackReason } = await withFallback((p) => p.getOptionChain(inst.id, expiry));
     return Response.json({
-      index: INSTRUMENTS[index].symbol,
+      index: inst.symbol,
       expiry: data.expiry,
       spot: data.spot,
       atmStrike: atmFor(data),

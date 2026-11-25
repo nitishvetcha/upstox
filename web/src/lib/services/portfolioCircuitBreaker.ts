@@ -7,13 +7,15 @@
 
 import { getRiskConfig } from "./risk/riskConfig.ts";
 
-export type CircuitBreakerStatus = "NORMAL" | "HEAT_STOP" | "DAILY_HALT" | "POSITION_CAP";
+export type CircuitBreakerStatus = "NORMAL" | "HEAT_STOP" | "DAILY_HALT" | "POSITION_CAP" | "CORRELATED_LIMIT";
 
 export interface CircuitBreakerState {
   status: CircuitBreakerStatus;
   isTradeAllowed: boolean;
   activeReasons: string[];
   realizedDailyLoss: number;
+  unrealizedDailyLoss: number;
+  totalDailyDrawdown: number;
   maxDailyLossAllowed: number;
   consecutiveLosses: number;
   currentOpenPositions: number;
@@ -59,8 +61,13 @@ class PortfolioCircuitBreaker {
 
   /**
    * Evaluates current circuit breaker status.
+   * Includes both realized closed trade losses AND unrealized open position MTM losses.
    */
-  public getState(now: Date = new Date(), openPositionsCount = 0): CircuitBreakerState {
+  public getState(
+    now: Date = new Date(),
+    openPositionsCount = 0,
+    unrealizedMtmLoss = 0
+  ): CircuitBreakerState {
     this.checkSessionReset(now);
     const config = getRiskConfig();
     const capital = config.accountCapital > 0 ? config.accountCapital : 100_000;
@@ -70,11 +77,15 @@ class PortfolioCircuitBreaker {
     const reasons: string[] = [];
     let effectiveStatus: CircuitBreakerStatus = "NORMAL";
 
-    // 1. Check Max Daily Loss Halt (Highest Priority)
-    if (this.realizedDailyLoss >= maxDailyLossAllowed) {
+    const effectiveUnrealizedLoss = Math.max(0, unrealizedMtmLoss);
+    const totalDailyDrawdown = this.realizedDailyLoss + effectiveUnrealizedLoss;
+
+    // 1. Check Max Daily Loss Halt (Highest Priority) - combines realized + unrealized MTM loss
+    if (totalDailyDrawdown >= maxDailyLossAllowed) {
       effectiveStatus = "DAILY_HALT";
       reasons.push(
-        `MAX DAILY DRAWDOWN BREACHED: Cumulative daily loss ₹${Math.round(this.realizedDailyLoss).toLocaleString("en-IN")} ` +
+        `MAX DAILY DRAWDOWN BREACHED: Cumulative daily drawdown ₹${Math.round(totalDailyDrawdown).toLocaleString("en-IN")} ` +
+        `(Realized: ₹${Math.round(this.realizedDailyLoss).toLocaleString("en-IN")}, Open MTM Loss: ₹${Math.round(effectiveUnrealizedLoss).toLocaleString("en-IN")}) ` +
         `exceeded limit of ₹${Math.round(maxDailyLossAllowed).toLocaleString("en-IN")} (${config.maxDailyLossPercent}% of capital). ` +
         `New trades halted until next session (09:15 IST).`
       );
@@ -118,6 +129,8 @@ class PortfolioCircuitBreaker {
       isTradeAllowed: this.status === "NORMAL",
       activeReasons: reasons,
       realizedDailyLoss: Math.round(this.realizedDailyLoss * 100) / 100,
+      unrealizedDailyLoss: Math.round(effectiveUnrealizedLoss * 100) / 100,
+      totalDailyDrawdown: Math.round(totalDailyDrawdown * 100) / 100,
       maxDailyLossAllowed: Math.round(maxDailyLossAllowed * 100) / 100,
       consecutiveLosses: this.consecutiveLosses,
       currentOpenPositions: openPositionsCount,
@@ -133,12 +146,16 @@ class PortfolioCircuitBreaker {
 
   /**
    * Evaluates whether an opportunity can be opened right now.
+   * Enforces status, MTM drawdown, and correlated exposure between NIFTY/BANKNIFTY/FINNIFTY.
    */
   public canOpenTrade(
     openPositionsCount = 0,
-    now: Date = new Date()
+    now: Date = new Date(),
+    unrealizedMtmLoss = 0,
+    proposedSymbol?: string,
+    openUnderlyingSymbols: string[] = []
   ): { allowed: boolean; code?: string; reason?: string } {
-    const state = this.getState(now, openPositionsCount);
+    const state = this.getState(now, openPositionsCount, unrealizedMtmLoss);
     if (!state.isTradeAllowed) {
       return {
         allowed: false,
@@ -146,6 +163,24 @@ class PortfolioCircuitBreaker {
         reason: state.activeReasons[0] || "Circuit breaker active",
       };
     }
+
+    // Correlated equity index exposure guard
+    if (proposedSymbol && openUnderlyingSymbols.length > 0) {
+      const norm = (s: string) => s.toUpperCase().replace(/[^A-Z]/g, "");
+      const p = norm(proposedSymbol);
+      const isCorrelatedIndex = (s: string) => s === "NIFTY" || s === "BANKNIFTY" || s === "FINNIFTY";
+      if (isCorrelatedIndex(p)) {
+        const activeCorrelated = openUnderlyingSymbols.map(norm).find((o) => isCorrelatedIndex(o) && o !== p);
+        if (activeCorrelated) {
+          return {
+            allowed: false,
+            code: "CORRELATED_EXPOSURE_LIMIT",
+            reason: `CORRELATED EXPOSURE LIMIT: An active position in ${activeCorrelated} is already open. Simultaneous positions across correlated indices (${activeCorrelated} + ${p}) are disallowed to limit joint beta risk.`,
+          };
+        }
+      }
+    }
+
     return { allowed: true };
   }
 

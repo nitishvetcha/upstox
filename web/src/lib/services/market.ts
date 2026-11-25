@@ -2,18 +2,18 @@
 // touch a provider directly. MARKET_DATA_PROVIDER=upstox uses live data when logged in, else mock.
 import { cache } from "react";
 import { logEvent } from "../ops/structuredLog.ts";
-import type { FallbackReason, IndexId, MarketDataProvider, News, Snapshot, SourceInfo } from "../types.ts";
+import type { FallbackReason, IndexId, UnderlyingId, MarketDataProvider, News, Snapshot, SourceInfo } from "../types.ts";
 import { getIndexNews } from "./newsProvider.ts";
 import { MOCK_NEWS, mockSource } from "./mock.ts";
 import { mockProvider } from "./mockMarket.ts";
 import { upstoxProvider } from "./upstoxMarket.ts";
 import { InvalidRequestError, UpstoxError } from "./errors.ts";
 import { getAccessToken, markTokenInvalid, resolveCredential, tokenStatus, type Credential, type CredentialSource, type TokenStatus } from "./upstoxAuth.ts";
-import { INDICES, INSTRUMENTS } from "./instrumentRegistry.ts";
+import { INDICES, INSTRUMENTS, COMMODITY_IDS, getUnderlyingInstrument, isIndexId } from "./instrumentRegistry.ts";
 import { chainMetrics } from "./optionChainAnalytics.ts";
 import { chainFreshness } from "./chainFreshness.ts";
 import { analyze, recommendationOfTheDay } from "../engine/strategy.ts";
-import { freshnessOf, tradeFreshnessOf } from "../time.ts";
+import { freshnessOf, tradeFreshnessOf, commodityMarketStatus } from "../time.ts";
 
 export { INDICES };
 export type ProviderMode = "mock" | "upstox";
@@ -72,9 +72,10 @@ export async function withFallback<T>(
 
 // Real news alongside real market data; mock news only alongside mock market data. A failed news provider
 // yields UNAVAILABLE (the engine then refuses to trade), never mock news.
-async function newsFeed(p: MarketDataProvider, index: IndexId, now: Date): Promise<{ news: News; source: SourceInfo }> {
+async function newsFeed(p: MarketDataProvider, index: UnderlyingId, now: Date): Promise<{ news: News; source: SourceInfo }> {
   if (p.name === "MOCK") return { news: { ...MOCK_NEWS }, source: mockSource(new Date(now.getTime() - 240_000).toISOString()) };
-  const d = await getIndexNews(index, () => now);
+  const newsIndex: IndexId = isIndexId(index) ? index : "nifty";
+  const d = await getIndexNews(newsIndex, () => now);
   const ok = d.status !== "UNAVAILABLE";
   const eventRisk = d.eventRisk.level === "HIGH" || d.eventRisk.level === "EXTREME" ? d.eventRisk.reason : null;
   return {
@@ -92,7 +93,7 @@ async function newsFeed(p: MarketDataProvider, index: IndexId, now: Date): Promi
   };
 }
 
-export async function buildSnapshot(p: MarketDataProvider, index: IndexId, now = new Date()): Promise<Snapshot> {
+export async function buildSnapshot(p: MarketDataProvider, index: UnderlyingId, now = new Date()): Promise<Snapshot> {
   const [quote, chain, tech, feed, breadth] = await Promise.all([
     p.getMarketSnapshot(index),
     p.getOptionChain(index),
@@ -100,10 +101,11 @@ export async function buildSnapshot(p: MarketDataProvider, index: IndexId, now =
     newsFeed(p, index, now),
     p.getBreadth(index),
   ]);
-  const breadthSrc = breadth.source ?? (breadth.status === "LIVE" || breadth.status === "PARTIAL" ? quote.source : { source: "UNAVAILABLE", provider: null, fetchedAt: null });
+  const breadthSrc = breadth?.source ?? (breadth?.status === "LIVE" || breadth?.status === "PARTIAL" ? quote.source : { source: "UNAVAILABLE", provider: null, fetchedAt: null });
+  const inst = getUnderlyingInstrument(index);
   return {
     index,
-    name: INSTRUMENTS[index].name,
+    name: inst?.name ?? String(index).toUpperCase(),
     spot: quote.spot,
     prevClose: quote.prevClose,
     expiry: chain.expiry,
@@ -126,18 +128,21 @@ export async function buildSnapshot(p: MarketDataProvider, index: IndexId, now =
   };
 }
 
-export async function getSnapshot(index: IndexId, deps?: FallbackDeps, now?: Date): Promise<Snapshot> {
+export async function getSnapshot(index: UnderlyingId, deps?: FallbackDeps, now?: Date): Promise<Snapshot> {
   const current = now ?? deps?.now?.();
   const { data, fallbackReason } = await withFallback((p) => buildSnapshot(p, index, current), deps);
   return { ...data, fallbackReason };
 }
 
-export const getAnalysis = cache(async (index: IndexId) => analyze(await getSnapshot(index)));
+export const getAnalysis = cache(async (index: UnderlyingId) => analyze(await getSnapshot(index)));
 
 // Deduped per request: the layout's top bar and the dashboard page share one fetch.
 export const getDashboard = cache(async () => {
-  const analyses = await Promise.all(INDICES.map(getAnalysis));
-  return { analyses, today: recommendationOfTheDay(analyses), generatedAt: new Date().toISOString() };
+  const now = new Date();
+  const commActive = commodityMarketStatus(now) === "OPEN";
+  const targetUnderlyings = commActive ? [...INDICES, ...COMMODITY_IDS] : INDICES;
+  const analyses = await Promise.all(targetUnderlyings.map((id) => getAnalysis(id)));
+  return { analyses, today: recommendationOfTheDay(analyses), generatedAt: now.toISOString() };
 });
 
 // --- normalized API shapes (no raw Upstox fields) ---
@@ -181,8 +186,9 @@ export function marketSummary(s: Snapshot, now = new Date()) {
   const m = chainMetrics(s, now);
   const change = s.prevClose === null ? null : s.spot - s.prevClose;
   const allSources = Object.values(s.sources) as SourceInfo[];
+  const inst = getUnderlyingInstrument(s.index);
   return {
-    index: INSTRUMENTS[s.index].symbol,
+    index: inst?.symbol ?? String(s.index).toUpperCase(),
     name: s.name,
     spot: s.spot,
     change: r2(change),

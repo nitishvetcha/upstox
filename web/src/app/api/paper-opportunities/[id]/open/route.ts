@@ -16,6 +16,7 @@ import { serverProvenance } from "@/lib/services/paperOpportunityProvenance";
 import { decideOpen, publicEngineReason, type OpenDecision, type OpenFacts } from "@/lib/services/paperOpportunityOpen";
 import { circuitBreaker } from "@/lib/services/portfolioCircuitBreaker";
 import { getPaperTradingEngine } from "@/lib/services/paperStore";
+import { paperPortfolioRiskContext } from "@/lib/services/paperPortfolioRiskContext";
 import { analyze } from "@/lib/engine/strategy";
 import { logEvent } from "@/lib/ops/structuredLog";
 
@@ -49,7 +50,11 @@ async function attemptOpen(id: string, opp: PaperOpportunity, earlyFacts: OpenFa
   const now = openDeps.now();
 
   // Portfolio Circuit Breaker Gate
-  const cb = circuitBreaker.canOpenTrade();
+  const ledger = getPaperTradingEngine();
+  const portfolio = paperPortfolioRiskContext(ledger.getTrades());
+  const cb = circuitBreaker.canOpenTrade(
+    portfolio.openPositionsCount, now, portfolio.unrealizedMtmLoss, index, portfolio.openUnderlyingSymbols,
+  );
   if (!cb.allowed) {
     return finish(id, decideOpen({ ...earlyFacts, circuitBreakerRejected: cb.reason }));
   }
@@ -68,7 +73,7 @@ async function attemptOpen(id: string, opp: PaperOpportunity, earlyFacts: OpenFa
   // The paper engine re-checks freshness, position limits, sizing, the 1% risk assessment and fills.
   // Last check, in the same synchronous step as the engine call: a link written while the snapshot loaded wins.
   if (getPaperOpportunity(id)?.openedPaperTradeId) return finish(id, ALREADY_OPEN);
-  const engine = getPaperTradingEngine();
+  const engine = ledger;
   const result = engine.processRecommendation(analysis, now);
   const facts: OpenFacts = {
     opp,

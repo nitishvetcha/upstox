@@ -2,6 +2,7 @@ import type {
   BreadthClassification,
   ConstituentQuote,
   IndexId,
+  UnderlyingId,
   MarketBreadth,
   PriceBreadthState,
   SourceInfo,
@@ -61,13 +62,13 @@ export function classifyPriceBreadthState(
 import { tradeFreshnessOf } from "../time.ts";
 
 export function calculateBreadth(
-  index: IndexId,
+  index: UnderlyingId,
   constituentQuotes: ConstituentQuote[],
   spotChangePercent?: number | null,
   now = new Date(),
   sourceOverride?: SourceInfo,
 ): MarketBreadth {
-  const expected = INDEX_CONSTITUENTS[index]?.length ?? 50;
+  const expected = (INDEX_CONSTITUENTS as Record<string, unknown[]>)[index]?.length ?? 50;
   const validQuotes = constituentQuotes.filter(
     (q) => Number.isFinite(q.lastPrice) && Number.isFinite(q.previousClose) && q.previousClose > 0,
   );
@@ -180,8 +181,8 @@ export function calculateBreadth(
   };
 }
 
-export function unavailableBreadth(index: IndexId, reason: string): MarketBreadth {
-  const expected = INDEX_CONSTITUENTS[index]?.length ?? 50;
+export function unavailableBreadth(index: UnderlyingId, reason: string): MarketBreadth {
+  const expected = (INDEX_CONSTITUENTS as Record<string, unknown[]>)[index]?.length ?? 50;
   return {
     index,
     status: "UNAVAILABLE",

@@ -1,0 +1,20 @@
+name: Paper validation cycle
+
+on:
+  schedule:
+    # 03:45-10:55 UTC, Mon-Fri. The app itself enforces NSE/MCX market hours.
+    - cron: "*/5 3-10 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  paper-cycle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Collect and monitor paper evidence
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --request POST "$APP_BASE_URL/api/automation/paper-cycle" \
+            --header "x-scheduler-token: $SCHEDULER_TOKEN"

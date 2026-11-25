@@ -7,7 +7,7 @@ import { getRiskConfig } from "./services/risk/riskConfig.ts";
 import { aggregateRequiredSource } from "./dataQuality.ts";
 import { checkPlanLegs, type LegGuardResult } from "./services/optionLegGuard.ts";
 import { hasMockInput } from "./services/mockInputs.ts";
-import { INSTRUMENTS } from "./services/instrumentRegistry.ts";
+import { INSTRUMENTS, getUnderlyingInstrument } from "./services/instrumentRegistry.ts";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -320,7 +320,7 @@ export function buildRecommendationResponse(a: Analysis, now = new Date()): Reco
     recommendationId: `rec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     generatedAt: now.toISOString(),
     source,
-    underlying: INSTRUMENTS[s.index].symbol,
+    underlying: getUnderlyingInstrument(s.index)?.symbol ?? String(s.index).toUpperCase(),
     decision: effectiveDecision,
     direction,
     strategy: plan?.strategy ?? "NONE",

@@ -1,8 +1,8 @@
 // MOCK DATA: hand-picked index levels and indicators, with an option chain priced by
 // Black-Scholes so premiums, deltas and IV are mutually consistent. Never shown as live.
-import type { IndexId, News, OptionRow, Snapshot, SourceInfo } from "../types.ts";
+import type { IndexId, UnderlyingId, News, OptionRow, Snapshot, SourceInfo } from "../types.ts";
 import { isRegularSession, istMinutes } from "../time.ts";
-import { INSTRUMENTS } from "./instrumentRegistry.ts";
+import { INSTRUMENTS, getUnderlyingInstrument } from "./instrumentRegistry.ts";
 
 const DAY = 86_400_000;
 const R = 0.065; // risk-free rate
@@ -134,7 +134,7 @@ import { asMockBreadth, calculateBreadth } from "./breadthService.ts";
 import { INDEX_CONSTITUENTS } from "./breadthConfig.ts";
 import type { ConstituentQuote } from "../types.ts";
 
-export function mockSnapshot(index: IndexId, now = new Date()): Snapshot {
+export function mockSnapshot(index: UnderlyingId, now = new Date()): Snapshot {
   const ago = (s: number) => new Date(now.getTime() - s * 1000).toISOString();
   const breadthSrc = mockSource(ago(5));
   const sources = {
@@ -190,9 +190,91 @@ export function mockSnapshot(index: IndexId, now = new Date()): Snapshot {
     };
   }
 
-  const spot = 56240;
-  const prevClose = 56410;
-  const expiry = lastTuesday(now);
+  if (index === "crudeoil") {
+    const spot = 7474;
+    const prevClose = 7570; // -96.00 (-1.27%)
+    const expiry = "2026-12-16";
+    return {
+      index,
+      name: "CRUDE OIL",
+      spot,
+      prevClose,
+      expiry,
+      strikeStep: 50,
+      lotSize: 100,
+      indicators: {
+        ema9: 7490, ema21: 7520, ema50: 7560, ema200: 7650, vwap: 7485, rsi: 43.5, macdHist: -6.2,
+        atr: 110, pdh: 7590, pdl: 7440, orHigh: 7510, orLow: 7460,
+      },
+      ivPercentile: 52,
+      breadth: null,
+      news,
+      chain: makeChain(
+        { spot, step: 50, atmIv: 28.5, expiry, putPeak: 7450, callPeak: 7550, oiScale: 25_000, putOiRatio: 1.15, callChgPct: 0.12, putChgPct: 0.14 },
+        now,
+      ),
+      ...meta,
+    };
+  }
+
+  if (index === "naturalgas") {
+    const spot = 333.0;
+    const prevClose = 328.1; // +4.90 (+1.49%)
+    const expiry = "2026-12-23";
+    return {
+      index,
+      name: "NATURAL GAS",
+      spot,
+      prevClose,
+      expiry,
+      strikeStep: 5,
+      lotSize: 1250,
+      indicators: {
+        ema9: 331, ema21: 327, ema50: 320, ema200: 305, vwap: 332, rsi: 62.5, macdHist: 2.1,
+        atr: 8.5, pdh: 336, pdl: 326, orHigh: 335, orLow: 329,
+      },
+      ivPercentile: 58,
+      breadth: null,
+      news,
+      chain: makeChain(
+        { spot, step: 5, atmIv: 42.0, expiry, putPeak: 330, callPeak: 340, oiScale: 18_000, putOiRatio: 1.08, callChgPct: 0.15, putChgPct: 0.11 },
+        now,
+      ),
+      ...meta,
+    };
+  }
+
+  // Do not use BANKNIFTY as a silent fallback for the other supported indices.
+  // In local/mock mode that used to make FINNIFTY, MIDCPNIFTY, SENSEX and BANKEX
+  // appear to have a BANKNIFTY price and option chain, which is worse than having
+  // no data because the label still looked legitimate to an operator.
+  const indexConfigs: Record<Exclude<IndexId, "nifty">, Omit<ChainCfg, "expiry"> & { prevClose: number; lotSize: number }> = {
+    banknifty: {
+      spot: 56240, prevClose: 56410, step: 100, lotSize: 30, atmIv: 13.8,
+      putPeak: 56000, callPeak: 56500, oiScale: 1_100_000, putOiRatio: 0.95, callChgPct: 0.1, putChgPct: 0.06,
+    },
+    finnifty: {
+      spot: 26750, prevClose: 26690, step: 50, lotSize: 65, atmIv: 15.2,
+      putPeak: 26600, callPeak: 26900, oiScale: 440_000, putOiRatio: 1.08, callChgPct: 0.08, putChgPct: 0.10,
+    },
+    midcpnifty: {
+      spot: 12480, prevClose: 12420, step: 25, lotSize: 120, atmIv: 18.5,
+      putPeak: 12400, callPeak: 12600, oiScale: 210_000, putOiRatio: 1.12, callChgPct: 0.07, putChgPct: 0.11,
+    },
+    sensex: {
+      spot: 82400, prevClose: 82180, step: 100, lotSize: 10, atmIv: 14.1,
+      putPeak: 82000, callPeak: 83000, oiScale: 170_000, putOiRatio: 1.04, callChgPct: 0.06, putChgPct: 0.09,
+    },
+    bankex: {
+      spot: 62400, prevClose: 62520, step: 100, lotSize: 15, atmIv: 16.4,
+      putPeak: 62000, callPeak: 63000, oiScale: 95_000, putOiRatio: 0.92, callChgPct: 0.11, putChgPct: 0.06,
+    },
+  };
+  // The remaining branch is necessarily one of the five supported non-NIFTY indices.
+  const cfg = indexConfigs[index as Exclude<IndexId, "nifty">];
+  const spot = cfg.spot;
+  const prevClose = cfg.prevClose;
+  const expiry = index === "banknifty" ? lastTuesday(now) : nextTuesday(now);
   const spotChgPct = ((spot - prevClose) / prevClose) * 100;
   const bankQuotes: ConstituentQuote[] = INDEX_CONSTITUENTS.banknifty.map((c, idx) => {
     const isAdv = idx < 4;
@@ -206,24 +288,29 @@ export function mockSnapshot(index: IndexId, now = new Date()): Snapshot {
       timestamp: now.toISOString(),
     };
   });
-  const breadth = asMockBreadth(calculateBreadth("banknifty", bankQuotes, spotChgPct, now, breadthSrc));
+  // Constituents are currently available only for BANKNIFTY. Never relabel that
+  // breadth as a measurement for a different index.
+  const breadth = index === "banknifty"
+    ? asMockBreadth(calculateBreadth("banknifty", bankQuotes, spotChgPct, now, breadthSrc))
+    : null;
+  const inst = getUnderlyingInstrument(index);
   return {
     index,
-    name: INSTRUMENTS[index].name,
+    name: inst?.name ?? String(index).toUpperCase(),
     spot,
     prevClose,
     expiry,
-    strikeStep: 100,
-    lotSize: 30,
+    strikeStep: cfg.step,
+    lotSize: cfg.lotSize,
     indicators: {
-      ema9: 56280, ema21: 56310, ema50: 56150, ema200: 55400, vwap: null, rsi: 47.2, macdHist: -14,
-      atr: 430, pdh: 56520, pdl: 56180, orHigh: 56450, orLow: 56250,
+      ema9: spot * 1.0007, ema21: spot * 0.9994, ema50: spot * 0.992, ema200: spot * 0.975, vwap: null, rsi: 52, macdHist: spot * 0.00015,
+      atr: Math.max(cfg.step * 2, spot * 0.007), pdh: prevClose * 1.008, pdl: prevClose * 0.992, orHigh: spot * 1.003, orLow: spot * 0.997,
     },
     ivPercentile: 44,
     breadth,
     news,
     chain: makeChain(
-      { spot, step: 100, atmIv: 13.8, expiry, putPeak: 56000, callPeak: 56500, oiScale: 1_100_000, putOiRatio: 0.95, callChgPct: 0.1, putChgPct: 0.06 },
+      { ...cfg, expiry },
       now,
     ),
     ...meta,

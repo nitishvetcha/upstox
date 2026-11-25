@@ -24,6 +24,7 @@ export function useMarketStream(): MarketStreamState {
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -89,7 +90,7 @@ export function useMarketStream(): MarketStreamState {
         if (!reconnectTimeoutRef.current) {
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectTimeoutRef.current = null;
-            connect();
+            connectRef.current();
           }, 3000);
         }
       };
@@ -99,9 +100,16 @@ export function useMarketStream(): MarketStreamState {
   }, []);
 
   useEffect(() => {
-    connect();
+    connectRef.current = connect;
+  }, [connect]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      connect();
+    }, 0);
 
     return () => {
+      clearTimeout(timer);
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }

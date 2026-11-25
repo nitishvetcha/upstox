@@ -63,6 +63,60 @@ export function sessionWindow(ymd: string): { open: number; close: number } | nu
 // A full regular session: the only kind of day an exchange expiry is placed on (holiday/special → previous day).
 export const isRegularSession = (ymd: string) => isTradingDay(ymd) && !NSE_SPECIAL_SESSIONS[ymd];
 
+// =============================================================================
+// MCX COMMODITY CALENDAR & SESSIONS (Crude Oil, Natural Gas, Gold, Silver)
+// =============================================================================
+
+// MCX Full Trading Holidays (both morning and evening sessions closed)
+export const MCX_FULL_HOLIDAYS = new Set<string>([
+  "2026-01-26", // Republic Day
+  "2026-08-15", // Independence Day
+  "2026-10-02", // Gandhi Jayanti
+  "2026-12-25", // Christmas
+]);
+
+// MCX Morning-Only Holidays (morning closed 09:00-17:00, evening session OPEN 17:00-23:30 IST)
+export const MCX_MORNING_HOLIDAYS = new Set<string>([
+  "2026-03-03", // Holi
+  "2026-03-26", // Ram Navami
+  "2026-03-31", // Mahavir Jayanti
+  "2026-04-03", // Good Friday
+  "2026-04-14", // Dr. Baba Saheb Ambedkar Jayanti
+  "2026-05-01", // Maharashtra Day
+  "2026-05-28", // Bakri Id / Eid-ul-Adha
+  "2026-06-26", // Muharram
+  "2026-09-14", // Ganesh Chaturthi
+  "2026-10-20", // Dussehra
+  "2026-11-10", // Diwali-Balipratipada
+  "2026-11-24", // Guru Nanak Jayanti (TODAY!)
+]);
+
+export const MCX_REGULAR_SESSION = { open: 9 * 60, close: 23 * 60 + 30 }; // 09:00 to 23:30 IST (540 to 1410 min)
+export const MCX_EVENING_SESSION = { open: 17 * 60, close: 23 * 60 + 30 }; // 17:00 to 23:30 IST (1020 to 1410 min)
+
+export function isCommodityTradingDay(ymd: string): boolean {
+  const weekday = new Date(ymd + "T00:00:00Z").getUTCDay();
+  if (weekday === 0 || weekday === 6) return false;
+  return !MCX_FULL_HOLIDAYS.has(ymd);
+}
+
+export function commoditySessionWindow(ymd: string): { open: number; close: number; isEveningOnly: boolean } | null {
+  if (!isCommodityTradingDay(ymd)) return null;
+  if (MCX_MORNING_HOLIDAYS.has(ymd)) {
+    return { ...MCX_EVENING_SESSION, isEveningOnly: true };
+  }
+  return { ...MCX_REGULAR_SESSION, isEveningOnly: false };
+}
+
+export function commodityMarketStatus(d: Date): MarketStatus {
+  const { minutes } = istMinutes(d);
+  const w = commoditySessionWindow(istToday(d));
+  if (!w) return "CLOSED";
+  if (minutes >= w.open - 15 && minutes < w.open) return "PRE-OPEN";
+  if (minutes >= w.open && minutes < w.close) return "OPEN";
+  return "CLOSED";
+}
+
 export function marketStatus(d: Date): MarketStatus {
   const { minutes } = istMinutes(d);
   const w = sessionWindow(istToday(d));
@@ -140,6 +194,7 @@ export function tradeFreshnessOf(
   lastTradeTime: string | Date | null | undefined,
   now: Date,
   slow = 1,
+  marketStatusOverride?: MarketStatus,
 ): TradeFreshnessResult {
   if (!now || !(now instanceof Date) || !Number.isFinite(now.getTime())) {
     return { freshnessSeconds: null, freshness: "STALE", source: "UNAVAILABLE" };
@@ -172,7 +227,7 @@ export function tradeFreshnessOf(
   // Elapsed seconds: within 5s allowable future skew (0 < futureDiffMs <= 5000), age is 0s.
   // Otherwise, elapsed time is (nowMs - timeMs) / 1000.
   const ageSeconds = futureDiffMs > 0 ? 0 : Math.round((nowMs - timeMs) / 1000);
-  const status = marketStatus(now);
+  const status = marketStatusOverride ?? marketStatus(now);
 
   if (status === "OPEN" || status === "PRE-OPEN") {
     if (ageSeconds > 120 * slow) {

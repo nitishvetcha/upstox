@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { RecommendationDiagnostic } from "@/lib/recommendationDiagnostic";
 import { RecommendationDiagnosticPanel } from "@/components/RecommendationDiagnosticPanel";
 
-// All six supported index symbols
-const ALL_UNDERLYINGS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX"];
+// All supported equity indices and MCX commodities
+const ALL_UNDERLYINGS = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "CRUDEOIL", "NATURALGAS"];
 
 type State = { d?: RecommendationDiagnostic; error?: string };
 
@@ -26,9 +26,28 @@ export default function RecommendationDebugPage() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
-    load();
-  }, [load]);
+    let active = true;
+    void (async () => {
+      const out: Record<string, State> = {};
+      await Promise.all(
+        ALL_UNDERLYINGS.map(async (u) => {
+          try {
+            const r = await fetch(`/api/recommendations/diagnostic?underlying=${u}`, { cache: "no-store" });
+            const j = await r.json();
+            out[u] = r.ok ? { d: j } : { error: j.error ?? `HTTP ${r.status}` };
+          } catch (e) {
+            out[u] = { error: String(e) };
+          }
+        })
+      );
+      if (active) {
+        setData(out);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="mx-auto max-w-7xl space-y-4">

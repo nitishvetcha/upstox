@@ -51,7 +51,7 @@ function statusTone(s: string): Tone {
 // ── Filters ────────────────────────────────────────────────────────────────────
 
 interface Filters {
-  underlying: "all" | "NIFTY" | "BANKNIFTY";
+  underlying: "all" | "NIFTY" | "BANKNIFTY" | "CRUDEOIL" | "NATURALGAS" | string;
   decision: "all" | "TRADE" | "WAIT" | "NO_TRADE";
   status: "all" | "MONITORING" | "TARGET_1_HIT" | "TARGET_2_HIT" | "STOPPED_OUT" | "EXPIRED" | "NOT_EXECUTABLE";
   days: 1 | 7 | 30 | 0;
@@ -294,7 +294,7 @@ export function RecommendationJournal() {
       <div className="mb-4 flex flex-wrap gap-2 text-xs">
         <div className="flex items-center gap-1">
           <span className="text-zinc-500">Underlying:</span>
-          {(["all", "NIFTY", "BANKNIFTY"] as const).map((v) => <FilterBtn key={v} label={v === "all" ? "All" : v} active={filters.underlying === v} onClick={() => setFilters((f) => ({ ...f, underlying: v }))} />)}
+          {(["all", "NIFTY", "BANKNIFTY", "CRUDEOIL", "NATURALGAS"] as const).map((v) => <FilterBtn key={v} label={v === "all" ? "All" : v} active={filters.underlying === v} onClick={() => setFilters((f) => ({ ...f, underlying: v }))} />)}
         </div>
         <div className="flex items-center gap-1">
           <span className="text-zinc-500">Decision:</span>

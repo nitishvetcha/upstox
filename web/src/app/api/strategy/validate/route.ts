@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
 import { validateHistoricalStrategy } from "@/lib/services/strategyHistoricalValidator";
+import { runEmpiricalOptionsValidation } from "@/lib/services/empiricalOptionsValidator";
 import { getAccessToken } from "@/lib/services/upstoxAuth";
 import { get } from "@/lib/services/upstoxMarket";
 import { normalizeCandles, mergeCandles } from "@/lib/services/candles";
@@ -24,6 +25,11 @@ const INSTRUMENT_MAP: Record<string, { key: string; name: string }> = {
   INFY: { key: "NSE_EQ|INE009A01021", name: "INFOSYS" },
   ICICIBANK: { key: "NSE_EQ|INE090A01021", name: "ICICI BANK" },
 };
+
+// This endpoint is an NSE spot-candle validator.  It must not silently turn an
+// MCX symbol into an NSE equity key: that would produce a plausible-looking
+// report for the wrong market.
+const UNSUPPORTED_FOR_SPOT_VALIDATION = new Set(["CRUDEOIL", "NATURALGAS"]);
 
 function planDateChunks(totalDays: number, maxChunkDays = 26): { to: string; from: string }[] {
   const chunks: { to: string; from: string }[] = [];
@@ -49,6 +55,21 @@ export async function GET(req: Request) {
   const rrTarget1 = Number(url.searchParams.get("rr1") || 1.5);
   const rrTarget2 = Number(url.searchParams.get("rr2") || 2.5);
   const atrBuffer = Number(url.searchParams.get("atrBuffer") || 0.15);
+  const executionMode = (url.searchParams.get("mode") || "VERTICAL_SPREAD") as
+    | "NAKED_BUYING"
+    | "VERTICAL_SPREAD"
+    | "SYNTHETIC_FUTURES";
+  const volumeFilter = url.searchParams.get("volumeFilter") === "true";
+  const timeWindowFilter = url.searchParams.get("timeFilter") === "true";
+
+  if (UNSUPPORTED_FOR_SPOT_VALIDATION.has(rawSymbol)) {
+    return NextResponse.json({
+      ok: false,
+      error: `${rawSymbol} requires the MCX historical-contract validator. The NSE spot-candle validator is intentionally unavailable for commodities.`,
+      symbol: rawSymbol,
+      validationStatus: "UNSUPPORTED_MARKET_DATASET",
+    }, { status: 422 });
+  }
 
   const matched = INSTRUMENT_MAP[rawSymbol] ?? {
     key: `NSE_EQ|${rawSymbol}`,
@@ -138,6 +159,17 @@ export async function GET(req: Request) {
     atrBuffer,
   });
 
+  // Stage 3: Run Empirical Options & Walk-Forward Validation
+  const empiricalReport = runEmpiricalOptionsValidation(candles, {
+    symbol: matched.name,
+    lotSize: matched.name.toLowerCase().includes("bank") ? 30 : 75,
+    optionDelta: 0.5,
+    slippagePct: 0.005,
+    executionMode,
+    volumeFilter,
+    timeWindowFilter,
+  });
+
   const tvSymbol = getTradingViewSymbol(matched.name);
   const tvUrl = getTradingViewChartUrl(tvSymbol, timeframe === "5m" ? "5" : timeframe === "30m" ? "30" : "15");
 
@@ -151,5 +183,6 @@ export async function GET(req: Request) {
     candleCount: candles.length,
     candles,
     validation: report,
+    empiricalValidation: empiricalReport,
   });
 }

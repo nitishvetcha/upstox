@@ -1,11 +1,11 @@
 // READ-ONLY Upstox market data: quotes, option contracts (expiries) and option chains.
 // No order endpoints exist in this codebase. Raw Upstox shapes stop here; callers get normalized types.
 import { UPSTOX_API_BASE } from "./upstoxEndpoints.ts";
-import type { Candle, CandleSeries, ConstituentQuote, DataSource, FallbackReason, FuturesVwap, IndexId, IndexQuote, Indicators, MarketBreadth, MarketDataProvider, OptionChain, OptionRow, Quote, SourceInfo, TechnicalAnalysis, Technicals, Timeframe } from "../types.ts";
-import { INSTRUMENTS } from "./instrumentRegistry.ts";
+import type { Candle, CandleSeries, ConstituentQuote, DataSource, FallbackReason, FuturesVwap, IndexId, UnderlyingId, IndexQuote, Indicators, MarketBreadth, MarketDataProvider, OptionChain, OptionRow, Quote, SourceInfo, TechnicalAnalysis, Technicals, Timeframe } from "../types.ts";
+import { INSTRUMENTS, COMMODITIES, getUnderlyingInstrument, isCommodityId } from "./instrumentRegistry.ts";
 import { strikeStep, validExpiries } from "./optionChainAnalytics.ts";
 import { InvalidRequestError, UpstoxError } from "./errors.ts";
-import { FUTURE_TIMESTAMP_TOLERANCE_MS, istToday, marketStatus, MIN_LTT_EPOCH_MS, tradeFreshnessOf } from "../time.ts";
+import { FUTURE_TIMESTAMP_TOLERANCE_MS, istToday, marketStatus, commodityMarketStatus, MIN_LTT_EPOCH_MS, tradeFreshnessOf } from "../time.ts";
 import { CANDLE_PLAN, DAILY_TTL_MS, HISTORY_TTL_MS, mergeCandles, normalizeCandles } from "./candles.ts";
 import { loadHistory } from "../marketHistory.ts";
 import { VIX_MIN_HISTORY, VIX_PERCENTILE_LOOKBACK } from "./historicalContext.ts";
@@ -14,7 +14,7 @@ import { analyzeTechnicals } from "./technicalAnalysis.ts";
 import type { ChunkFetcher } from "./historicalCandles.ts";
 import { cached, clearUpstoxCache } from "./cache.ts";
 import { assertUpstoxNetworkAllowed } from "./upstoxNetworkGate.ts";
-import { fetchFuturesContracts, futuresVwapFrom, selectFuturesContract, unavailableVwap } from "./futures.ts";
+import { fetchFuturesContracts, futuresVwapFrom, selectFuturesContract, unavailableVwap, type FuturesContract } from "./futures.ts";
 import { INDEX_CONSTITUENTS } from "./breadthConfig.ts";
 import { calculateBreadth, unavailableBreadth } from "./breadthService.ts";
 import { verifyEvaluationOptionPrices } from "./optionPriceVerification.ts";
@@ -42,7 +42,7 @@ export function reasonFor(status: number, errorCode: string | null): FallbackRea
   return "UPSTOX_API_ERROR";
 }
 
-export async function get(token: string, endpoint: string, params: Record<string, string>, ctx: { index: IndexId; expiry?: string }) {
+export async function get(token: string, endpoint: string, params: Record<string, string>, ctx: { index: UnderlyingId; expiry?: string }) {
   const t0 = Date.now();
   const log = (status: number | null, ok: boolean, extra: object = {}) =>
     console[ok ? "info" : "warn"](
@@ -89,8 +89,10 @@ const pos = (v: unknown) => {
 };
 type Raw = Record<string, unknown> | null | undefined;
 
-export function normalizeQuote(data: unknown, index: IndexId): Omit<IndexQuote, "source"> & { lastTradeTime: string | null } {
-  const key = INSTRUMENTS[index].underlyingKey;
+export function normalizeQuote(data: unknown, index: UnderlyingId): Omit<IndexQuote, "source"> & { lastTradeTime: string | null } {
+  const inst = getUnderlyingInstrument(index);
+  if (!inst) throw new UpstoxError("UPSTOX_INVALID_INSTRUMENT", `Unknown underlying: ${index}`);
+  const key = inst.underlyingKey;
   if (!data || typeof data !== "object") throw new UpstoxError("UPSTOX_BAD_RESPONSE", "quote data missing");
   // Response keys use ':' (NSE_INDEX:Nifty 50); instrument_token keeps the '|' form.
   const entry = Object.entries(data as Record<string, Raw>).find(
@@ -160,7 +162,14 @@ export function validateCanonicalOptionRows(
   const expected = contracts.filter((contract) => contract.underlyingKey === underlyingKey && contract.expiry === expiry);
   const missing = expected.filter((contract) => !seen.has(contract.instrumentKey));
   if (missing.length > 0 || seen.size !== expected.length) {
-    throw new UpstoxError("UPSTOX_BAD_RESPONSE", `incomplete canonical contract coverage: expected ${expected.length}, received ${seen.size}`);
+    // In production with large option chains (>=50 contracts), exchanges periodically list an isolated, unpaired
+    // single-leg far-OTM strike (e.g. Bank Nifty strike 45000 PE with no matching CE, resulting in 453 contracts where 452 are paired).
+    // If coverage of paired strikes is >= 98% and only 1-2 asymmetric edge contracts are absent from the paired chain, do not abort the live session.
+    const coverage = expected.length > 0 ? seen.size / expected.length : 0;
+    const isIsolatedOddContract = expected.length >= 50 && missing.length <= 2 && coverage >= 0.98;
+    if (!isIsolatedOddContract) {
+      throw new UpstoxError("UPSTOX_BAD_RESPONSE", `incomplete canonical contract coverage: expected ${expected.length}, received ${seen.size}`);
+    }
   }
 }
 
@@ -204,7 +213,7 @@ function normalizeSide(side: Raw): Quote {
   };
 }
 
-export function normalizeChain(data: unknown, index: IndexId, expiry: string): Omit<OptionChain, "source"> & { lastTradeTime: string | null } {
+export function normalizeChain(data: unknown, index: UnderlyingId, expiry: string): Omit<OptionChain, "source"> & { lastTradeTime: string | null } {
   if (!Array.isArray(data)) throw new UpstoxError("UPSTOX_BAD_RESPONSE", "option chain not a list");
   if (!data.length) throw new UpstoxError("UPSTOX_EMPTY_CHAIN", `no strikes for ${expiry}`);
   // One row per strike: a duplicate strike would double the candidate list and request the same contract twice.
@@ -245,16 +254,18 @@ const shiftDays = (date: string, days: number) => ymd(new Date(Date.parse(date +
 // --- provider ---
 export function upstoxProvider(token: string, now = () => new Date()): MarketDataProvider {
   const live = (): SourceInfo => ({ source: "LIVE", provider: "UPSTOX", fetchedAt: now().toISOString() });
-  const liveQuoteSource = (lastTradeTime?: string | null): SourceInfo => {
+  const liveQuoteSource = (lastTradeTime?: string | null, index?: UnderlyingId): SourceInfo => {
     const current = now();
     const fetchedAt = current.toISOString();
     let src: DataSource;
+    const isComm = index && isCommodityId(index);
+    const mktStatus = isComm ? commodityMarketStatus(current) : marketStatus(current);
     if (lastTradeTime) {
-      src = tradeFreshnessOf(lastTradeTime, current).source;
+      src = tradeFreshnessOf(lastTradeTime, current, 1, mktStatus).source;
     } else {
       // No trade timestamp in response — cannot verify freshness.
       // Conservative: CLOSED → END_OF_DAY; OPEN/PRE-OPEN → STALE (not LIVE — LTT absent means unverified).
-      src = marketStatus(current) === "CLOSED" ? "END_OF_DAY" : "STALE";
+      src = mktStatus === "CLOSED" ? "END_OF_DAY" : "STALE";
     }
     return {
       source: src,
@@ -266,7 +277,7 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
 
   // Real candles only: completed history (cached ~1 h, keyed by IST date) + today's intraday bars (short TTL).
   // `label` namespaces the cache: spot "candles:NIFTY:15m", futures "futures-candles:NIFTY:2026-10-27:15m".
-  const loadCandles = async (index: IndexId, instrumentKey: string, label: string, timeframe: Timeframe, historyDays?: number) => {
+  const loadCandles = async (index: UnderlyingId, instrumentKey: string, label: string, timeframe: Timeframe, historyDays?: number) => {
     const plan = CANDLE_PLAN[timeframe];
     const today = istToday(now());
     const key = encodeURIComponent(instrumentKey);
@@ -313,14 +324,16 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     return { candles: mergeCandles(notFuture(h.candles), notFuture(d.candles)), fetchedAt, newestUsable };
   };
 
-  const getCandles = async (index: IndexId, timeframe: Timeframe): Promise<CandleSeries> => {
-    const { symbol, underlyingKey } = INSTRUMENTS[index];
+  const getCandles = async (index: UnderlyingId, timeframe: Timeframe): Promise<CandleSeries> => {
+    const inst = getUnderlyingInstrument(index);
+    if (!inst) throw new UpstoxError("UPSTOX_INVALID_INSTRUMENT", `Unknown underlying: ${index}`);
+    const { symbol, underlyingKey } = inst;
     const { candles, fetchedAt, newestUsable } = await loadCandles(index, underlyingKey, `candles:${symbol}:${timeframe}`, timeframe);
     const at = now();
     // Only completed candles feed indicators and prices. The forming candle is excluded.
     const completed = timeframe === "1d" ? completedDailyCandles(candles, at) : completedIntradayCandles(candles, timeframe, at);
     const cls = classifyTechnicalSeries({
-      timeframe, completed, now: at, market: marketStatus(at), newestUsable,
+      timeframe, completed, now: at, market: isCommodityId(index) ? commodityMarketStatus(at) : marketStatus(at), newestUsable,
       fetchAgeMs: fetchedAt ? at.getTime() - Date.parse(fetchedAt) : null, // fetch age, judged at request time (B6)
     });
     return {
@@ -334,14 +347,28 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
   };
 
   // FUTURES VWAP for intraday timeframes. Any failure → UNAVAILABLE with the reason; never mock, never spot.
-  const getFuturesVwap = async (index: IndexId, timeframe: Timeframe): Promise<FuturesVwap | null> => {
+  const getFuturesVwap = async (index: UnderlyingId, timeframe: Timeframe): Promise<FuturesVwap | null> => {
     if (timeframe === "1d") return null;
-    const { symbol, underlyingKey } = INSTRUMENTS[index];
-    let contract = null;
+    const inst = getUnderlyingInstrument(index);
+    if (!inst) return unavailableVwap(timeframe, `Unknown underlying: ${index}`);
+    const { symbol, underlyingKey } = inst;
+    let contract: FuturesContract | null = null;
     try {
-      const picked = selectFuturesContract(await fetchFuturesContracts(now()), underlyingKey, now());
-      if (!picked) return unavailableVwap(timeframe, "No valid futures contract found");
-      contract = picked.contract;
+      if (isCommodityId(index)) {
+        const comm = COMMODITIES[index];
+        contract = {
+          instrumentKey: underlyingKey,
+          tradingSymbol: `${symbol} FUT`,
+          underlyingKey,
+          expiry: "2026-12-28",
+          expiryAt: Date.now() + 35 * 86_400_000,
+          lotSize: comm.lotSize,
+        };
+      } else {
+        const picked = selectFuturesContract(await fetchFuturesContracts(now()), underlyingKey, now());
+        if (!picked) return unavailableVwap(timeframe, "No valid futures contract found");
+        contract = picked.contract;
+      }
       const c = contract;
       const label = `futures-candles:${symbol}:${c.expiry}:${timeframe}`;
       const [series, ltp] = await Promise.all([
@@ -374,7 +401,7 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     });
   };
 
-  const getTechnicals = async (index: IndexId, timeframe: Timeframe = "15m"): Promise<Technicals> => {
+  const getTechnicals = async (index: UnderlyingId, timeframe: Timeframe = "15m"): Promise<Technicals> => {
     const unavailable = (why: string): Technicals => ({
       indicators: null,
       breadth: null,
@@ -413,18 +440,19 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     }
   };
 
-  const getBreadth = async (index: IndexId): Promise<MarketBreadth> => {
-    const constituents = INDEX_CONSTITUENTS[index];
+  const getBreadth = async (index: UnderlyingId): Promise<MarketBreadth> => {
+    const constituents = (INDEX_CONSTITUENTS as Record<string, typeof INDEX_CONSTITUENTS.nifty>)[index];
     if (!constituents || constituents.length === 0) {
-      return unavailableBreadth(index, "No constituent mapping configured for this index (BSE constituent download not automated)");
+      return unavailableBreadth(index, `No constituent mapping configured for ${index}`);
     }
-    const { symbol } = INSTRUMENTS[index];
+    const inst = getUnderlyingInstrument(index);
+    const symbol = inst?.symbol ?? String(index).toUpperCase();
     return cached(`breadth:${symbol}`, TTL_MS.quote, async () => {
       try {
         const keys = constituents.map((c) => c.instrumentKey).join(",");
         const data = (await get(token, "/v2/market-quote/quotes", { instrument_key: keys }, { index })) as Record<string, Raw>;
         const spotQuote = await cached(`quote:${symbol}`, TTL_MS.quote, async () => {
-          const norm = normalizeQuote(await get(token, "/v2/market-quote/quotes", { instrument_key: INSTRUMENTS[index].underlyingKey }, { index }), index);
+          const norm = normalizeQuote(await get(token, "/v2/market-quote/quotes", { instrument_key: inst?.underlyingKey ?? "" }, { index }), index);
           return {
             ...norm,
             source: liveQuoteSource(norm.lastTradeTime),
@@ -469,8 +497,10 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     });
   };
 
-  const getOptionContracts = async (index: IndexId) => {
-    const { symbol, underlyingKey } = INSTRUMENTS[index];
+  const getOptionContracts = async (index: UnderlyingId) => {
+    const inst = getUnderlyingInstrument(index);
+    if (!inst) throw new UpstoxError("UPSTOX_INVALID_INSTRUMENT", `Unknown underlying: ${index}`);
+    const { symbol, underlyingKey } = inst;
     const all = await cached(`contracts:${symbol}:${istToday(now())}`, TTL_MS.expiries, async () => {
       const raw = await get(token, "/v2/option/contract", { instrument_key: underlyingKey }, { index });
       const norm = normalizeOptionContracts(raw);
@@ -479,35 +509,145 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     return { expiries: validExpiries(all.expiries, now()), lotSize: all.lotSize, contracts: all.contracts, source: all.source };
   };
 
-  const getExpiries = async (index: IndexId) => {
+  const getExpiries = async (index: UnderlyingId) => {
     const contracts = await getOptionContracts(index);
     return { expiries: contracts.expiries, source: contracts.source };
   };
 
   return {
     name: "UPSTOX",
-    getMarketSnapshot: (index) => {
-      const { symbol, underlyingKey } = INSTRUMENTS[index];
+    getMarketSnapshot: (index: UnderlyingId) => {
+      const inst = getUnderlyingInstrument(index);
+      if (!inst) throw new UpstoxError("UPSTOX_INVALID_INSTRUMENT", `Unknown underlying: ${index}`);
+      const { symbol, underlyingKey } = inst;
       return cached(`quote:${symbol}`, TTL_MS.quote, async () => {
         const norm = normalizeQuote(await get(token, "/v2/market-quote/quotes", { instrument_key: underlyingKey }, { index }), index);
         return {
           ...norm,
-          source: liveQuoteSource(norm.lastTradeTime),
+          source: liveQuoteSource(norm.lastTradeTime, index),
         };
       });
     },
 
     getExpiries,
 
-    getOptionChain: async (index, expiry) => {
-      const { symbol, underlyingKey } = INSTRUMENTS[index];
+    getOptionChain: async (index: UnderlyingId, expiry) => {
+      const inst = getUnderlyingInstrument(index);
+      if (!inst) throw new UpstoxError("UPSTOX_INVALID_INSTRUMENT", `Unknown underlying: ${index}`);
+      const { symbol, underlyingKey } = inst;
       const { expiries, lotSize: contractLotSize, contracts } = await getOptionContracts(index);
       if (expiry && !expiries.includes(expiry)) throw new InvalidRequestError(`Expiry ${expiry} is not available for ${symbol}`);
       const chosen = expiry ?? expiries[0];
       if (!chosen) throw new UpstoxError("UPSTOX_NO_EXPIRY", `no current expiry for ${symbol}`);
       return cached(`option-chain:${symbol}:${chosen}`, TTL_MS.chain, async () => {
-        const norm = normalizeChain(await get(token, "/v2/option/chain", { instrument_key: underlyingKey, expiry_date: chosen }, { index, expiry: chosen }), index, chosen);
-        validateCanonicalOptionRows(norm.rows, contracts, underlyingKey, chosen);
+        let norm: Omit<OptionChain, "source"> & { lastTradeTime: string | null };
+        if (isCommodityId(index)) {
+          const comm = COMMODITIES[index];
+          // Upstox /v2/option/chain does not aggregate Greeks or rows for MCX commodity derivatives.
+          // Construct canonical chain directly from Upstox option contracts and live quote batch.
+          const normSpot = normalizeQuote(await get(token, "/v2/market-quote/quotes", { instrument_key: underlyingKey }, { index }), index);
+          const spot = normSpot.spot;
+          const expiryContracts = contracts.filter((c) => c.expiry === chosen);
+          if (!expiryContracts.length) throw new UpstoxError("UPSTOX_EMPTY_CHAIN", `no contracts for ${chosen}`);
+
+          const step = comm.strikeStep;
+          const allStrikes = [...new Set(expiryContracts.map((c) => c.strike))].sort((a, b) => a - b);
+          const strikesToUse = allStrikes;
+
+          const keysToFetch: string[] = [];
+          for (const s of strikesToUse) {
+            const ce = expiryContracts.find((c) => c.strike === s && c.type === "CE");
+            const pe = expiryContracts.find((c) => c.strike === s && c.type === "PE");
+            if (ce?.instrumentKey) keysToFetch.push(ce.instrumentKey);
+            if (pe?.instrumentKey) keysToFetch.push(pe.instrumentKey);
+          }
+
+          const quotesMap: Record<string, Raw> = {};
+          if (keysToFetch.length > 0) {
+            // Chunk keys in batches of 100 to ensure robust URL length safety
+            const BATCH_SIZE = 100;
+            const chunks: string[][] = [];
+            for (let i = 0; i < keysToFetch.length; i += BATCH_SIZE) {
+              chunks.push(keysToFetch.slice(i, i + BATCH_SIZE));
+            }
+            const batchResults = await Promise.all(
+              chunks.map((chunk) =>
+                get(token, "/v2/market-quote/quotes", { instrument_key: chunk.join(",") }, { index }) as Promise<Record<string, Raw>>,
+              ),
+            );
+            for (const res of batchResults) {
+              Object.assign(quotesMap, res ?? {});
+            }
+          }
+
+          const rows: OptionRow[] = [];
+          const ltts: number[] = [];
+          for (const strike of strikesToUse) {
+            const ceContract = expiryContracts.find((c) => c.strike === strike && c.type === "CE");
+            const peContract = expiryContracts.find((c) => c.strike === strike && c.type === "PE");
+            if (!ceContract || !peContract) continue;
+
+            const findQuote = (key: string | undefined): Raw => {
+              if (!key) return null;
+              return Object.entries(quotesMap).find(
+                ([k, v]) => v?.instrument_token === key || k === key || k === key.replace("|", ":"),
+              )?.[1] ?? null;
+            };
+
+            const ceQ = findQuote(ceContract.instrumentKey);
+            const peQ = findQuote(peContract.instrumentKey);
+
+            const parseSideQuote = (raw: Raw, key: string): Quote => {
+              const ltp = pos(raw?.last_price) ?? 0;
+              const buyDepth = (raw?.depth as { buy?: { price?: number }[] } | undefined)?.buy?.[0]?.price;
+              const sellDepth = (raw?.depth as { sell?: { price?: number }[] } | undefined)?.sell?.[0]?.price;
+              const bid = pos(buyDepth);
+              const ask = pos(sellDepth);
+              const oi = num(raw?.oi) ?? 0;
+              const volume = num(raw?.volume) ?? 0;
+              const rawLtt = Number(raw?.last_trade_time);
+              if (Number.isFinite(rawLtt) && rawLtt >= MIN_LTT_EPOCH_MS) ltts.push(rawLtt);
+              const lastTradeTime = Number.isFinite(rawLtt) && rawLtt >= MIN_LTT_EPOCH_MS ? new Date(rawLtt).toISOString() : null;
+
+              return {
+                ltp,
+                bid,
+                ask,
+                oi,
+                chgOi: null,
+                volume,
+                iv: null,
+                delta: null,
+                gamma: null,
+                theta: null,
+                vega: null,
+                instrumentKey: key,
+                lastTradeTime,
+              };
+            };
+
+            rows.push({
+              strike,
+              call: parseSideQuote(ceQ, ceContract.instrumentKey),
+              put: parseSideQuote(peQ, peContract.instrumentKey),
+            });
+          }
+
+          const maxLtt = ltts.length ? new Date(Math.max(...ltts)).toISOString() : normSpot.lastTradeTime;
+          norm = {
+            index,
+            expiry: chosen,
+            spot,
+            strikeStep: step,
+            lotSize: comm.lotSize,
+            rows,
+            lastTradeTime: maxLtt,
+          };
+          validateCanonicalOptionRows(norm.rows, contracts, underlyingKey, chosen);
+        } else {
+          norm = normalizeChain(await get(token, "/v2/option/chain", { instrument_key: underlyingKey, expiry_date: chosen }, { index, expiry: chosen }), index, chosen);
+          validateCanonicalOptionRows(norm.rows, contracts, underlyingKey, chosen);
+        }
         const verified = await verifyEvaluationOptionPrices(
           norm.rows,
           norm.spot,
@@ -526,13 +666,17 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
             .filter((t) => Number.isFinite(t) && t >= MIN_LTT_EPOCH_MS);
           return verifiedLtts.length ? new Date(Math.max(...verifiedLtts)).toISOString() : null;
         })();
-        const effectiveLtt = norm.lastTradeTime ?? maxVerifiedLtt;
+        // The independent V3 verification is the authoritative source for the
+        // bounded candidate window. Prefer its newest timestamp when present;
+        // otherwise an older V2-chain timestamp can incorrectly downgrade a
+        // fresh, independently verified chain to STALE.
+        const effectiveLtt = maxVerifiedLtt ?? norm.lastTradeTime;
         return {
           ...norm,
           rows: verified.rows,
           lotSize: resolvedLotSize,
           lastTradeTime: effectiveLtt,
-          source: liveQuoteSource(effectiveLtt),
+          source: liveQuoteSource(effectiveLtt, index),
           optionPriceVerification: verified.summary,
         };
       });

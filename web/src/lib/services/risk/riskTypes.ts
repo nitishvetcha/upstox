@@ -1,4 +1,4 @@
-import type { IndexId } from "../../types.ts";
+import type { IndexId, UnderlyingId } from "../../types.ts";
 
 export type RiskStatus = "APPROVED" | "REJECTED" | "WARNING";
 
@@ -37,7 +37,7 @@ export interface RiskAssessment {
   portfolioReasons?: RiskRejectionReason[]; // Portfolio-specific constraints (e.g. ZERO_LOTS, DAILY_LOSS_LIMIT)
   portfolioHumanReasons?: string[]; // Human-readable explanations for portfolio constraints
   sizingStatus?: "UNCONFIGURED" | "SIZED" | "ZERO_LOTS" | "PORTFOLIO_CONSTRAINED";
-  index: IndexId;
+  index: UnderlyingId;
   lotSize: number;
   entryPrice: number; // Combined entry per unit
   stopPrice: number; // Combined stop per unit

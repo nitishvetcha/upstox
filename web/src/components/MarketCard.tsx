@@ -1,6 +1,7 @@
 import type { Analysis } from "@/lib/types";
 import { fmtDate } from "@/lib/time";
-import { INSTRUMENTS } from "@/lib/services/instrumentRegistry";
+import { INSTRUMENTS, getUnderlyingInstrument } from "@/lib/services/instrumentRegistry";
+import type { IndexId } from "@/lib/types";
 import { Badge, Card, Stat, num, signed } from "./ui";
 import { breadthBadge } from "@/lib/provenanceDisplay";
 import { getTradingViewChartUrl } from "@/lib/tradingView";
@@ -20,7 +21,7 @@ export function MarketCard({ a }: { a: Analysis }) {
   const ind = s.indicators;
   const techSrc = s.sources.technical.source;
   const fv = t?.futuresVwap ?? null;
-  const futName = INSTRUMENTS[s.index].symbol;
+  const futName = getUnderlyingInstrument(s.index)?.symbol ?? String(s.index).toUpperCase();
   // Real-candle trend when available; otherwise the engine's EMA factor (mock), else N/A.
   // A null trend (mock analysis carries none) falls back to the engine factor, as before.
   const trendLabel = t?.trend ? t.trend.state.replace("_", " ") : !trendF.available ? na : trendDir > 0.25 ? "Uptrend" : trendDir < -0.25 ? "Downtrend" : "Mixed";

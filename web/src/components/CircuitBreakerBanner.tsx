@@ -9,26 +9,34 @@ import type { CircuitBreakerState } from "@/lib/services/portfolioCircuitBreaker
 
 export function CircuitBreakerBanner() {
   const [state, setState] = useState<CircuitBreakerState | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [resetting, setResetting] = useState(false);
 
-  const fetchStatus = useCallback(async () => {
-    try {
-      const res = await fetch("/api/risk/circuit-breaker");
-      if (res.ok) {
-        const json = await res.json();
-        setState(json.data);
-      }
-    } catch {
-      // Ignore background fetch error
-    }
-  }, []);
-
   useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 15000); // 15s poll
-    return () => clearInterval(interval);
-  }, [fetchStatus]);
+    let active = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/risk/circuit-breaker");
+        if (res.ok && active) {
+          const json = await res.json();
+          setState(json.data);
+        }
+      } catch {
+        // Ignore background fetch error
+      }
+    };
+
+    const timer = setTimeout(() => {
+      void load();
+    }, 0);
+    const interval = setInterval(load, 15000); // 15s poll
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, []);
 
   const handleResetHeatStop = async () => {
     setResetting(true);

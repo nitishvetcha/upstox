@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { INDICES as INDEX_IDS, INSTRUMENTS } from "@/lib/services/instrumentRegistry";
+import { INDICES as INDEX_IDS, INSTRUMENTS, COMMODITY_IDS, COMMODITIES } from "@/lib/services/instrumentRegistry";
 import type { ReactNode } from "react";
 import type { DashboardView } from "@/lib/dashboard";
 import { fmtIst } from "@/lib/time";
@@ -24,15 +24,27 @@ function Panel({ title, children, right }: { title: string; children: ReactNode;
 const Grid = ({ children }: { children: ReactNode }) => <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">{children}</div>;
 
 export function IndexSwitch({ index, base }: { index: string; base: string }) {
-  // Index list comes from the instrument registry (single source of truth).
-  const ALL = INDEX_IDS.map((id) => [id, INSTRUMENTS[id].symbol] as const);
+  // Index and commodity lists come from the instrument registry (single source of truth).
+  const INDICES_ALL = INDEX_IDS.map((id) => [id, INSTRUMENTS[id].symbol] as const);
+  const COMMODITIES_ALL = COMMODITY_IDS.map((id) => [id, COMMODITIES[id].symbol] as const);
   return (
-    <div className="flex flex-wrap gap-1.5 text-xs">
-      {ALL.map(([id, label]) => (
-        <Link key={id} href={`${base}?index=${id}`} className={`rounded border px-2.5 py-1 font-semibold ${index === id ? "border-zinc-500 bg-zinc-800 text-zinc-100" : "border-zinc-800 text-zinc-400 hover:bg-zinc-900"}`}>
-          {label}
-        </Link>
-      ))}
+    <div className="flex flex-wrap items-center gap-3 text-xs">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Equity:</span>
+        {INDICES_ALL.map(([id, label]) => (
+          <Link key={id} href={`${base}?index=${id}`} className={`rounded border px-2.5 py-1 font-semibold ${index === id ? "border-zinc-500 bg-zinc-800 text-zinc-100" : "border-zinc-800 text-zinc-400 hover:bg-zinc-900"}`}>
+            {label}
+          </Link>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 border-l border-zinc-800 pl-3">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500">MCX:</span>
+        {COMMODITIES_ALL.map(([id, label]) => (
+          <Link key={id} href={`${base}?index=${id}`} className={`rounded border px-2.5 py-1 font-semibold ${index === id ? "border-amber-500/80 bg-amber-950/40 text-amber-200" : "border-zinc-800 text-zinc-400 hover:bg-zinc-900"}`}>
+            {label}
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

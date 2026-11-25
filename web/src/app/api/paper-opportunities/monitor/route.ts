@@ -8,7 +8,7 @@ import { requireOperator } from "../../../../lib/operatorSession.ts";
 import { runOnce, listMonitorRuns } from "@/lib/services/paperTradeMonitorRunner";
 import type { PriceFetcher } from "@/lib/services/paperTradeMonitorRunner";
 import { getSnapshot } from "@/lib/services/market";
-import { optionMonitorInput } from "@/lib/services/paperPriceInput";
+import { optionMonitorInput, optionUnderlyingId } from "@/lib/services/paperPriceInput";
 
 // Build a price fetcher that uses live Upstox data for each open opportunity.
 function buildPriceFetcher(): PriceFetcher {
@@ -19,10 +19,11 @@ function buildPriceFetcher(): PriceFetcher {
 
   return async (opp) => {
     if (opp.instrumentType === "OPTION") {
-      const key = opp.underlying.toLowerCase() as "nifty" | "banknifty";
+      const key = optionUnderlyingId(opp.underlying);
+      if (!key) return null;
       if (!optionSnapshots.has(key)) {
         try {
-          optionSnapshots.set(key, await getSnapshot(key === "banknifty" ? "banknifty" : "nifty"));
+          optionSnapshots.set(key, await getSnapshot(key));
         } catch {
           optionSnapshots.set(key, null);
         }

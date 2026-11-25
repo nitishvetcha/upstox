@@ -17,7 +17,11 @@
     "paper:live": "node scripts/paper-live.mjs",
     "bot:runner": "node --import tsx --env-file=.env.local scripts/run-telegram-market-bot.ts",
     "start:render": "node scripts/start-render.mjs",
+    "data:ingest": "node --import tsx scripts/ingest-underlying-history.ts",
+    "backtest:replay": "node --import tsx scripts/run-contract-replay.ts",
+    "validate:walk-forward": "node --import tsx scripts/run-walk-forward-validation.ts",
     "typecheck": "tsc --noEmit",
+    "preflight": "tsc --noEmit && npm test && npm run build",
     "test:dom": "node --import tsx --test src/app/saved-picks/savedPicks.dom.test.tsx",
     "test:integration": "node --import tsx --test src/lib/integration/openRoute.integration.ts src/lib/integration/openRouteSuccess.integration.ts src/lib/integration/openRouteLedgerFailure.integration.ts src/lib/integration/openRouteParallel.integration.ts src/lib/integration/securityRegression.integration.ts"
   },
@@ -25,9 +29,11 @@
     "node": ">=22.16.0 <23"
   },
   "dependencies": {
+    "@types/pg": "^8.23.1",
     "lightweight-charts": "5.2.1",
     "lucide-react": "^1.52.0",
     "next": "16.4.5",
+    "pg": "^8.23.1",
     "protobufjs": "8.8.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",

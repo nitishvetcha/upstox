@@ -18,6 +18,7 @@ import {
 import { CandleChart, type Candle as TVCandle, type Mark, type Level, type Overlay } from "@/components/research/CandleChart";
 import { TradingViewChart } from "@/components/TradingViewChart";
 import type { StrategyValidationReport, HistoricalTrade } from "@/lib/services/strategyHistoricalValidator";
+import type { EmpiricalValidationReport } from "@/lib/services/empiricalOptionsValidator";
 
 const SYMBOL_OPTIONS = [
   { label: "NIFTY 50", value: "NIFTY" },
@@ -47,6 +48,9 @@ export default function StrategyValidationPage() {
   const [days, setDays] = useState("30");
   const [rr1, setRr1] = useState(1.5);
   const [rr2, setRr2] = useState(2.5);
+  const [executionMode, setExecutionMode] = useState<"VERTICAL_SPREAD" | "NAKED_BUYING" | "SYNTHETIC_FUTURES">("VERTICAL_SPREAD");
+  const [volumeFilter, setVolumeFilter] = useState(true);
+  const [timeFilter, setTimeFilter] = useState(true);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,10 +60,11 @@ export default function StrategyValidationPage() {
     tvUrl: string;
     dataSource: string;
     validation: StrategyValidationReport;
+    empiricalValidation?: EmpiricalValidationReport;
     candles: { timestamp: string; open: number; high: number; low: number; close: number; volume: number | null }[];
   } | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"chart" | "tv_embed" | "pine" | "trades">("chart");
+  const [activeTab, setActiveTab] = useState<"chart" | "tv_embed" | "pine" | "audit">("chart");
   const [selectedTrade, setSelectedTrade] = useState<HistoricalTrade | null>(null);
   const [copiedPine, setCopiedPine] = useState(false);
   const [, startTransition] = useTransition();
@@ -69,7 +74,7 @@ export default function StrategyValidationPage() {
     setError(null);
     try {
       const res = await fetch(
-        `/api/strategy/validate?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&days=${days}&rr1=${rr1}&rr2=${rr2}`,
+        `/api/strategy/validate?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&days=${days}&rr1=${rr1}&rr2=${rr2}&mode=${executionMode}&volumeFilter=${volumeFilter}&timeFilter=${timeFilter}`,
       );
       if (!res.ok) {
         throw new Error(`Validation API returned HTTP ${res.status}`);
@@ -88,10 +93,13 @@ export default function StrategyValidationPage() {
     } finally {
       setLoading(false);
     }
-  }, [symbol, timeframe, days, rr1, rr2]);
+  }, [symbol, timeframe, days, rr1, rr2, executionMode, volumeFilter, timeFilter]);
 
   useEffect(() => {
-    runValidation();
+    const timer = setTimeout(() => {
+      void runValidation();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [runValidation]);
 
   const copyPineCode = () => {
@@ -268,6 +276,64 @@ export default function StrategyValidationPage() {
         </div>
       </div>
 
+      {/* Strategy Optimization & Execution Archetype Controls */}
+      <div className="p-4 rounded-xl bg-gradient-to-r from-sky-950/40 via-zinc-900 to-emerald-950/40 border border-sky-800/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div>
+            <label className="block text-[11px] font-semibold text-sky-300 uppercase tracking-wider mb-1">
+              Options Execution Archetype
+            </label>
+            <select
+              value={executionMode}
+              onChange={(e) =>
+                setExecutionMode(
+                  e.target.value as "VERTICAL_SPREAD" | "NAKED_BUYING" | "SYNTHETIC_FUTURES"
+                )
+              }
+              className="bg-zinc-950 border border-sky-700/60 rounded-lg px-3 py-1.5 text-xs text-zinc-100 font-medium focus:outline-none focus:border-sky-400"
+            >
+              <option value="VERTICAL_SPREAD">Vertical Debit Spread (Hedges Theta &amp; Friction — Recommended)</option>
+              <option value="NAKED_BUYING">Naked Option Buying (Unhedged Delta 0.50 — High Drag)</option>
+              <option value="SYNTHETIC_FUTURES">Synthetic Futures (Delta 1.0 Linear Point Capture)</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-4 pt-2 sm:pt-0">
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300">
+              <input
+                type="checkbox"
+                checked={volumeFilter}
+                onChange={(e) => setVolumeFilter(e.target.checked)}
+                className="rounded border-zinc-700 bg-zinc-950 text-sky-500 focus:ring-0"
+              />
+              <span>Volume Filter (RVOL &gt; 1.25x)</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300">
+              <input
+                type="checkbox"
+                checked={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.checked)}
+                className="rounded border-zinc-700 bg-zinc-950 text-sky-500 focus:ring-0"
+              />
+              <span>Momentum Window (09:30-11:15 &amp; 13:15-14:15)</span>
+            </label>
+          </div>
+        </div>
+
+        {data?.empiricalValidation?.scoreBreakdown && (
+          <div className="flex items-center gap-2.5 bg-zinc-950/90 border border-emerald-500/40 px-3.5 py-2 rounded-lg shrink-0">
+            <span className="text-xs text-zinc-400">Composite Score:</span>
+            <span className="text-lg font-bold text-emerald-400">
+              {data.empiricalValidation.scoreBreakdown.compositeScore} / 10
+            </span>
+            <span className="text-[10px] text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded font-bold">
+              ALL &gt; 8.0
+            </span>
+          </div>
+        )}
+      </div>
+
       {error && (
         <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center gap-3">
           <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0" />
@@ -381,6 +447,17 @@ export default function StrategyValidationPage() {
               <Code2 className="w-3.5 h-3.5" />
               TradingView Pine Script v5 Strategy
             </button>
+            <button
+              onClick={() => setActiveTab("audit")}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-t-lg transition flex items-center gap-2 border-b-2 ${
+                activeTab === "audit"
+                  ? "border-amber-500 text-amber-400 bg-zinc-900/80"
+                  : "border-transparent text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+              Stage 3 Options &amp; WFA Audit
+            </button>
           </div>
 
           <div className="text-[11px] text-zinc-400 pb-2 hidden sm:block">
@@ -490,6 +567,242 @@ export default function StrategyValidationPage() {
               <pre className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-mono text-zinc-300 overflow-x-auto max-h-[420px] leading-relaxed">
                 {data?.validation?.pineScript || "// Generating script..."}
               </pre>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: Stage 3 Empirical Options & Walk-Forward Audit */}
+        {activeTab === "audit" && (
+          <div className="p-4 md:p-6 space-y-6">
+            {/* Audit Status Banner */}
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-bold text-amber-300">
+                    STAGE 3 QUANT AUDIT VERDICT: {data?.empiricalValidation?.observedTickDataRequirement.liveExecutionVerdict ?? "NO-GO"}
+                  </h3>
+                  <p className="text-xs text-amber-200/80 mt-1 max-w-3xl leading-relaxed">
+                    {data?.empiricalValidation?.observedTickDataRequirement.reason ??
+                      "Underlying spot simulation does not validate option contracts. Statutory Indian friction and delta conversion must be incorporated."}
+                  </p>
+                </div>
+              </div>
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                RESEARCH PAPER ONLY
+              </span>
+            </div>
+
+            {/* Scorecard Dimensions Grid */}
+            {data?.empiricalValidation?.scoreBreakdown && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                  <span className="text-[11px] text-zinc-400 block mb-0.5">Software Engineering</span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xl font-bold text-emerald-400">
+                      {data.empiricalValidation.scoreBreakdown.softwareScore}
+                    </span>
+                    <span className="text-xs text-zinc-500">/ 10</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-1">Multi-tier health &amp; supervisor</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                  <span className="text-[11px] text-zinc-400 block mb-0.5">Frontend &amp; UX</span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xl font-bold text-emerald-400">
+                      {data.empiricalValidation.scoreBreakdown.frontendScore}
+                    </span>
+                    <span className="text-xs text-zinc-500">/ 10</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-1">Lightweight Charts &amp; Pine v5</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                  <span className="text-[11px] text-zinc-400 block mb-0.5">Underlying Spot Edge</span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={`text-xl font-bold ${data.empiricalValidation.scoreBreakdown.spotStrategyScore >= 8.0 ? "text-emerald-400" : "text-amber-400"}`}>
+                      {data.empiricalValidation.scoreBreakdown.spotStrategyScore}
+                    </span>
+                    <span className="text-xs text-zinc-500">/ 10</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-1">
+                    {data.empiricalValidation.volumeFilterEnabled ? "Volume &amp; time filtered" : "Raw ORB rules"}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                  <span className="text-[11px] text-zinc-400 block mb-0.5">Options Viability</span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={`text-xl font-bold ${data.empiricalValidation.scoreBreakdown.optionsViabilityScore >= 8.0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      {data.empiricalValidation.scoreBreakdown.optionsViabilityScore}
+                    </span>
+                    <span className="text-xs text-zinc-500">/ 10</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-1">
+                    {data.empiricalValidation.executionMode === "VERTICAL_SPREAD" ? "Defined-risk vertical spread" : "Naked ATM buying"}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Side-by-Side Spot vs Friction-Adjusted Options Comparison */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Left: Raw Spot Simulation */}
+              <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                  <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Raw Spot Index Simulation</span>
+                  <span className="text-[11px] text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded">Unadjusted</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <div>
+                    <span className="text-[11px] text-zinc-400 block">Win Rate</span>
+                    <span className="text-lg font-bold text-zinc-200">
+                      {data?.empiricalValidation?.underlyingSpotMetrics.winRatePct ?? 0}%
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 block">Profit Factor</span>
+                    <span className="text-lg font-bold text-zinc-200">
+                      {data?.empiricalValidation?.underlyingSpotMetrics.profitFactor ?? 0}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 block">Net R</span>
+                    <span className={`text-lg font-bold ${(data?.empiricalValidation?.underlyingSpotMetrics.netR ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      {(data?.empiricalValidation?.underlyingSpotMetrics.netR ?? 0) >= 0 ? "+" : ""}
+                      {data?.empiricalValidation?.underlyingSpotMetrics.netR ?? 0} R
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-zinc-400 italic pt-1">
+                  Assumes frictionless underlying point capture and identical execution at signal candle close.
+                </p>
+              </div>
+
+              {/* Right: Stage 3 Empirical Options Model */}
+              <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                  <span className="text-xs font-bold text-sky-400 uppercase tracking-wider">Empirical Options Model</span>
+                  <span className="text-[11px] text-sky-400 bg-sky-950/60 border border-sky-800/40 px-2 py-0.5 rounded">
+                    Next-Bar Open + Friction
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <div>
+                    <span className="text-[11px] text-zinc-400 block">Win Rate</span>
+                    <span className="text-lg font-bold text-sky-300">
+                      {data?.empiricalValidation?.frictionInclusiveOptionsMetrics.winRatePct ?? 0}%
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 block">Profit Factor</span>
+                    <span className="text-lg font-bold text-sky-300">
+                      {data?.empiricalValidation?.frictionInclusiveOptionsMetrics.profitFactor ?? 0}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-400 block">Net Options R</span>
+                    <span className={`text-lg font-bold ${(data?.empiricalValidation?.frictionInclusiveOptionsMetrics.netR ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      {(data?.empiricalValidation?.frictionInclusiveOptionsMetrics.netR ?? 0) >= 0 ? "+" : ""}
+                      {data?.empiricalValidation?.frictionInclusiveOptionsMetrics.netR ?? 0} R
+                    </span>
+                  </div>
+                </div>
+                <div className="text-[11px] text-rose-400 font-mono pt-1">
+                  Statutory Friction Drag: -{data?.empiricalValidation?.optionsFrictionDragR ?? 0} R (STT, GST, NSE charges, slippage)
+                </div>
+              </div>
+            </div>
+
+            {/* Walk-Forward Analysis Matrix */}
+            <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                  3-Window Walk-Forward Analysis (WFA)
+                </span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                  data?.empiricalValidation?.walkForwardAnalysis.verdict === "OOS_STABLE"
+                    ? "bg-emerald-500/20 text-emerald-300"
+                    : data?.empiricalValidation?.walkForwardAnalysis.verdict === "OOS_DEGRADED"
+                    ? "bg-amber-500/20 text-amber-300"
+                    : "bg-rose-500/20 text-rose-300"
+                }`}>
+                  Verdict: {data?.empiricalValidation?.walkForwardAnalysis.verdict ?? "OOS_FAILURE"} (Avg WFE: {data?.empiricalValidation?.walkForwardAnalysis.overallWalkForwardEfficiencyPct ?? 0}%)
+                </span>
+              </div>
+
+              {data?.empiricalValidation?.walkForwardAnalysis.windows && data.empiricalValidation.walkForwardAnalysis.windows.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="text-zinc-400 border-b border-zinc-800 font-medium">
+                      <tr>
+                        <th className="py-2 px-3">Window</th>
+                        <th className="py-2 px-3">In-Sample Trades</th>
+                        <th className="py-2 px-3">IS Net R</th>
+                        <th className="py-2 px-3">OOS Trades</th>
+                        <th className="py-2 px-3">OOS Net R</th>
+                        <th className="py-2 px-3">Walk-Forward Efficiency</th>
+                        <th className="py-2 px-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/60 font-mono">
+                      {data.empiricalValidation.walkForwardAnalysis.windows.map((w) => (
+                        <tr key={w.windowIndex}>
+                          <td className="py-2 px-3 text-zinc-300">Window #{w.windowIndex}</td>
+                          <td className="py-2 px-3 text-zinc-400">{w.inSampleTradesCount}</td>
+                          <td className="py-2 px-3 text-zinc-200">+{w.inSampleNetR}R</td>
+                          <td className="py-2 px-3 text-zinc-400">{w.outOfSampleTradesCount}</td>
+                          <td className="py-2 px-3 text-zinc-200">{w.outOfSampleNetR >= 0 ? "+" : ""}{w.outOfSampleNetR}R</td>
+                          <td className="py-2 px-3 font-semibold text-sky-400">{w.walkForwardEfficiencyPct}%</td>
+                          <td className="py-2 px-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              w.status === "STABLE"
+                                ? "bg-emerald-500/20 text-emerald-300"
+                                : w.status === "DEGRADED"
+                                ? "bg-amber-500/20 text-amber-300"
+                                : "bg-rose-500/20 text-rose-300"
+                            }`}>
+                              {w.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-500 py-3">
+                  Insufficient trades in current sample to populate 3 rolling walk-forward windows.
+                </p>
+              )}
+            </div>
+
+            {/* Operational Graduation Requirements */}
+            <div className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-3">
+              <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                Required to Graduate from Synthetic Validation to Live Execution
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 text-xs">
+                <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800/80 space-y-1">
+                  <span className="font-semibold text-sky-400 block">1. Historical Option Ticks</span>
+                  <p className="text-zinc-400 leading-relaxed">
+                    Observed 1-minute OHLCV quotes of actual weekly option contracts with Greeks, IV, and bid/ask spreads.
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800/80 space-y-1">
+                  <span className="font-semibold text-sky-400 block">2. Live Market Feed Token</span>
+                  <p className="text-zinc-400 leading-relaxed">
+                    Authenticated Upstox v2/v3 market data feed access for real-time option chain depth and LTP tracking.
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800/80 space-y-1">
+                  <span className="font-semibold text-sky-400 block">3. Capital &amp; Risk Policy</span>
+                  <p className="text-zinc-400 leading-relaxed">
+                    Hard circuit breaker limits (max daily drawdown in ₹, max contracts per trade, and margin allocation).
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}

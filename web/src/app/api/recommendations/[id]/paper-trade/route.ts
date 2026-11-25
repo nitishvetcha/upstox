@@ -6,6 +6,8 @@ export const dynamic = "force-dynamic";
 import { requireOperator } from "../../../../../lib/operatorSession.ts";
 import { getJournalEntry, updateJournalEntry } from "@/lib/services/recommendationStore";
 import { getPaperTradingEngine } from "@/lib/services/paperStore";
+import { circuitBreaker } from "@/lib/services/portfolioCircuitBreaker";
+import { paperPortfolioRiskContext } from "@/lib/services/paperPortfolioRiskContext";
 import { getSnapshot } from "@/lib/services/market";
 import { analyze } from "@/lib/engine/strategy";
 import type { IndexId } from "@/lib/types";
@@ -35,6 +37,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const analysis = analyze(snapshot);
 
     const engine = getPaperTradingEngine();
+    const portfolio = paperPortfolioRiskContext(engine.getTrades());
+    const cb = circuitBreaker.canOpenTrade(
+      portfolio.openPositionsCount, new Date(), portfolio.unrealizedMtmLoss, index, portfolio.openUnderlyingSymbols,
+    );
+    if (!cb.allowed) {
+      return Response.json({ status: "rejected", reason: cb.reason, code: cb.code, recommendationId: id }, { status: 422 });
+    }
     const result = engine.processRecommendation(analysis);
 
     if (!result.created || !result.trade) {

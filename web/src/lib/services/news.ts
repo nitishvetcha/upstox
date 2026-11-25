@@ -151,17 +151,26 @@ function detectEvents(articles: Article[], index: IndexId, now: Date): NewsSenti
   let level: RiskLevel = "NONE";
   const byCat = new Map<string, NewsEvent[]>();
   for (const h of hits) byCat.set(h.category, [...(byCat.get(h.category) ?? []), h]);
-  for (const list of byCat.values()) {
+  const assessed: { category: string; list: NewsEvent[]; sev: number }[] = [];
+  for (const [category, list] of byCat.entries()) {
     let sev = RISK_ORDER.indexOf(list[0].severity);
+    // Scheduled calendar events (RBI, FED, BUDGET, ELECTIONS) require explicit timing (TODAY or UPCOMING)
+    // or strong corroboration (>= 3 articles) before imposing a HIGH event risk that blocks trades.
+    // Uncorroborated, unspecified mentions in commentary/retrospective reports stay MEDIUM.
+    const isScheduledMacro = ["RBI", "FED", "BUDGET", "ELECTIONS"].includes(category);
+    if (isScheduledMacro && sev >= RISK_ORDER.indexOf("HIGH") && list.length < 3 && list.every((h) => h.timing === "UNSPECIFIED")) {
+      sev = RISK_ORDER.indexOf("MEDIUM");
+    }
     // HIGH → EXTREME only when widely corroborated AND stated as happening today (a scheduled week stays HIGH).
     if (list.length >= EXTREME_MIN_ARTICLES && sev === RISK_ORDER.indexOf("HIGH") && list.some((h) => h.timing === "TODAY")) sev++;
     level = RISK_ORDER[Math.max(RISK_ORDER.indexOf(level), sev)];
+    assessed.push({ category, list, sev });
   }
-  const top = [...byCat.values()].sort((a, b) => RISK_ORDER.indexOf(b[0].severity) - RISK_ORDER.indexOf(a[0].severity) || b.length - a.length)[0];
+  const top = assessed.sort((a, b) => b.sev - a.sev || b.list.length - a.list.length)[0];
   return {
     level,
     status: level === "NONE" ? "NONE" : "DETECTED",
-    reason: top ? `${top[0].label} detected in ${top.length} article${top.length > 1 ? "s" : ""}${top.some((t) => t.timing === "TODAY") ? " (today)" : top.some((t) => t.timing === "UPCOMING") ? " (upcoming)" : ""}` : null,
+    reason: top ? `${top.list[0].label} detected in ${top.list.length} article${top.list.length > 1 ? "s" : ""}${top.list.some((t) => t.timing === "TODAY") ? " (today)" : top.list.some((t) => t.timing === "UPCOMING") ? " (upcoming)" : ""}` : null,
     events: hits.slice(0, 20),
   };
 }

@@ -5,7 +5,8 @@ services:
   - type: web
     name: upstox-analyzer
     runtime: node
-    plan: starter # Starter plan recommended for 24/7 background worker stability; or change to 'free'
+    # GitHub Actions performs scheduled validation cycles; the web service can stay free.
+    plan: free
     region: singapore # Low latency to NSE (India)
     rootDir: web
     buildCommand: npm install && npm run build
@@ -31,4 +32,10 @@ services:
       - key: UPSTOX_REDIRECT_URI
         sync: false
       - key: UPSTOX_ANALYTICS_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: OPERATOR_TOKEN
+        sync: false
+      - key: SCHEDULER_TOKEN
         sync: false

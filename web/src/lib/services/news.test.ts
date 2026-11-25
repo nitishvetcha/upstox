@@ -293,3 +293,11 @@ test("25. live-inspection fixes: baseball 'RBI', losing streak, rate hike, space
   const week = ["RBI policy this week", "MPC to decide repo rate this week", "Markets await RBI policy review", "Repo rate decision next week"].map((t, i) => art(t, i + 1));
   assert.equal(analyzeNews(week, "nifty", NOW, "x").eventRisk.level, "HIGH", "scheduled week: HIGH, not EXTREME");
 });
+
+test("26. uncorroborated unspecified-timing macro mention (e.g. commentary on repo rate) stays MEDIUM, not HIGH", () => {
+  const unspecified = [art("Report suggests 25 bps repo rate cut by RBI in coming months", 1)];
+  const res = analyzeNews(unspecified, "nifty", NOW, "x");
+  assert.equal(res.eventRisk.level, "MEDIUM", "isolated unspecified commentary should not trigger HIGH trade-blocking event risk");
+  assert.equal(res.eventRisk.status, "DETECTED");
+  assert.equal(res.eventRisk.events[0].timing, "UNSPECIFIED");
+});

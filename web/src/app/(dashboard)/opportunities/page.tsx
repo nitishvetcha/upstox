@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 // Defect fixed (Phase 29): page was HTTP-fetching itself at localhost:3000 which fails when
 // the dev server runs on a different port. Now calls engines directly as a server component.
 import { getSnapshot } from "@/lib/services/market";
-import { INDICES, INSTRUMENTS } from "@/lib/services/instrumentRegistry";
+import { INDICES, INSTRUMENTS, COMMODITY_IDS, COMMODITIES } from "@/lib/services/instrumentRegistry";
 import { evaluateOptionsOpportunity, validateSpreadIntegrity } from "@/lib/engine/opportunityEngine";
 import { scanStocks } from "@/lib/engine/stockOpportunityEngine";
 import { POSITIONAL_RETIRED_NOTE } from "@/lib/engine/positionalTrend";
@@ -92,15 +92,19 @@ function DecisionFunnel({ options, stockScans }: {
 async function loadData() {
   try {
     const now = new Date();
-    const [snaps, intradayResult, swingResult, ltResult] = await Promise.all([
+    const [snaps, commSnaps, intradayResult, swingResult, ltResult] = await Promise.all([
       Promise.allSettled(INDICES.map((i) => getSnapshot(i))),
+      Promise.allSettled(COMMODITY_IDS.map((c) => getSnapshot(c))),
       scanStocks("intraday", now),
       scanStocks("swing", now),
       scanLongTerm(),
     ]);
-    const indexOptions = snaps.flatMap((r, k) => {
+    const allSnaps = [
+      ...snaps.map((r, k) => ({ r, sym: INSTRUMENTS[INDICES[k]].symbol })),
+      ...commSnaps.map((r, k) => ({ r, sym: COMMODITIES[COMMODITY_IDS[k]].symbol })),
+    ];
+    const indexOptions = allSnaps.flatMap(({ r, sym }) => {
       if (r.status !== "fulfilled") return [];
-      const sym = INSTRUMENTS[INDICES[k]].symbol;
       const primary = evaluateOptionsOpportunity(r.value, sym, now);
       // Also evaluate the counter-direction so users see all three scenarios.
       const counterType: "CE" | "PE" = primary.marketDirection === "BEARISH" ? "CE" : "PE";
@@ -108,8 +112,8 @@ async function loadData() {
       counter.isAlternativeScenario = true;
       return [primary, counter];
     });
-    const failedIndices = snaps.flatMap((r, k) =>
-      r.status === "rejected" ? [`${INSTRUMENTS[INDICES[k]].symbol}: ${(r.reason as Error)?.message ?? "failed"}`] : [],
+    const failedIndices = allSnaps.flatMap(({ r, sym }) =>
+      r.status === "rejected" ? [`${sym}: ${(r.reason as Error)?.message ?? "failed"}`] : [],
     );
     return { indexOptions, failedIndices, intradayResult, swingResult, ltResult, now };
   } catch (e) {
@@ -280,8 +284,8 @@ function GradeChip({ grade }: { grade: OpportunityGrade | undefined }) {
     grade === "A+" || grade === "A" ? tw.pill("green")
     : grade === "B" ? tw.pill("sky")
     : grade === "C" ? tw.pill("amber")
-    : tw.pill("zinc") + " line-through opacity-60";
-  return <span className={cls}>grade {grade}</span>;
+    : tw.pill("zinc");
+  return <span className={cls}>{grade === "REJECT" ? "REJECTED" : `grade ${grade}`}</span>;
 }
 
 function Cell({ label, value, tone, sub }: { label: string; value: string; tone?: string; sub?: string }) {
@@ -717,12 +721,31 @@ function OptionRecCard({ contract, snapshotSource, lotSize, rank, daysLeft, scor
           <span className="ml-2 text-xs text-zinc-500">expiry {contract.expiry ?? "—"}{daysLeft != null ? ` (${daysLeft}d)` : ""}</span>
         </div>
         <div className="flex flex-wrap gap-1.5 items-center">
+          {contract.contractRole === "ATM" && (
+            <span className="rounded bg-sky-950/80 border border-sky-500/80 px-2 py-0.5 text-[10px] font-bold text-sky-300 shadow-sm" title="At-The-Money contract (closest strike to spot)">
+              ATM STRIKE
+            </span>
+          )}
+          {contract.contractRole === "ITM_1" && (
+            <span className="rounded bg-emerald-950/80 border border-emerald-500/80 px-2 py-0.5 text-[10px] font-bold text-emerald-300 shadow-sm" title="One strike In-The-Money (higher delta, reduced time decay)">
+              1-ITM STRIKE
+            </span>
+          )}
+          {contract.contractRole === "OTM_1" && (
+            <span className="rounded bg-amber-950/80 border border-amber-500/80 px-2 py-0.5 text-[10px] font-bold text-amber-300 shadow-sm" title="One strike Out-Of-The-Money (gamma leverage, lower premium)">
+              1-OTM STRIKE
+            </span>
+          )}
           <span className={tw.pill("zinc")}>INTRADAY (2–4h)</span>
           <span className={actionable ? (isBullish ? tw.pill("green") : tw.pill("red")) : tw.pill("zinc")}>{stratLabel}</span>
           <GradeChip grade={grade} />
           {contract.contractPriceQuality === "CONTRACT_PRICE_LIVE" && <span className={tw.pill("sky")}>LIVE price</span>}
           {contract.contractPriceQuality !== "CONTRACT_PRICE_LIVE" && (
-            <span className={tw.pill("amber")}>{contract.contractPriceQuality?.replace("CONTRACT_PRICE_", "") ?? "PRICE?"}</span>
+            <span className={tw.pill(contract.contractPriceQuality ? "amber" : "zinc")}>
+              {contract.contractPriceQuality
+                ? contract.contractPriceQuality.replace("CONTRACT_PRICE_", "")
+                : (contract.instrumentKey?.includes("MOCK") ? "SIMULATED" : "UNVERIFIED")}
+            </span>
           )}
           {contract.isZeroDte && <span className={tw.pill("amber")}>0-DTE</span>}
           {contract.afternoonThetaGuard && <span className={tw.pill("red")}>THETA GUARD</span>}
@@ -1076,7 +1099,14 @@ function OptionsIndexSection({ result, altResult, now, scoreBands }: { result: O
     <div className="rounded-xl border border-zinc-700 bg-zinc-900/50 p-4">
       {/* Index header */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <h3 className="font-bold text-lg text-zinc-100">{result.underlying}</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-bold text-lg text-zinc-100">{result.underlying}</h3>
+          {result.underlying === "CRUDEOIL" || result.underlying === "NATURALGAS" ? (
+            <span className={tw.pill("amber")}>MCX COMMODITY</span>
+          ) : (
+            <span className={tw.pill("zinc")}>NSE/BSE INDEX</span>
+          )}
+        </div>
         <div className="flex flex-wrap gap-1.5">
           <span className={`${tw.pill("zinc")} ${statusColor} !border-current`}>
             {rec === "NO_TRADE" ? "NO TRADE" : rec.replace("_", " ")}
@@ -1342,7 +1372,13 @@ export default async function OpportunitiesPage() {
     }
   }
   const altByUnderlying = new Map(rawIndexOptions.filter((o) => o.isAlternativeScenario).map((o) => [o.underlying, o]));
-  const indexOptions = Array.from(primaryByUnderlying.values()).sort((a, b) => (isPrimary(a) ? 0 : 1) - (isPrimary(b) ? 0 : 1));
+  const indexOptions = Array.from(primaryByUnderlying.values()).sort((a, b) => {
+    const aActionable = a.topOpportunities.some((c) => c.grade !== "REJECT" && c.grade !== "C");
+    const bActionable = b.topOpportunities.some((c) => c.grade !== "REJECT" && c.grade !== "C");
+    if (aActionable && !bActionable) return -1;
+    if (!aActionable && bActionable) return 1;
+    return (isPrimary(a) ? 0 : 1) - (isPrimary(b) ? 0 : 1);
+  });
 
   // REJECT and observation-only Grade C candidates remain available in the diagnostics section,
   // but must never be presented in the primary recommendation lanes.
@@ -1438,13 +1474,13 @@ export default async function OpportunitiesPage() {
             <BarChart3 size={18} className="text-sky-400" />
             <span>TradingView Live Terminal</span>
             <span className="rounded bg-sky-950/60 border border-sky-800/50 px-2 py-0.5 text-[11px] font-medium text-sky-400">
-              NSE Live Charts
+              NSE / BSE / MCX Live Charts
             </span>
           </div>
           <span className="text-xs text-zinc-400 group-open:rotate-180 transition-transform">▼</span>
         </summary>
         <div className="mt-4">
-          <TradingViewChart symbol="NIFTY" timeframe="15" height={440} />
+          <TradingViewChart symbol="NIFTY" timeframe="15" height={440} showInstrumentSelector={true} />
         </div>
       </details>
 
@@ -1566,15 +1602,15 @@ export default async function OpportunitiesPage() {
       </Section>
 
       {/* ── B. OPTIONS RECOMMENDATIONS ────────────────────────────────── */}
-      <Section id="sec-options" title="B. Options Recommendations" tone="text-zinc-100">
+      <Section id="sec-options" title="B. Options Recommendations (Indices &amp; Commodities)" tone="text-zinc-100">
         <SafetyNotice />
         <div className="mt-2 mb-3 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs">
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className={tw.pill("zinc")}>HOLDING HORIZON: INTRADAY TACTICAL</span>
-            <span className="font-semibold text-zinc-200">2–4 Hour Horizon (Exit before 15:15 IST)</span>
+            <span className="font-semibold text-zinc-200">2–4 Hour Horizon (Exit before session close: 15:15 IST Equity / 23:15 IST MCX)</span>
           </div>
           <p className="text-zinc-400">
-            Option targets and stops are calibrated to intraday delta expansion and expected session moves. They are <strong>NOT overnight expiry holds</strong>. Exit on Target/Stop hit or square off before the close of the trading session.
+            Option targets and stops are calibrated to intraday delta expansion and expected session moves. They are <strong>NOT overnight expiry holds</strong>. Exit on Target/Stop hit or square off before the close of the trading session (15:15 IST for NSE/BSE Equity, 23:15 IST for MCX Commodities).
           </p>
         </div>
         <p className="mt-1 mb-4 text-xs text-zinc-500">

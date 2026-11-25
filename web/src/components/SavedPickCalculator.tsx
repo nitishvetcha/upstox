@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -25,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { analyzeSavedPick } from "@/lib/savedPickAnalytics";
+import type { SavedPick, PickSource } from "@/lib/savedPicks";
 export type { CalculatorPick } from "./savedPickUtils";
 export { defaultLotSize } from "./savedPickUtils";
 import { defaultLotSize } from "./savedPickUtils";
@@ -245,12 +247,16 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
           id: pick.id,
           savedAt: new Date().toISOString(),
           instrument: pick.instrument,
-          instrumentType: pick.instrumentType as any,
-          direction: pick.direction as any,
+          instrumentType: (pick.instrumentType === "STOCK"
+            ? "STOCK"
+            : pick.instrument.toUpperCase().includes("NIFTY")
+            ? "INDEX_OPTION"
+            : "STOCK_OPTION") as SavedPick["instrumentType"],
+          direction: (pick.direction === "SHORT" ? "SHORT" : "LONG") as "LONG" | "SHORT",
           entry,
           stopLoss: stop,
           targets: [t1, t2],
-          source: (pick.source as any) ?? "RESEARCH",
+          source: (pick.source === "LIVE" ? "LIVE" : "RESEARCH") as PickSource,
           validation: "NOT_VALIDATED",
         },
         { livePrice: currentLtp }
@@ -915,7 +921,7 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
           <div className="rounded border border-emerald-900/40 bg-zinc-950/80 p-2.5">
             <div className="flex items-center gap-1.5 font-semibold text-emerald-300">
               <CheckCircle2 size={13} className="text-emerald-400" />
-              <span>Why "NOT VALIDATED"?</span>
+              <span>Why &quot;NOT VALIDATED&quot;?</span>
             </div>
             <div className="mt-1 text-[11px] text-zinc-400 leading-relaxed">
               This setup is an algorithmic candidate. Quantitative models require <span className="text-emerald-300 font-semibold">≥30 forward paper trades</span> in the Journal to establish statistical proof (p &lt; 0.05). This prevents false profit promises.
@@ -936,18 +942,18 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <a
+          <Link
             href="/opportunity-journal"
             className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:border-zinc-500"
           >
             Track in Journal →
-          </a>
-          <a
+          </Link>
+          <Link
             href="/backtest"
             className="rounded border border-sky-800 bg-sky-950/60 px-3 py-1 text-xs font-medium text-sky-200 hover:bg-sky-900"
           >
             Walk-Forward Backtest →
-          </a>
+          </Link>
         </div>
       </div>
     </div>

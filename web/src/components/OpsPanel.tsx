@@ -9,6 +9,7 @@ import { MIN_SESSIONS } from "@/lib/optionsAudit";
 import { freshnessDisplayLabel } from "@/lib/freshnessLabel";
 import { auditReport } from "@/lib/optionsAuditReport";
 import { collectionAgeDisplay } from "@/lib/ops/collectionAge";
+import { isCommodityId } from "@/lib/services/instrumentRegistry";
 
 export const VERDICT_STATUS: Record<string, Status> = {
   DATA_TRUSTED: "ok", PRICES_TRUSTED_IV_UNVERIFIED: "warn", DATA_NOT_TRUSTED: "error", INSUFFICIENT: "info", // pending evidence, not a failure
@@ -61,9 +62,27 @@ export async function OpsPanel({ now }: { now: number }) {
           {analyses.map((a) => (
             <div key={a.snapshot.index} className="flex flex-wrap items-center gap-1.5 text-xs">
               <span className="w-24 shrink-0 font-semibold text-zinc-300">{a.snapshot.name}</span>
-              {Object.entries(a.snapshot.sources).map(([k, x]) => (
-                <StatusPill key={k} status={SOURCE_STATUS[x.source] ?? "unknown"} title={`fetched ${fmtIstTs(x.fetchedAt)}`}>{k}: {freshnessDisplayLabel(x.source)}</StatusPill>
-              ))}
+              {Object.entries(a.snapshot.sources).map(([k, x]) => {
+                const isComm = isCommodityId(a.snapshot.index);
+                if (isComm && k === "breadth") {
+                  return (
+                    <StatusPill key={k} status="info" title="Commodities trade on physical contracts and do not have equity constituent breadth">
+                      breadth: N/A
+                    </StatusPill>
+                  );
+                }
+                const isWarmup = k === "technical" && x.source === "UNAVAILABLE" && (a.snapshot.technicalReasonCode === "NO_INTRADAY_CANDLES" || a.snapshot.technicalReasonCode === "PRE_OPEN");
+                const pillStatus = isWarmup ? "info" : (SOURCE_STATUS[x.source] ?? "unknown");
+                const displayLabel = isWarmup ? "WARMING UP" : freshnessDisplayLabel(x.source);
+                const titleText = isWarmup
+                  ? "Market open: waiting for first completed 15m candle (09:15–09:30 IST). Indicators become LIVE at 09:30."
+                  : (a.snapshot.technicalReason && k === "technical" ? `${a.snapshot.technicalReason} · fetched ${fmtIstTs(x.fetchedAt)}` : `fetched ${fmtIstTs(x.fetchedAt)}`);
+                return (
+                  <StatusPill key={k} status={pillStatus} title={titleText}>
+                    {k}: {displayLabel}
+                  </StatusPill>
+                );
+              })}
             </div>
           ))}
         </div>

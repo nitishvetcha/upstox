@@ -5,8 +5,8 @@ import { requireOperator } from "../../../../lib/operatorSession.ts";
 import { loadPicks } from "../../../../lib/savedPicks.ts";
 import { resolveSymbol, stockQuote } from "../../../../lib/services/stockService.ts";
 import { withFallback } from "../../../../lib/services/market.ts";
-import { isIndexId } from "../../../../lib/services/instrumentRegistry.ts";
-import type { IndexId } from "../../../../lib/types.ts";
+import { isUnderlyingId } from "../../../../lib/services/instrumentRegistry.ts";
+import type { UnderlyingId } from "../../../../lib/types.ts";
 
 function picksFile(): string {
   return process.env.SAVED_PICKS_FILE || path.join(process.cwd(), ".data", "saved-picks", "picks.json");
@@ -55,8 +55,8 @@ export async function GET(req: Request) {
             const strike = parseFloat(match[3]);
             const optType = match[4].toUpperCase();
 
-            if (isIndexId(rawIndex)) {
-              const { data } = await withFallback((p) => p.getOptionChain(rawIndex as IndexId, expiry));
+            if (isUnderlyingId(rawIndex)) {
+              const { data } = await withFallback((p) => p.getOptionChain(rawIndex, expiry));
               const row = data?.rows?.find((r) => Math.abs(r.strike - strike) < 0.5);
               if (row) {
                 const opt = optType === "CE" ? row.call : row.put;

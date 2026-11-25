@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
-import { fmtIst, marketStatus } from "@/lib/time";
+import { fmtIst, marketStatus, commodityMarketStatus } from "@/lib/time";
 import { Badge, num, signed } from "./ui";
 import { dataAge } from "./dataAgeUtils";
 import { StreamStatusPill } from "./StreamStatusPill";
@@ -40,7 +40,22 @@ export function TopBar({
     return () => clearInterval(clock);
   }, []);
 
-  const status = now ? marketStatus(now) : null;
+  const eqStatus = now ? marketStatus(now) : null;
+  const commStatus = now ? commodityMarketStatus(now) : null;
+
+  const renderMarketBadge = () => {
+    if (!now) return null;
+    if (eqStatus === "OPEN" && commStatus === "OPEN") {
+      return <Badge tone="neutral">MARKET OPEN (EQUITY + MCX)</Badge>;
+    }
+    if (eqStatus === "OPEN") {
+      return <Badge tone="neutral">MARKET OPEN (EQUITY)</Badge>;
+    }
+    if (commStatus === "OPEN") {
+      return <Badge tone="neutral">MCX OPEN (17:00–23:30)</Badge>;
+    }
+    return <Badge tone="warn">MARKET CLOSED</Badge>;
+  };
 
   return (
     <header className="sticky top-0 z-30 border-b border-zinc-800/80 bg-zinc-950/90 px-4 py-2.5 text-xs backdrop-blur-xl md:px-6">
@@ -63,7 +78,7 @@ export function TopBar({
       })}
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-zinc-800/60 pt-2 text-zinc-400">
-        {status && <Badge tone="neutral">MARKET {status}</Badge>}
+        {renderMarketBadge()}
         <span className="font-mono font-semibold tabular-nums text-zinc-300">{now ? `${fmtIst(now)} IST` : "--:--:-- IST"}</span>
         <span className="flex items-center gap-1" title={`Data fetched at ${fmtIst(generatedAt)} IST`}>
           <RefreshCw size={12} aria-hidden /> {fmtIst(generatedAt)}

@@ -1,5 +1,7 @@
 // The only place Upstox instrument keys live. Update here if Upstox renames an instrument.
-import type { IndexId } from "../types.ts";
+import type { IndexId, CommodityId, UnderlyingId } from "../types.ts";
+
+export type { CommodityId, UnderlyingId };
 
 export interface Instrument {
   id: IndexId;
@@ -21,4 +23,72 @@ export const INDICES = Object.keys(INSTRUMENTS) as IndexId[];
 
 export function isIndexId(v: string): v is IndexId {
   return v in INSTRUMENTS;
+}
+
+// -----------------------------------------------------------------------------
+// MCX Commodity Instruments (Crude Oil, Natural Gas)
+// -----------------------------------------------------------------------------
+
+export interface CommodityInstrument {
+  id: CommodityId;
+  symbol: string;
+  name: string;
+  underlyingKey: string;
+  lotSize: number;
+  strikeStep: number;
+  segment: "COMMODITY";
+  exchange: "MCX";
+}
+
+export const COMMODITIES: Record<CommodityId, CommodityInstrument> = {
+  crudeoil: {
+    id: "crudeoil",
+    symbol: "CRUDEOIL",
+    name: "CRUDE OIL",
+    underlyingKey: process.env.MCX_CRUDEOIL_KEY || "MCX_FO|576264", // Active Dec 2026 Crude Oil Futures
+    lotSize: 100, // 100 bbl
+    strikeStep: 50, // ₹50 step
+    segment: "COMMODITY",
+    exchange: "MCX",
+  },
+  naturalgas: {
+    id: "naturalgas",
+    symbol: "NATURALGAS",
+    name: "NATURAL GAS",
+    underlyingKey: process.env.MCX_NATURALGAS_KEY || "MCX_FO|578249", // Active Dec 2026 Natural Gas Futures
+    lotSize: 1250, // 1,250 mmBtu
+    strikeStep: 5, // ₹5 step
+    segment: "COMMODITY",
+    exchange: "MCX",
+  },
+};
+
+export const COMMODITY_IDS = Object.keys(COMMODITIES) as CommodityId[];
+
+export function isCommodityId(v: string): v is CommodityId {
+  return v in COMMODITIES;
+}
+
+export type SupportedUnderlying = UnderlyingId;
+export const ALL_UNDERLYINGS: UnderlyingId[] = [...INDICES, ...COMMODITY_IDS];
+
+export function isUnderlyingId(v: string): v is UnderlyingId {
+  return isIndexId(v) || isCommodityId(v);
+}
+
+export function getUnderlyingInstrument(v: UnderlyingId | string): Instrument | CommodityInstrument | undefined {
+  if (isIndexId(v)) return INSTRUMENTS[v];
+  if (isCommodityId(v)) return COMMODITIES[v];
+  return undefined;
+}
+
+export function getInstrumentBySymbol(symbol: string): Instrument | CommodityInstrument | undefined {
+  const upper = symbol.toUpperCase();
+  for (const inst of Object.values(INSTRUMENTS)) {
+    if (inst.symbol.toUpperCase() === upper) return inst;
+  }
+  for (const comm of Object.values(COMMODITIES)) {
+    if (comm.symbol.toUpperCase() === upper) return comm;
+  }
+  return undefined;
 }

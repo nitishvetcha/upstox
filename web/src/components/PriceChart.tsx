@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "./ui";
-import { INDICES as INDEX_IDS, INSTRUMENTS } from "@/lib/services/instrumentRegistry";
+import { INDICES as INDEX_IDS, INSTRUMENTS, ALL_UNDERLYINGS, getUnderlyingInstrument } from "@/lib/services/instrumentRegistry";
+import type { UnderlyingId } from "@/lib/types";
 import { CHART_TIMEFRAMES } from "@/lib/uiConfig";
 import { hasAnyIndicator, indicatorGroups, statusBadge, type TechnicalPayload } from "@/lib/technicalDisplay";
 import { TradingViewChart } from "./TradingViewChart";
@@ -14,8 +15,8 @@ type Point = { t: string; close: number; ema9: number | null; ema21: number | nu
 type Resp = TechnicalPayload & { series: Point[]; error?: string };
 const BADGE_TONE = { ok: "text-emerald-400 border-emerald-800", warn: "text-amber-400 border-amber-800", bad: "text-red-400 border-red-800" } as const;
 
-// Index list comes from the instrument registry (single source of truth), not typed here.
-const INDICES = INDEX_IDS.map((id) => [id, INSTRUMENTS[id].name] as const);
+// Single source of truth from instrument registry for indices and commodities.
+const UNDERLYINGS = ALL_UNDERLYINGS.map((id) => [id, getUnderlyingInstrument(id)?.name ?? id.toUpperCase()] as const);
 const TFS = CHART_TIMEFRAMES;
 // Validated (dark surface): categorical slots blue / orange / violet; price stays neutral ink.
 const COLORS = { close: "#d4d4d8", ema9: "#3987e5", ema21: "#d95926", vwap: "#9085e9" };
@@ -48,7 +49,7 @@ function Toggle<T extends string>({ value, options, onChange }: { value: T; opti
 
 // Close price with EMA 9 / EMA 21 / VWAP overlays from GET /api/technical/[index] (backend-aggregated; one call per change).
 export function PriceChart() {
-  const [index, setIndex] = useState<(typeof INDICES)[number][0]>("nifty");
+  const [index, setIndex] = useState<(typeof UNDERLYINGS)[number][0]>("nifty");
   const [tf, setTf] = useState<(typeof TFS)[number]>("15m");
   const [data, setData] = useState<Resp | null>(null);
   const [chartMode, setChartMode] = useState<"tradingview" | "recharts">("tradingview");
@@ -104,7 +105,7 @@ export function PriceChart() {
             <span>Indicators View</span>
           </button>
         </div>
-        <Toggle value={index} options={INDICES} onChange={(v) => (setIndex(v), setData(null))} />
+        <Toggle value={index} options={UNDERLYINGS} onChange={(v) => (setIndex(v), setData(null))} />
         <Toggle value={tf} options={TFS.map((t) => [t, t.toUpperCase()] as const)} onChange={(v) => (setTf(v), setData(null))} />
         <a
           href={getTradingViewChartUrl(index, tvInterval)}
@@ -126,7 +127,7 @@ export function PriceChart() {
         <>
           {data && badge && (
             <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-              <span className="font-semibold text-zinc-200">{INSTRUMENTS[index]?.name ?? data.index ?? index.toUpperCase()}</span>
+              <span className="font-semibold text-zinc-200">{getUnderlyingInstrument(index)?.name ?? data.index ?? index.toUpperCase()}</span>
               <span>· {data.timeframe ?? tf} candles</span>
               <span className={`rounded border px-1.5 py-0.5 font-semibold ${BADGE_TONE[badge.tone]}`}>{badge.label}</span>
             </div>

@@ -6,6 +6,7 @@ import { getPaperOpportunity } from "./paperOpportunityStore.ts";
 import {
   addTrackedPick,
   removeTrackedPick,
+  clearAllTrackedPicks,
   listTrackedPicks,
   type TrackedPick,
 } from "./trackedPicksStore.ts";
@@ -37,8 +38,8 @@ export class TelegramBotListener {
   private isPolling = false;
   private pollTimer: NodeJS.Timeout | null = null;
 
-  /** Answers a Telegram callback query with an immediate popup alert. */
-  public async answerCallbackQuery(callbackQueryId: string, text: string): Promise<boolean> {
+  /** Answers a Telegram callback query with an immediate popup alert or toast. */
+  public async answerCallbackQuery(callbackQueryId: string, text: string, showAlert = false): Promise<boolean> {
     const cfg = getNotificationConfig();
     const token = cfg.telegramBotToken;
     if (!token) return false;
@@ -51,7 +52,7 @@ export class TelegramBotListener {
         body: JSON.stringify({
           callback_query_id: callbackQueryId,
           text,
-          show_alert: false,
+          show_alert: showAlert,
         }),
         signal: AbortSignal.timeout(4000),
       });
@@ -65,7 +66,8 @@ export class TelegramBotListener {
   public async handleCallbackQuery(cb: TelegramCallbackQuery): Promise<void> {
     const data = cb.data;
     if (!data) return;
-    const chatId = cb.message?.chat.id ?? cb.from.id;
+    const userId = cb.from.id;
+    const isGroup = cb.message?.chat.id ? Number(cb.message.chat.id) < 0 : false;
 
     if (data.startsWith("track:")) {
       const payload = data.slice(6);
@@ -91,7 +93,7 @@ export class TelegramBotListener {
           target1,
           target2,
           lotSize: underlying.includes("BANK") ? 30 : 65,
-          savedByChatId: cb.from.id,
+          savedByChatId: userId,
         });
       } else {
         // 2. Try resolving from paper opportunity store
@@ -108,7 +110,7 @@ export class TelegramBotListener {
             target2: opp.target2,
             lotSize: opp.underlying.includes("BANK") ? 30 : 65,
             instrumentKey: opp.instrumentKey,
-            savedByChatId: cb.from.id,
+            savedByChatId: userId,
           });
         } else {
           // 3. Fallback: parse format like "NIFTY_24200_CE" or "NIFTY_24200_CE_145_115_195"
@@ -130,15 +132,13 @@ export class TelegramBotListener {
               target1,
               target2,
               lotSize: underlying.includes("BANK") ? 30 : 65,
-              savedByChatId: cb.from.id,
+              savedByChatId: userId,
             });
           }
         }
       }
 
-      await this.answerCallbackQuery(cb.id, "✅ Option added to active tracking!");
-
-      if (createdPick && chatId) {
+      if (createdPick && userId) {
         const tvUrl = getTradingViewChartUrl(createdPick.underlying, "15");
         const text = [
           `🎯 <b>Option Tracked: ${createdPick.underlying} ${createdPick.strike} ${createdPick.optionType}</b>`,
@@ -148,12 +148,13 @@ export class TelegramBotListener {
           `• <b>Target 2:</b> ₹${createdPick.target2.toFixed(1)}`,
           `• <b>Chart:</b> <a href="${tvUrl}">TradingView Live ${createdPick.underlying}</a>`,
           ``,
-          `<i>Live price & risk updates (Hold / Trail / Cut) will post automatically. Tracking ends at 15:15 IST.</i>`,
+          `<i>Live price & risk updates (Hold / Trail / Cut) will post directly here in your private chat. Tracking ends at 15:15 IST.</i>`,
         ].join("\n");
 
-        await sendTelegramMessage(
+        // Send confirmation and card DIRECTLY to the clicking user in private DM (never in the group)
+        const sendResult = await sendTelegramMessage(
           text,
-          { telegramChatId: String(chatId) },
+          { telegramChatId: String(userId) },
           {
             inline_keyboard: [
               [
@@ -161,50 +162,78 @@ export class TelegramBotListener {
                 { text: "📈 TradingView Chart", url: tvUrl },
               ],
               [
-                { text: "📊 All Tracked Picks", callback_data: "cmd:picks" },
+                { text: "📊 My Tracked Picks", callback_data: "cmd:picks" },
               ],
             ],
           },
         );
+
+        if (sendResult.success) {
+          const toastMsg = isGroup
+            ? "✅ Saved! Details sent to your private chat with @Upstox_analyzer_bot."
+            : "✅ Option added to active tracking!";
+          await this.answerCallbackQuery(cb.id, toastMsg, false);
+        } else {
+          // If Telegram rejected DM because user hasn't clicked /start on bot yet, show modal alert
+          await this.answerCallbackQuery(
+            cb.id,
+            "⚠️ Please open @Upstox_analyzer_bot in Telegram and click START first so the bot can send you private tracking alerts!",
+            true, // modal alert dialog
+          );
+        }
+      } else {
+        await this.answerCallbackQuery(cb.id, "⚠️ Could not parse option setup to track.", true);
       }
     } else if (data.startsWith("untrack:")) {
       const targetId = data.slice(8);
-      removeTrackedPick(targetId);
-      await this.answerCallbackQuery(cb.id, "🗑️ Option removed from active tracking.");
-      if (chatId) {
+      removeTrackedPick(targetId, userId);
+      await this.answerCallbackQuery(cb.id, "🗑️ Option removed from your tracked list.", false);
+      if (userId) {
         await sendTelegramMessage(
           `🗑️ <b>Option Tracking Removed:</b> <code>${targetId}</code> is no longer being actively monitored.`,
-          { telegramChatId: String(chatId) },
+          { telegramChatId: String(userId) },
         );
       }
     } else if (data === "cmd:picks") {
-      await this.answerCallbackQuery(cb.id, "📋 Loading active picks...");
-      if (chatId) {
-        await this.handlePicksCommand(chatId);
+      await this.answerCallbackQuery(cb.id, "📋 Loading your tracked options...", false);
+      if (userId) {
+        await this.handlePicksCommand(userId, userId);
       }
     }
   }
 
-  /** Lists all active tracked picks with live advice. */
-  public async handlePicksCommand(chatId: string | number): Promise<void> {
-    const active = listTrackedPicks(true);
+  /** Lists active tracked picks with live advice (filtered by user if requested in private DM). */
+  public async handlePicksCommand(targetChatId: string | number, requestingUserId?: string | number): Promise<void> {
+    const isPrivate = Number(targetChatId) > 0;
+    // In private user chat, filter strictly to that user's saved picks
+    const active = isPrivate && requestingUserId
+      ? listTrackedPicks(true, requestingUserId)
+      : listTrackedPicks(true);
+
     if (active.length === 0) {
-      await sendTelegramMessage(
-        [
-          `📋 <b>Active Tracked Options: None</b>`,
-          ``,
-          `You are not currently tracking any options.`,
-          `Click <b>[📌 Save & Track Option]</b> below any signal alert to start tracking.`,
-        ].join("\n"),
-        { telegramChatId: String(chatId) },
-      );
+      const emptyMsg = isPrivate
+        ? [
+            `📋 <b>Your Active Tracked Options: None</b>`,
+            ``,
+            `You are not currently tracking any options.`,
+            `Click <b>[📌 Save & Track Option]</b> below any signal in the group to track it here.`,
+          ].join("\n")
+        : [
+            `📋 <b>Active Tracked Options: None</b>`,
+            ``,
+            `No options are currently being tracked.`,
+            `Click <b>[📌 Save & Track Option]</b> below any alert to track options.`,
+          ].join("\n");
+
+      await sendTelegramMessage(emptyMsg, { telegramChatId: String(targetChatId) });
       return;
     }
 
-    const lines = [
-      `📋 <b>Active Tracked Options (${active.length}):</b>`,
-      ``,
-    ];
+    const title = isPrivate
+      ? `📋 <b>Your Active Tracked Options (${active.length}):</b>`
+      : `📋 <b>Active Tracked Options (${active.length}):</b>`;
+
+    const lines = [title, ``];
 
     for (const p of active) {
       const pnlSign = (p.lastPnl ?? 0) >= 0 ? "+" : "";
@@ -220,7 +249,7 @@ export class TelegramBotListener {
 
     lines.push(`<i>All intraday option tracking automatically closes at 15:15 IST.</i>`);
 
-    await sendTelegramMessage(lines.join("\n"), { telegramChatId: String(chatId) });
+    await sendTelegramMessage(lines.join("\n"), { telegramChatId: String(targetChatId) });
   }
 
   /** Processes a single Telegram incoming update. */
@@ -239,18 +268,22 @@ export class TelegramBotListener {
       // In Telegram groups, commands may arrive as /command@BotUsername (e.g. /status@Upstox_analyzer_bot)
       const command = rawText.split("@")[0].toLowerCase().trim();
       const chatId = update.message.chat.id;
+      const fromUserId = update.message.from?.id ?? chatId;
 
       if (command === "/picks" || command === "/status") {
-        await this.handlePicksCommand(chatId);
+        await this.handlePicksCommand(chatId, fromUserId);
       } else if (command === "/start" || command === "/help") {
         await sendTelegramMessage(
           [
             `🤖 <b>Upstox Options Terminal Bot</b>`,
             ``,
             `<b>Available Commands:</b>`,
-            `• <code>/picks</code> or <code>/status</code> — View all active tracked option contracts with live P&L and risk advice.`,
-            `• <code>/clear</code> — Remove all active tracked contracts.`,
+            `• <code>/picks</code> or <code>/status</code> — View your active tracked option contracts with live P&L and risk guidance.`,
+            `• <code>/clear</code> — Remove your active tracked contracts.`,
             `• <code>/help</code> — Show this help message.`,
+            ``,
+            `<b>How Tracking Works:</b>`,
+            `When you click <b>[📌 Save & Track Option]</b> on any alert in the group, the option will be privately tracked here in your DM with real-time risk updates (Hold / Trail / Cut)!`,
             ``,
             `<b>Notification Schedule (Mon–Fri):</b>`,
             `• <b>09:35 IST:</b> Opening Range Initial Momentum Scan`,
@@ -261,14 +294,14 @@ export class TelegramBotListener {
           { telegramChatId: String(chatId) },
         );
       } else if (command === "/clear") {
-        const active = listTrackedPicks(true);
-        for (const p of active) {
-          removeTrackedPick(p.id);
-        }
-        await sendTelegramMessage(
-          `🗑️ <b>Cleared:</b> Removed ${active.length} active tracked contract(s).`,
-          { telegramChatId: String(chatId) },
-        );
+        const isPrivate = Number(chatId) > 0;
+        const clearedCount = isPrivate
+          ? clearAllTrackedPicks(fromUserId)
+          : clearAllTrackedPicks();
+        const clearMsg = isPrivate
+          ? `🗑️ <b>Cleared:</b> Removed ${clearedCount} of your active tracked contract(s).`
+          : `🗑️ <b>Cleared:</b> Removed ${clearedCount} active tracked contract(s).`;
+        await sendTelegramMessage(clearMsg, { telegramChatId: String(chatId) });
       }
     }
   }

@@ -17,7 +17,9 @@ import {
   type TrackedPick,
 } from "./trackedPicksStore.ts";
 import { quoteManager } from "./streamingQuoteManager.ts";
-import { sendTelegramMessage } from "./notificationService.ts";
+import { sendTelegramMessage, notifyOpportunitySignal } from "./notificationService.ts";
+import { sessionWindow, istToday, commoditySessionWindow, commodityMarketStatus } from "../time.ts";
+import { COMMODITY_IDS, COMMODITIES, isCommodityId } from "./instrumentRegistry.ts";
 
 export interface ScheduleSlot {
   hour: number;
@@ -41,23 +43,118 @@ export const SCHEDULE_SLOTS: ScheduleSlot[] = [
   { hour: 15, minute: 15, label: "15:15 IST Final Square-Off & Settlement Scan" },
 ];
 
-/** Matches current IST time against the scheduled trading window. */
-export function isScheduledScanTime(now = new Date()): { isScheduled: boolean; label: string } {
+export const COMMODITY_SCHEDULE_SLOTS: ScheduleSlot[] = [
+  { hour: 17, minute: 15, label: "17:15 IST Commodity Evening Opening Scan" },
+  { hour: 17, minute: 45, label: "17:45 IST Commodity Breakout Confirmation Scan" },
+  { hour: 18, minute: 15, label: "18:15 IST European Overlap Scan" },
+  { hour: 18, minute: 45, label: "18:45 IST US Pre-Market Momentum Scan" },
+  { hour: 19, minute: 15, label: "19:15 IST US NYMEX Opening Range Scan" },
+  { hour: 19, minute: 45, label: "19:45 IST US Energy Morning Expansion Scan" },
+  { hour: 20, minute: 15, label: "20:15 IST US Peak Momentum Scan" },
+  { hour: 20, minute: 45, label: "20:45 IST EIA Energy Trend Scan" },
+  { hour: 21, minute: 15, label: "21:15 IST US Midday Volatility Scan" },
+  { hour: 21, minute: 45, label: "21:45 IST Power Hour Continuation Scan" },
+  { hour: 22, minute: 15, label: "22:15 IST Institutional Block Window Scan" },
+  { hour: 22, minute: 45, label: "22:45 IST Late Session Momentum Scan" },
+  { hour: 23, minute: 15, label: "23:15 IST Final Commodity Square-Off & Settlement Scan" },
+];
+
+/** Matches current IST time against the scheduled commodity trading window. */
+export function isScheduledCommodityScanTime(now = new Date()): { isScheduled: boolean; label: string } {
+  const istDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+  const day = istDate.getDay();
+  const isWeekend = day === 0 || day === 6;
+
+  const ymd = istToday(now);
+  const win = commoditySessionWindow(ymd);
+
+  if (!win) {
+    return { isScheduled: false, label: isWeekend ? "WEEKEND" : "MARKET_CLOSED" };
+  }
+
   const istStr = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
   const [hStr, mStr] = istStr.split(":");
   const h = parseInt(hStr, 10);
   const m = parseInt(mStr, 10);
+  const currentMinutes = h * 60 + m;
 
-  const istDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-  const day = istDate.getDay();
-  const isWeekday = day >= 1 && day <= 5; // Monday to Friday
-
-  if (!isWeekday) {
-    return { isScheduled: false, label: "WEEKEND" };
+  if (currentMinutes < win.open || currentMinutes >= win.close) {
+    return { isScheduled: false, label: "OUTSIDE_SCHEDULE" };
   }
 
-  for (const slot of SCHEDULE_SLOTS) {
+  for (const slot of COMMODITY_SCHEDULE_SLOTS) {
     if (h === slot.hour && Math.abs(m - slot.minute) <= 1) {
+      return { isScheduled: true, label: slot.label };
+    }
+  }
+
+  return { isScheduled: false, label: "OUTSIDE_SCHEDULE" };
+}
+
+/** Matches current IST time against the scheduled trading window (Equity + Commodities). */
+export function isScheduledScanTime(now = new Date()): { isScheduled: boolean; label: string } {
+  const istDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+  const day = istDate.getDay();
+  const isWeekend = day === 0 || day === 6;
+
+  const ymd = istToday(now);
+  const win = sessionWindow(ymd);
+
+  if (!win) {
+    // If equity is closed, check if MCX commodity evening session is active
+    const commCheck = isScheduledCommodityScanTime(now);
+    if (commCheck.isScheduled) {
+      return commCheck;
+    }
+    return { isScheduled: false, label: isWeekend ? "WEEKEND" : "MARKET_CLOSED" };
+  }
+
+  const istStr = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
+  const [hStr, mStr] = istStr.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  const currentMinutes = h * 60 + m;
+
+  // Outside active session window
+  if (currentMinutes < win.open || currentMinutes >= win.close) {
+    // Check if commodity evening session is active
+    const commCheck = isScheduledCommodityScanTime(now);
+    if (commCheck.isScheduled) {
+      return commCheck;
+    }
+    return { isScheduled: false, label: "OUTSIDE_SCHEDULE" };
+  }
+
+  // Regular standard daytime session (09:15 - 15:30 IST)
+  if (win.open === 9 * 60 + 15 && win.close === 15 * 60 + 30) {
+    for (const slot of SCHEDULE_SLOTS) {
+      if (h === slot.hour && Math.abs(m - slot.minute) <= 1) {
+        return { isScheduled: true, label: slot.label };
+      }
+    }
+    return { isScheduled: false, label: "OUTSIDE_SCHEDULE" };
+  }
+
+  // Special/Non-standard Session: dynamically generate slots relative to session window
+  const fmt = (min: number) => {
+    const hh = String(Math.floor(min / 60)).padStart(2, "0");
+    const mm = String(min % 60).padStart(2, "0");
+    return `${hh}:${mm} IST`;
+  };
+
+  const specialSlots: { minutes: number; label: string }[] = [];
+  const duration = win.close - win.open;
+
+  if (duration >= 30) {
+    specialSlots.push({ minutes: win.open + 10, label: `${fmt(win.open + 10)} Special Session Initial Scan` });
+    for (let slotMin = win.open + 30; slotMin < win.close - 15; slotMin += 30) {
+      specialSlots.push({ minutes: slotMin, label: `${fmt(slotMin)} Special Session Active Scan` });
+    }
+    specialSlots.push({ minutes: win.close - 15, label: `${fmt(win.close - 15)} Final Square-Off & Settlement Scan` });
+  }
+
+  for (const slot of specialSlots) {
+    if (Math.abs(currentMinutes - slot.minutes) <= 1) {
       return { isScheduled: true, label: slot.label };
     }
   }
@@ -74,28 +171,59 @@ export class MarketScheduleRunner {
    */
   public async executeScan(label: string, now = new Date(), forceOpen = false): Promise<{ runCount: number; errors: string[] }> {
     try {
-      // 1. Run live opportunity discovery across indices and stocks
-      const run = await runLiveOpportunityCollection(
-        () => getSnapshot("nifty", undefined, now).then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "NIFTY", now))),
-        () => getSnapshot("banknifty", undefined, now).then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "BANKNIFTY", now))),
-        () => scanStocks("intraday", now),
-        now,
-        { forceMarketOpen: forceOpen },
-      );
+      let totalGenerated = 0;
+      let totalCreated = 0;
+      const errors: string[] = [];
 
-      // 2. Announce scan completion to Telegram group
+      // 1. Run live opportunity discovery across equity indices and stocks
+      try {
+        const run = await runLiveOpportunityCollection(
+          () => getSnapshot("nifty", undefined, now).then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "NIFTY", now))),
+          () => getSnapshot("banknifty", undefined, now).then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "BANKNIFTY", now))),
+          () => scanStocks("intraday", now),
+          now,
+          { forceMarketOpen: forceOpen },
+        );
+        totalGenerated += run.generated;
+        totalCreated += run.created;
+        errors.push(...run.errors);
+      } catch (e) {
+        errors.push((e as Error).message);
+      }
+
+      // 2. Run live opportunity discovery for MCX Commodities (Crude Oil & Natural Gas)
+      const isCommOpen = commodityMarketStatus(now) === "OPEN" || forceOpen;
+      if (isCommOpen) {
+        for (const commId of COMMODITY_IDS) {
+          try {
+            const snap = await getSnapshot(commId, undefined, now);
+            const opp = evaluateOptionsOpportunity(snap, COMMODITIES[commId].symbol, now);
+            totalGenerated += opp.topOpportunities.length;
+            for (const top of opp.topOpportunities) {
+              if (top.grade === "A" || top.grade === "B") {
+                totalCreated++;
+                await notifyOpportunitySignal(top, { underlying: COMMODITIES[commId].symbol, lotSize: COMMODITIES[commId].lotSize });
+              }
+            }
+          } catch (err) {
+            errors.push(`${commId}: ${(err as Error).message}`);
+          }
+        }
+      }
+
+      // 3. Announce scan completion to Telegram group
       const timestamp = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }) + " IST";
       const summaryText = [
         `📡 <b>Scheduled Market Scan Complete · ${label}</b>`,
         `<b>Time:</b> ${timestamp}`,
-        `• Evaluated: ${run.generated} setups`,
-        `• High-Conviction (Grade A/B): ${run.created} signals`,
-        run.created === 0 ? `<i>No new qualifying setups in this slot. Capital protected.</i>` : `<i>New qualifying setups posted above with [📌 Save & Track Option] button.</i>`,
+        `• Evaluated: ${totalGenerated} setups`,
+        `• High-Conviction (Grade A/B): ${totalCreated} signals`,
+        totalCreated === 0 ? `<i>No new qualifying setups in this slot. Capital protected.</i>` : `<i>New qualifying setups posted above with [📌 Save & Track Option] button.</i>`,
       ].join("\n");
 
       await sendTelegramMessage(summaryText);
 
-      // 3. Broadcast status of any active tracked picks to the group and admin
+      // 4. Broadcast status of any active tracked picks to the group and admin
       const activePicks = listTrackedPicks(true);
       if (activePicks.length > 0) {
         const trackedLines = [
@@ -112,11 +240,11 @@ export class MarketScheduleRunner {
             ``,
           );
         }
-        trackedLines.push(`<i>All tracking automatically closes at 15:15 IST.</i>`);
+        trackedLines.push(`<i>All tracking automatically closes at session cutoff.</i>`);
         await sendTelegramMessage(trackedLines.join("\n"));
       }
 
-      return { runCount: run.created, errors: run.errors };
+      return { runCount: totalCreated, errors };
     } catch (err) {
       return { runCount: 0, errors: [(err as Error).message] };
     }
@@ -129,19 +257,36 @@ export class MarketScheduleRunner {
     const active = listTrackedPicks(true);
     if (active.length === 0) return { monitoredCount: 0 };
 
-    // Check if 15:15 IST intraday cutoff
+    // Check if session intraday cutoff (15 minutes prior to close)
     const istStr = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false });
     const [hStr, mStr] = istStr.split(":");
     const h = parseInt(hStr, 10);
     const m = parseInt(mStr, 10);
+    const currentMinutes = h * 60 + m;
 
-    if (h > 15 || (h === 15 && m >= 15)) {
-      // 15:15 Square-Off alert
+    const ymd = istToday(now);
+    const win = sessionWindow(ymd);
+    const commWin = commoditySessionWindow(ymd);
+
+    const hasOnlyCommodities = active.every((p) =>
+      p.underlying.toUpperCase().includes("CRUDE") || p.underlying.toUpperCase().includes("NATURAL")
+    );
+
+    // If tracking only commodities, cutoff is MCX close - 15m (23:15 IST)
+    const cutoffMinutes = hasOnlyCommodities
+      ? (commWin ? commWin.close - 15 : 23 * 60 + 15)
+      : (win ? win.close - 15 : 15 * 60 + 15);
+
+    if (currentMinutes >= cutoffMinutes) {
+      // Intraday Square-Off alert
       const archived = archiveIntradayPicks();
       if (archived > 0) {
+        const hh = String(Math.floor(cutoffMinutes / 60)).padStart(2, "0");
+        const mm = String(cutoffMinutes % 60).padStart(2, "0");
+        const cutoffLabel = `${hh}:${mm} IST`;
         await sendTelegramMessage(
           [
-            `⏰ <b>15:15 IST INTRADAY CLOSE — SQUARE OFF ALL POSITIONS</b>`,
+            `⏰ <b>${cutoffLabel} INTRADAY CLOSE — SQUARE OFF ALL POSITIONS</b>`,
             ``,
             `The institutional intraday options window is now closed.`,
             `Archived ${archived} active tracked pick(s). Do not carry naked intraday options overnight.`,
@@ -162,8 +307,14 @@ export class MarketScheduleRunner {
       } else {
         // Fallback: check index snapshot chain for latest option LTP
         try {
-          const idx = pick.underlying.toLowerCase().includes("bank") ? "banknifty" : "nifty";
-          const snap = await getSnapshot(idx, undefined, now);
+          const candidate = pick.underlying.toLowerCase().replace(/\s+/g, "");
+          // Commodity picks must query their own chain.  Falling back to NIFTY
+          // could silently update a CRUDEOIL/NATURALGAS position with an
+          // unrelated premium.
+          const idx = isCommodityId(candidate)
+            ? candidate
+            : pick.underlying.toLowerCase().includes("bank") ? "banknifty" : "nifty";
+          const snap = await getSnapshot(idx as import("../types.ts").IndexId, undefined, now);
           const row = snap.chain?.find((r) => r.strike === pick.strike);
           if (row) {
             const sideQuote = pick.optionType === "CE" ? row.call : row.put;
@@ -195,9 +346,12 @@ export class MarketScheduleRunner {
           `<b>Guidance:</b> ${updated.adviceReason}`,
         ].join("\n");
 
+        // Route the risk alert directly to the user who saved this contract (keeps groups clean)
+        const userTargetConfig = pick.savedByChatId ? { telegramChatId: String(pick.savedByChatId) } : undefined;
+
         await sendTelegramMessage(
           alertText,
-          undefined, // Broadcast to all configured recipients (Admin DM + Group)
+          userTargetConfig,
           {
             inline_keyboard: [
               [{ text: "❌ Remove from Monitor", callback_data: `untrack:${updated.id}` }],

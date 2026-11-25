@@ -29,7 +29,9 @@ export default function MarketHistoryPage() {
   const [results, setResults] = useState<StockInstrument[]>([]);
   const [hist, setHist] = useState<Hist | null>(null);
   const [quote, setQuote] = useState<StockMarketData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const queryKey = `${symbol}:${range}:${interval}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const loading = loadedKey !== queryKey;
   const [loadError, setLoadError] = useState<string | null>(null); // a failed request is not an empty result
 
   useEffect(() => {
@@ -40,8 +42,6 @@ export default function MarketHistoryPage() {
 
   useEffect(() => {
     let live = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for the fetch below
-    setLoading(true);
     // Each response is checked: an error body is not history. A failure clears the loading flag instead of leaving it set.
     const json = async (r: Response) => {
       const body = await r.json().catch(() => null);
@@ -57,17 +57,17 @@ export default function MarketHistoryPage() {
         setHist(h);
         setQuote(s.quote ?? null);
         setLoadError(null);
-        setLoading(false);
+        setLoadedKey(queryKey);
       })
       .catch((e: unknown) => {
         if (!live) return;
         setHist(null);
         setQuote(null);
         setLoadError(e instanceof Error ? e.message : "request failed");
-        setLoading(false);
+        setLoadedKey(queryKey);
       });
     return () => { live = false; };
-  }, [symbol, range, interval]);
+  }, [symbol, range, interval, queryKey]);
 
   const intraday = !["1d", "1w", "1mo"].includes(interval);
   const pts = hist?.points ?? [];

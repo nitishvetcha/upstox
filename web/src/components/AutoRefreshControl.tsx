@@ -1,32 +1,47 @@
 "use client";
 
-import { useEffect, useState, useTransition, useCallback } from "react";
+import { useEffect, useState, useTransition, useCallback, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, Pause, Play } from "lucide-react";
 
 const DEFAULT_INTERVAL_SEC = 900; // default 15 minutes (900 seconds)
 
+function subscribeStorage(callback: () => void) {
+  window.addEventListener("storage", callback);
+  return () => window.removeEventListener("storage", callback);
+}
+
+function getStoredIntervalSnapshot(): number {
+  try {
+    const stored = localStorage.getItem("analyzer_auto_refresh_sec");
+    const parsed = Number(stored);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  } catch {}
+  return DEFAULT_INTERVAL_SEC;
+}
+
+function getServerSnapshot(): number {
+  return DEFAULT_INTERVAL_SEC;
+}
+
 export function AutoRefreshControl() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [intervalSec, setIntervalSec] = useState<number>(DEFAULT_INTERVAL_SEC);
+  const storedInterval = useSyncExternalStore(
+    subscribeStorage,
+    getStoredIntervalSnapshot,
+    getServerSnapshot
+  );
+  const [overrideInterval, setOverrideInterval] = useState<number | null>(null);
+  const intervalSec = overrideInterval ?? storedInterval;
   const [secondsLeft, setSecondsLeft] = useState<number>(DEFAULT_INTERVAL_SEC);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const stored = localStorage.getItem("analyzer_auto_refresh_sec");
-      if (stored) {
-        const parsed = Number(stored);
-        if (Number.isFinite(parsed) && parsed > 0) {
-          setIntervalSec(parsed);
-          setSecondsLeft(parsed);
-        }
-      }
-    } catch {}
-  }, []);
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   const triggerRefresh = useCallback(() => {
     startTransition(() => {
@@ -114,7 +129,7 @@ export function AutoRefreshControl() {
         title={isPaused ? "Resume auto-refresh" : "Pause auto-refresh"}
       >
         {isPaused ? <Play size={10} className="text-amber-400" /> : <Pause size={10} className="text-zinc-500" />}
-        <span>{isPaused ? "Paused" : formatCountdown(secondsLeft)}</span>
+        <span suppressHydrationWarning>{isPaused ? "Paused" : formatCountdown(mounted ? secondsLeft : DEFAULT_INTERVAL_SEC)}</span>
       </button>
 
       <div className="relative h-1.5 w-12 overflow-hidden rounded-full bg-zinc-800">
@@ -125,10 +140,11 @@ export function AutoRefreshControl() {
       </div>
 
       <select
-        value={intervalSec}
+        value={mounted ? intervalSec : DEFAULT_INTERVAL_SEC}
+        suppressHydrationWarning
         onChange={(e) => {
           const val = Number(e.target.value);
-          setIntervalSec(val);
+          setOverrideInterval(val);
           setSecondsLeft(val);
           try {
             localStorage.setItem("analyzer_auto_refresh_sec", String(val));

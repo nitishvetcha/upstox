@@ -2,6 +2,7 @@ import { requireOperator } from "../../../../lib/operatorSession.ts";
 import { NextResponse } from "next/server";
 import { getPaperTradingEngine } from "@/lib/services/paperStore";
 import { circuitBreaker } from "@/lib/services/portfolioCircuitBreaker";
+import { paperPortfolioRiskContext } from "@/lib/services/paperPortfolioRiskContext";
 import { getSnapshot } from "@/lib/services/market";
 import { analyze } from "@/lib/engine/strategy";
 import { updateJournalEntry } from "@/lib/services/recommendationStore";
@@ -15,8 +16,12 @@ export async function POST(request: Request) {
     const index: IndexId = body.index === "banknifty" ? "banknifty" : "nifty";
     const recommendationId: string | undefined = body.recommendationId;
 
-    // Portfolio Circuit Breakers & Heat Stops Gate
-    const cb = circuitBreaker.canOpenTrade();
+    const engine = getPaperTradingEngine();
+    const portfolio = paperPortfolioRiskContext(engine.getTrades());
+    // Portfolio Circuit Breakers & Heat Stops Gate, evaluated from the durable ledger.
+    const cb = circuitBreaker.canOpenTrade(
+      portfolio.openPositionsCount, new Date(), portfolio.unrealizedMtmLoss, index, portfolio.openUnderlyingSymbols,
+    );
     if (!cb.allowed) {
       return NextResponse.json({
         status: "rejected",
@@ -30,7 +35,6 @@ export async function POST(request: Request) {
     const snapshot = await getSnapshot(index);
     const analysis = analyze(snapshot);
 
-    const engine = getPaperTradingEngine();
     const result = engine.processRecommendation(analysis);
 
     // Link paper trade to the originating recommendation if provided

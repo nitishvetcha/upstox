@@ -1,5 +1,6 @@
-import type { IndexId, OptionRow, Quote } from "../types.ts";
-import { tradeFreshnessOf } from "../time.ts";
+import type { IndexId, UnderlyingId, OptionRow, Quote } from "../types.ts";
+import { tradeFreshnessOf, commodityMarketStatus, marketStatus } from "../time.ts";
+import { isCommodityId } from "./instrumentRegistry.ts";
 import { bs } from "./mock.ts";
 import { candidateWindow, CANDIDATE_MAX_STRIKES_ATM } from "./optionCandidateWindow.ts";
 
@@ -71,7 +72,7 @@ export interface OptionPriceVerificationSummary {
 }
 
 type RawQuote = Record<string, unknown>;
-type QuoteFetcher = (keys: string[], index: IndexId) => Promise<Record<string, RawQuote>>;
+type QuoteFetcher = (keys: string[], index: UnderlyingId) => Promise<Record<string, RawQuote>>;
 
 function allContractKeys(rows: OptionRow[]): string[] {
   const keys = new Set<string>();
@@ -123,6 +124,7 @@ function verifyQuote(
   strike: number,
   type: "CE" | "PE",
   expiry?: string,
+  index?: UnderlyingId,
 ): Quote {
   if (!raw) return {
     ...q,
@@ -176,7 +178,9 @@ function verifyQuote(
     greeksProvenance: q.delta === null ? "UNAVAILABLE" : "VENDOR_REPORTED_UNVERIFIED",
   };
 
-  const freshness = tradeFreshnessOf(lastTradeTime, now);
+  const isComm = index && isCommodityId(index);
+  const mktStatus = isComm ? commodityMarketStatus(now) : marketStatus(now);
+  const freshness = tradeFreshnessOf(lastTradeTime, now, 1, mktStatus);
   const discrepancy = Math.abs(q.ltp - quoteLtp);
   const consistent = optionPricesConsistent(q.ltp, quoteLtp);
   const quality: ContractPriceQuality = !consistent
@@ -227,7 +231,7 @@ function safeError(error: unknown): string {
 export async function verifyEvaluationOptionPrices(
   rows: OptionRow[],
   spot: number,
-  index: IndexId,
+  index: UnderlyingId,
   now: Date,
   fetchQuotes: QuoteFetcher,
   maxStrikesAtm = CANDIDATE_MAX_STRIKES_ATM,
@@ -259,10 +263,10 @@ export async function verifyEvaluationOptionPrices(
   const verifiedRows = rows.map((row) => ({
     ...row,
     call: row.call.instrumentKey && requested.has(row.call.instrumentKey)
-      ? verifyQuote(row.call, quotes.get(row.call.instrumentKey), now, spot, row.strike, "CE", expiry)
+      ? verifyQuote(row.call, quotes.get(row.call.instrumentKey), now, spot, row.strike, "CE", expiry, index)
       : row.call,
     put: row.put.instrumentKey && requested.has(row.put.instrumentKey)
-      ? verifyQuote(row.put, quotes.get(row.put.instrumentKey), now, spot, row.strike, "PE", expiry)
+      ? verifyQuote(row.put, quotes.get(row.put.instrumentKey), now, spot, row.strike, "PE", expiry, index)
       : row.put,
   }));
   const verified = verifiedRows.flatMap((row) => [row.call, row.put]).filter((q) => q.instrumentKey && requested.has(q.instrumentKey));

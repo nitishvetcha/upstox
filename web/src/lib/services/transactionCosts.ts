@@ -1,7 +1,10 @@
-// Statutory + broker costs for NSE index OPTIONS (per executed order leg), configurable. Kept separate from
+// Statutory + broker costs for NSE/BSE/MCX index & commodity OPTIONS (per executed order leg), configurable. Kept separate from
 // market movement and slippage. Rates reflect verified circulars and published broker schedules.
 // NSE Circular NSE/FA/73061 (dated February 27, 2026, effective March 1, 2026).
+// MCX Circular MCX/TRD/678/2024 & CTT schedule (Finance Act).
 // Finance Act STT schedule (effective April 1, 2026).
+
+import type { UnderlyingId } from "../types.ts";
 
 export type UpstoxAccountPlan = "BASIC" | "PLUS" | "UNKNOWN";
 export type PlanStatus = "CONFIRMED" | "OWNER_CONFIRMATION_REQUIRED" | "CONSERVATIVE_RESEARCH_FALLBACK";
@@ -224,5 +227,132 @@ export function costsFor(
   return {
     ...parts,
     totalCosts: r2(Object.values(parts).reduce((a, b) => a + b, 0)),
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Exchange Profiles & Asset-Specific Statutory Cost Models (NSE, BSE, MCX)
+// -----------------------------------------------------------------------------
+
+export type ExchangeId = "NSE_FO" | "BSE_FO" | "MCX_FO";
+export type StatutoryTaxType = "STT" | "CTT";
+
+export interface ExchangeTradingHours {
+  regular: { open: string; close: string }; // e.g. "09:15" to "15:30" or "09:00" to "17:00"
+  eveningSession?: { open: string; close: string }; // e.g. "17:00" to "23:30"
+}
+
+export interface ExchangeProfile {
+  exchangeId: ExchangeId;
+  name: string;
+  segment: "EQUITY_DERIVATIVES" | "COMMODITY_DERIVATIVES";
+  tradingHours: ExchangeTradingHours;
+  autoSquareOffTime: string; // e.g. "15:15" for NSE/BSE, "23:15" for MCX
+  taxType: StatutoryTaxType;
+  taxRate: number; // STT 0.15% (NSE/BSE) or CTT 0.125% (MCX) on sell turnover
+  exchangeTxnRate: number; // 0.03553% for NSE, 0.0375% for BSE, 0.05% for MCX
+  sebiRate: number; // ₹10/cr
+  stampDutyRate: number; // 0.003% on buy turnover
+  gstRate: number; // 18% on (brokerage + exchange + sebi)
+  defaultBrokeragePerOrder: number;
+  tickSize: number;
+  defaultLotSize: number;
+}
+
+export const NSE_FO_PROFILE: ExchangeProfile = {
+  exchangeId: "NSE_FO",
+  name: "National Stock Exchange - Equity Derivatives",
+  segment: "EQUITY_DERIVATIVES",
+  tradingHours: { regular: { open: "09:15", close: "15:30" } },
+  autoSquareOffTime: "15:15",
+  taxType: "STT",
+  taxRate: 0.0015, // 0.15% on sell-side premium turnover
+  exchangeTxnRate: 0.0003553, // ₹3,553.00/cr (NSE Circular NSE/FA/73061)
+  sebiRate: 0.000001, // ₹10/cr
+  stampDutyRate: 0.00003, // 0.003% on buy-side premium
+  gstRate: 0.18,
+  defaultBrokeragePerOrder: 30, // conservative fallback
+  tickSize: 0.05,
+  defaultLotSize: 65,
+};
+
+export const BSE_FO_PROFILE: ExchangeProfile = {
+  exchangeId: "BSE_FO",
+  name: "Bombay Stock Exchange - Equity Derivatives",
+  segment: "EQUITY_DERIVATIVES",
+  tradingHours: { regular: { open: "09:15", close: "15:30" } },
+  autoSquareOffTime: "15:15",
+  taxType: "STT",
+  taxRate: 0.0015,
+  exchangeTxnRate: 0.000375, // 0.0375%
+  sebiRate: 0.000001,
+  stampDutyRate: 0.00003,
+  gstRate: 0.18,
+  defaultBrokeragePerOrder: 30,
+  tickSize: 0.05,
+  defaultLotSize: 10,
+};
+
+export const MCX_FO_PROFILE: ExchangeProfile = {
+  exchangeId: "MCX_FO",
+  name: "Multi Commodity Exchange - Commodity Options",
+  segment: "COMMODITY_DERIVATIVES",
+  tradingHours: {
+    regular: { open: "09:00", close: "17:00" },
+    eveningSession: { open: "17:00", close: "23:30" },
+  },
+  autoSquareOffTime: "23:15", // RMS cutoff 15 min prior to 23:30 evening close
+  taxType: "CTT", // Commodity Transaction Tax
+  taxRate: 0.00125, // 0.125% on sell-side premium turnover (Finance Act)
+  exchangeTxnRate: 0.0005, // 0.05% (₹5,000/cr on option premium turnover)
+  sebiRate: 0.000001, // ₹10/cr
+  stampDutyRate: 0.00003, // 0.003% on buy-side premium
+  gstRate: 0.18,
+  defaultBrokeragePerOrder: 30,
+  tickSize: 1.0, // Crude Oil tick size
+  defaultLotSize: 100, // Crude Oil lot size
+};
+
+export const EXCHANGE_PROFILES: Record<ExchangeId, ExchangeProfile> = {
+  NSE_FO: NSE_FO_PROFILE,
+  BSE_FO: BSE_FO_PROFILE,
+  MCX_FO: MCX_FO_PROFILE,
+};
+
+export function getExchangeProfile(underlying: UnderlyingId): ExchangeProfile {
+  if (underlying === "crudeoil" || underlying === "naturalgas") {
+    return MCX_FO_PROFILE;
+  }
+  if (underlying === "sensex" || underlying === "bankex") {
+    return BSE_FO_PROFILE;
+  }
+  return NSE_FO_PROFILE;
+}
+
+export function costsForAsset(
+  fills: Fill[],
+  underlying: UnderlyingId,
+  plan?: UpstoxAccountPlan,
+  orderCountOverride?: number,
+): TradeCosts & { exchange: ExchangeId; taxType: StatutoryTaxType } {
+  const profile = getExchangeProfile(underlying);
+  const resolved = resolveAccountPlan(plan);
+  const cfg: TransactionCostConfig = {
+    version: `${profile.exchangeId.toLowerCase()}-options-2026`,
+    plan: resolved.plan,
+    planStatus: resolved.status,
+    brokeragePerOrder: resolved.brokeragePerOrder,
+    sttRate: profile.taxRate, // stores STT or CTT rate
+    exchangeTxnRate: profile.exchangeTxnRate,
+    gstRate: profile.gstRate,
+    sebiRate: profile.sebiRate,
+    stampDutyRate: profile.stampDutyRate,
+    source: `${profile.name} Statutory Schedule`,
+  };
+  const base = costsFor(fills, cfg, orderCountOverride);
+  return {
+    ...base,
+    exchange: profile.exchangeId,
+    taxType: profile.taxType,
   };
 }

@@ -1,4 +1,6 @@
 export type IndexId = "nifty" | "banknifty" | "finnifty" | "midcpnifty" | "sensex" | "bankex";
+export type CommodityId = "crudeoil" | "naturalgas";
+export type UnderlyingId = IndexId | CommodityId;
 
 // Where a piece of data came from. UNAVAILABLE = not produced yet (e.g. candle indicators before Phase 3).
 export type DataSource = "LIVE" | "MOCK" | "END_OF_DAY" | "STALE" | "UNAVAILABLE";
@@ -114,7 +116,7 @@ export interface Candle {
 }
 
 export interface CandleSeries {
-  index: IndexId;
+  index: UnderlyingId;
   timeframe: Timeframe;
   candles: Candle[]; // oldest first; completed candles only (B5)
   source: SourceInfo;
@@ -226,7 +228,7 @@ export interface NewsEvent {
 }
 
 export interface NewsSentiment {
-  index: IndexId;
+  index: UnderlyingId;
   // MOCK: simulated headlines served in mock mode. Never LIVE, never an input to a live recommendation.
   status: "LIVE" | "AGING" | "STALE" | "UNAVAILABLE" | "MOCK";
   reason: string | null;
@@ -274,7 +276,7 @@ export interface ConstituentQuote {
 }
 
 export interface MarketBreadth {
-  index: IndexId;
+  index: UnderlyingId;
   status: "LIVE" | "PARTIAL" | "END_OF_DAY" | "STALE" | "UNAVAILABLE" | "MOCK";
   advances: number;
   declines: number;
@@ -299,7 +301,7 @@ export interface MarketBreadth {
 // One point-in-time view of an index. Mock and Upstox both produce this shape,
 // so the engine and UI never know which provider they're looking at.
 export interface Snapshot {
-  index: IndexId;
+  index: UnderlyingId;
   name: string;
   spot: number;
   prevClose: number | null;
@@ -323,14 +325,14 @@ export interface Snapshot {
 // --- Provider contract (mock and Upstox implement it) ---
 
 export interface IndexQuote {
-  index: IndexId;
+  index: UnderlyingId;
   spot: number;
   prevClose: number | null;
   source: SourceInfo;
 }
 
 export interface OptionChain {
-  index: IndexId;
+  index: UnderlyingId;
   expiry: string;
   spot: number;
   strikeStep: number;
@@ -352,12 +354,12 @@ export interface Technicals {
 
 export interface MarketDataProvider {
   name: "MOCK" | "UPSTOX";
-  getMarketSnapshot(index: IndexId): Promise<IndexQuote>;
-  getExpiries(index: IndexId): Promise<{ expiries: string[]; source: SourceInfo }>;
-  getOptionChain(index: IndexId, expiry?: string): Promise<OptionChain>;
-  getTechnicals(index: IndexId, timeframe?: Timeframe): Promise<Technicals>;
-  getCandles(index: IndexId, timeframe: Timeframe): Promise<CandleSeries>;
-  getBreadth(index: IndexId): Promise<MarketBreadth>;
+  getMarketSnapshot(index: UnderlyingId): Promise<IndexQuote>;
+  getExpiries(index: UnderlyingId): Promise<{ expiries: string[]; source: SourceInfo }>;
+  getOptionChain(index: UnderlyingId, expiry?: string): Promise<OptionChain>;
+  getTechnicals(index: UnderlyingId, timeframe?: Timeframe): Promise<Technicals>;
+  getCandles(index: UnderlyingId, timeframe: Timeframe): Promise<CandleSeries>;
+  getBreadth(index: UnderlyingId): Promise<MarketBreadth>;
 }
 
 // --- Engine output ---

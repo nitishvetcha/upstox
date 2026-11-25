@@ -26,3 +26,4 @@ snscrape/
 web/.research-data/
 .next/
 .test-data/
+.data/

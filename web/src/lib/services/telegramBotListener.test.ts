@@ -66,11 +66,11 @@ describe("telegramBotListener", () => {
   it("handles /clear text command to purge all tracked options", async () => {
     await telegramBotListener.processUpdate({
       update_id: 104,
-      callback_query: { id: "cq_4", from: { id: 1 }, data: "track:NIFTY_24200_CE" },
+      callback_query: { id: "cq_4", from: { id: 1008179235 }, data: "track:NIFTY_24200_CE" },
     });
     await telegramBotListener.processUpdate({
       update_id: 105,
-      callback_query: { id: "cq_5", from: { id: 1 }, data: "track:BANKNIFTY_51500_CE" },
+      callback_query: { id: "cq_5", from: { id: 1008179235 }, data: "track:BANKNIFTY_51500_CE" },
     });
 
     assert.equal(listTrackedPicks(true).length, 2);
@@ -84,7 +84,59 @@ describe("telegramBotListener", () => {
       },
     });
 
-    assert.equal(listTrackedPicks(true).length, 0);
+    assert.equal(listTrackedPicks(true, 1008179235).length, 0);
+  });
+
+  it("isolates tracked picks between different users in private chats", async () => {
+    // User A (1111) tracks NIFTY
+    await telegramBotListener.processUpdate({
+      update_id: 110,
+      callback_query: {
+        id: "cq_userA",
+        from: { id: 1111, first_name: "Alice" },
+        message: { message_id: 501, chat: { id: -5143464220 } }, // clicked in group
+        data: "track:NIFTY_24300_CE",
+      },
+    });
+
+    // User B (2222) tracks BANKNIFTY
+    await telegramBotListener.processUpdate({
+      update_id: 111,
+      callback_query: {
+        id: "cq_userB",
+        from: { id: 2222, first_name: "Bob" },
+        message: { message_id: 502, chat: { id: -5143464220 } }, // clicked in group
+        data: "track:BANKNIFTY_52000_PE",
+      },
+    });
+
+    // Total picks in system = 2
+    assert.equal(listTrackedPicks(true).length, 2);
+
+    // User A only sees their own pick
+    const userAPicks = listTrackedPicks(true, 1111);
+    assert.equal(userAPicks.length, 1);
+    assert.equal(userAPicks[0].underlying, "NIFTY");
+    assert.equal(userAPicks[0].savedByChatId, 1111);
+
+    // User B only sees their own pick
+    const userBPicks = listTrackedPicks(true, 2222);
+    assert.equal(userBPicks.length, 1);
+    assert.equal(userBPicks[0].underlying, "BANKNIFTY");
+    assert.equal(userBPicks[0].savedByChatId, 2222);
+
+    // If User A runs /clear in their private DM, User B's pick remains safe!
+    await telegramBotListener.processUpdate({
+      update_id: 112,
+      message: {
+        message_id: 503,
+        chat: { id: 1111 },
+        text: "/clear",
+      },
+    });
+
+    assert.equal(listTrackedPicks(true, 1111).length, 0);
+    assert.equal(listTrackedPicks(true, 2222).length, 1); // User B's pick untouched!
   });
 
   it("handles self-contained colon-delimited track: callback with exact entry, stop, and targets", async () => {

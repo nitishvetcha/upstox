@@ -7,9 +7,18 @@ import { Badge, Card, Stat, num, signed } from "./ui";
 
 const na = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? "N/A" : num(v, d));
 
+const UNDERLYING_OPTIONS = [
+  { id: "nifty", label: "NIFTY", tag: "Equity" },
+  { id: "banknifty", label: "BANK NIFTY", tag: "Equity" },
+  { id: "crudeoil", label: "CRUDE OIL", tag: "MCX" },
+  { id: "naturalgas", label: "NATURAL GAS", tag: "MCX" },
+] as const;
+
+type SelectableUnderlying = typeof UNDERLYING_OPTIONS[number]["id"];
+
 // One-click recommendation generator. No polling, no auto-refresh.
 export function RecommendationWidget() {
-  const [index, setIndex] = useState<"nifty" | "banknifty">("nifty");
+  const [index, setIndex] = useState<SelectableUnderlying>("nifty");
   const [loading, setLoading] = useState(false);
   const [rec, setRec] = useState<RecommendationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,14 +79,15 @@ export function RecommendationWidget() {
           <h2 className="mt-1 text-lg font-semibold text-zinc-100">Generate an index recommendation</h2>
           <p className="mt-1 text-sm text-zinc-400">Choose an underlying, then run a fresh manual analysis.</p>
         </div>
-        <div className="flex rounded-xl border border-zinc-800 bg-zinc-950/70 p-1">
-          {(["nifty", "banknifty"] as const).map((id) => (
+        <div className="flex flex-wrap gap-1 rounded-xl border border-zinc-800 bg-zinc-950/70 p-1">
+          {UNDERLYING_OPTIONS.map((opt) => (
             <button
-              key={id}
-              onClick={() => { setIndex(id); setRec(null); setError(null); }}
-              className={`min-h-9 rounded-lg px-3 py-1.5 text-sm font-semibold ${index === id ? "bg-zinc-700 text-white shadow" : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"}`}
+              key={opt.id}
+              onClick={() => { setIndex(opt.id); setRec(null); setError(null); }}
+              className={`min-h-9 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${index === opt.id ? "bg-zinc-700 text-white shadow" : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"}`}
             >
-              {id === "nifty" ? "NIFTY" : "BANK NIFTY"}
+              <span>{opt.label}</span>
+              <span className="ml-1.5 text-[10px] text-zinc-400 font-normal">({opt.tag})</span>
             </button>
           ))}
         </div>

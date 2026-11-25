@@ -1,4 +1,4 @@
-import type { IndexId, StrategyName } from "./types.ts";
+import type { IndexId, UnderlyingId, StrategyName } from "./types.ts";
 import type { RiskAssessment } from "./services/risk/riskTypes.ts";
 import type { RiskConfig } from "./services/risk/riskConfig.ts";
 import type { TradeCosts } from "./services/transactionCosts.ts";
@@ -93,7 +93,7 @@ export interface PaperTradeMonitoring {
 export interface PaperTrade {
   id: string; // UUID / unique string
   status: PaperTradeStatus;
-  index: IndexId;
+  index: UnderlyingId;
   strategy: StrategyName;
   createdAt: string; // ISO
   updatedAt: string; // ISO

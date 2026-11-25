@@ -13,9 +13,12 @@ import { RecommendationJournal } from "@/components/RecommendationJournal";
 import { loadInventories } from "@/lib/research/inventoryStore";
 import { OpsPanel } from "@/components/OpsPanel";
 import { BookOpen, Target } from "lucide-react";
+import { getAuthoritativeRecommendation } from "@/lib/services/authoritativeOpportunity";
+import { AuthoritativeRecommendationHero } from "@/components/AuthoritativeRecommendationHero";
 
 export default async function Dashboard() {
   const { analyses, today, generatedAt } = await getDashboard();
+  const authoritativeBest = await getAuthoritativeRecommendation();
 
   return (
     <div className="mx-auto max-w-[90rem] space-y-6">
@@ -38,8 +41,26 @@ export default async function Dashboard() {
         <div className="mt-5 border-t border-zinc-800 pt-4"><DataStatus snaps={analyses.map((a) => a.snapshot)} refreshedAt={generatedAt} /></div>
       </section>
       <OpsPanel now={Date.parse(generatedAt)} />
+
+      {/* Authoritative Best Opportunity from modern Opportunity Engine */}
+      <AuthoritativeRecommendationHero best={authoritativeBest} />
+
       <StrategyMap />
-      <RecommendationCard a={today} />
+
+      {/* Historical Benchmark Reference (Strategy 11.4) */}
+      <section className="app-surface rounded-2xl border border-zinc-800/80 bg-zinc-950/40 p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+          <div>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Historical Benchmark</span>
+            <h2 className="text-base font-semibold text-zinc-200">Strategy 11.4 Reference (Frozen 2024 Baseline)</h2>
+            <p className="mt-0.5 text-xs text-zinc-400">Preserved byte-for-byte under SHA-256 lock for regression verification. Not the active pick engine.</p>
+          </div>
+          <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs font-mono text-zinc-400">
+            FROZEN BENCHMARK
+          </span>
+        </div>
+        <RecommendationCard a={today} />
+      </section>
       <div className="grid gap-4 lg:grid-cols-2">
         <RiskPanel v={toDashboardView(today, getRiskConfig(), generatedAt)} />
         <DataQualityPanel v={toDashboardView(today, getRiskConfig(), generatedAt)} />

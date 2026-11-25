@@ -1,7 +1,7 @@
 export interface PositionSizeParams {
   type: "OPTION" | "STOCK";
   accountCapital: number;
-  riskPercent?: number; // default 1.5%
+  riskPercent?: number; // default 1.0%
   entry: number;
   stop: number;
   target1: number;
@@ -9,6 +9,7 @@ export interface PositionSizeParams {
   lotSize?: number | null; // e.g. 65 for Nifty, 1 for Stock
   unitPrice?: number | null; // premium or share price
   maxCapitalAllocationPct?: number; // default 50%
+  enforceFullPremiumRisk?: boolean; // if true, sizes strictly against full premium (100% loss worst-case)
 }
 
 export interface PositionSizeResult {
@@ -19,6 +20,8 @@ export interface PositionSizeResult {
   totalRiskPercent: number;
   capitalRequired: number;
   capitalRequiredPercent: number;
+  maxLossRupees?: number;
+  maxLossPerLot?: number;
   target1Profit: number;
   target2Profit: number;
   isCappedByCapital: boolean;
@@ -31,7 +34,7 @@ export function calculatePositionSize(params: PositionSizeParams): PositionSizeR
   const {
     type,
     accountCapital,
-    riskPercent = 1.5,
+    riskPercent = 1.0,
     entry,
     stop,
     target1,
@@ -39,25 +42,58 @@ export function calculatePositionSize(params: PositionSizeParams): PositionSizeR
     lotSize = 1,
     unitPrice,
     maxCapitalAllocationPct = 50,
+    enforceFullPremiumRisk = false,
   } = params;
+
+  // Strict positive finite number assertions
+  if (
+    !Number.isFinite(accountCapital) || accountCapital <= 0 ||
+    !Number.isFinite(entry) || entry <= 0 ||
+    !Number.isFinite(stop) || stop <= 0 ||
+    !Number.isFinite(target1) || target1 <= 0 ||
+    !Number.isFinite(target2) || target2 <= 0 ||
+    (lotSize != null && (!Number.isFinite(lotSize) || lotSize <= 0)) ||
+    (unitPrice != null && (!Number.isFinite(unitPrice) || unitPrice < 0)) ||
+    !Number.isFinite(riskPercent) || riskPercent <= 0 ||
+    !Number.isFinite(maxCapitalAllocationPct) || maxCapitalAllocationPct <= 0
+  ) {
+    return {
+      recommendedLots: 0,
+      recommendedUnits: 0,
+      riskBudget: 0,
+      totalRisk: 0,
+      totalRiskPercent: 0,
+      capitalRequired: 0,
+      capitalRequiredPercent: 0,
+      maxLossRupees: 0,
+      maxLossPerLot: 0,
+      target1Profit: 0,
+      target2Profit: 0,
+      isCappedByCapital: false,
+      isCapitalConstrained: true,
+      minCapitalNeeded: 0,
+      riskWarning: "Invalid price, stop, target, lot size, or capital input; all values must be positive finite numbers.",
+    };
+  }
 
   const validCapital = Math.max(accountCapital, 1000);
   const effectiveLotSize = Math.max(lotSize ?? 1, 1);
   const effectiveUnitPrice = unitPrice != null && unitPrice > 0 ? unitPrice : entry;
-  const riskPerUnit = Math.max(Math.abs(entry - stop), 0.01);
+  const plannedRiskPerUnit = Math.max(Math.abs(entry - stop), 0.01);
   const riskBudget = Math.round(validCapital * (riskPercent / 100) * 100) / 100;
   const maxAllowedCapital = validCapital * (maxCapitalAllocationPct / 100);
 
   if (type === "OPTION") {
-    const riskPerLot = riskPerUnit * effectiveLotSize;
-    const capitalPerLot = effectiveUnitPrice * effectiveLotSize;
+    const plannedRiskPerLot = plannedRiskPerUnit * effectiveLotSize;
+    const worstCaseRiskPerLot = effectiveUnitPrice * effectiveLotSize; // Full 100% premium at risk per lot
+    const effectiveRiskPerLot = enforceFullPremiumRisk ? worstCaseRiskPerLot : plannedRiskPerLot;
 
-    // Strict 1% (or user riskPercent) risk enforcement:
+    // Strict risk budget enforcement:
     // If risk per lot exceeds the entire risk budget, do NOT force 1 lot (which would risk 15%-30% on small accounts).
     // Instead return 0 lots with an explicit capital shortfall calculation.
-    const rawLots = Math.floor(riskBudget / riskPerLot);
+    const rawLots = Math.floor(riskBudget / effectiveRiskPerLot);
     if (rawLots < 1) {
-      const minCapitalNeeded = Math.ceil(riskPerLot / (riskPercent / 100));
+      const minCapitalNeeded = Math.ceil(effectiveRiskPerLot / (riskPercent / 100));
       return {
         recommendedLots: 0,
         recommendedUnits: 0,
@@ -66,12 +102,14 @@ export function calculatePositionSize(params: PositionSizeParams): PositionSizeR
         totalRiskPercent: 0,
         capitalRequired: 0,
         capitalRequiredPercent: 0,
+        maxLossRupees: 0,
+        maxLossPerLot: Math.round(worstCaseRiskPerLot * 100) / 100,
         target1Profit: 0,
         target2Profit: 0,
         isCappedByCapital: false,
         isCapitalConstrained: true,
         minCapitalNeeded,
-        riskWarning: `Account capital (₹${validCapital.toLocaleString("en-IN")}) is insufficient to trade 1 lot within your ${riskPercent}% risk budget (₹${riskBudget.toLocaleString("en-IN")}). Risk per lot is ₹${Math.round(riskPerLot).toLocaleString("en-IN")}. Minimum capital needed: ₹${minCapitalNeeded.toLocaleString("en-IN")}.`,
+        riskWarning: `Account capital (₹${validCapital.toLocaleString("en-IN")}) is insufficient to trade 1 lot within your ${riskPercent}% risk budget (₹${riskBudget.toLocaleString("en-IN")}). Risk per lot is ₹${Math.round(effectiveRiskPerLot).toLocaleString("en-IN")} (worst-case full premium at risk: ₹${Math.round(worstCaseRiskPerLot).toLocaleString("en-IN")}). Minimum capital needed: ₹${minCapitalNeeded.toLocaleString("en-IN")}.`,
       };
     }
 
@@ -79,8 +117,8 @@ export function calculatePositionSize(params: PositionSizeParams): PositionSizeR
     let isCappedByCapital = false;
 
     // Capital allocation guard (e.g. max 50% account capital deployed)
-    if (lots * capitalPerLot > maxAllowedCapital) {
-      const maxCapitalLots = Math.floor(maxAllowedCapital / capitalPerLot);
+    if (lots * worstCaseRiskPerLot > maxAllowedCapital) {
+      const maxCapitalLots = Math.floor(maxAllowedCapital / worstCaseRiskPerLot);
       if (maxCapitalLots >= 1) {
         lots = maxCapitalLots;
         isCappedByCapital = true;
@@ -88,8 +126,8 @@ export function calculatePositionSize(params: PositionSizeParams): PositionSizeR
     }
 
     const totalUnits = lots * effectiveLotSize;
-    const totalRisk = Math.round(lots * riskPerLot * 100) / 100;
-    const capitalRequired = Math.round(lots * capitalPerLot * 100) / 100;
+    const totalRisk = Math.round(lots * plannedRiskPerLot * 100) / 100;
+    const capitalRequired = Math.round(lots * worstCaseRiskPerLot * 100) / 100;
     const target1Profit = Math.round(totalUnits * Math.max(target1 - entry, 0) * 100) / 100;
     const target2Profit = Math.round(totalUnits * Math.max(target2 - entry, 0) * 100) / 100;
 
@@ -101,6 +139,8 @@ export function calculatePositionSize(params: PositionSizeParams): PositionSizeR
       totalRiskPercent: Math.round((totalRisk / validCapital) * 10000) / 100,
       capitalRequired,
       capitalRequiredPercent: Math.round((capitalRequired / validCapital) * 10000) / 100,
+      maxLossRupees: capitalRequired,
+      maxLossPerLot: Math.round(worstCaseRiskPerLot * 100) / 100,
       target1Profit,
       target2Profit,
       isCappedByCapital,
@@ -109,6 +149,7 @@ export function calculatePositionSize(params: PositionSizeParams): PositionSizeR
       riskWarning: null,
     };
   } else {
+    const riskPerUnit = plannedRiskPerUnit;
     // STOCK sizing:
     // If risk per share exceeds the entire risk budget, return 0 shares with capital shortfall details.
     const rawUnits = Math.floor(riskBudget / riskPerUnit);
@@ -122,6 +163,7 @@ export function calculatePositionSize(params: PositionSizeParams): PositionSizeR
         totalRiskPercent: 0,
         capitalRequired: 0,
         capitalRequiredPercent: 0,
+        maxLossRupees: 0,
         target1Profit: 0,
         target2Profit: 0,
         isCappedByCapital: false,

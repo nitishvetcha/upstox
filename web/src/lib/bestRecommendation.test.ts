@@ -29,4 +29,25 @@ describe("authoritative best recommendation", () => {
     assert.equal(result.status, "RECOMMENDATION");
     if (result.status === "RECOMMENDATION") assert.equal(result.candidate.engine, "OPTIONS");
   });
+
+  it("downgrades candidates with Net R:R below 1.5x to watch-only", () => {
+    const candidateBorderline = { ...candidate("A", 85, "OPTIONS"), netRewardToRisk: 1.45 };
+    const candidatePassing = { ...candidate("B", 65, "STOCK_INTRADAY"), netRewardToRisk: 1.6 };
+    const result = selectBestRecommendation([candidateBorderline, candidatePassing]);
+    assert.equal(result.status, "RECOMMENDATION");
+    if (result.status === "RECOMMENDATION") {
+      assert.equal(result.candidate.engine, "STOCK_INTRADAY");
+      assert.equal(result.candidate.grade, "B");
+    }
+    assert.equal(result.watchOnlyCount, 1);
+  });
+
+  it("returns NO_TRADE when all candidates have Net R:R < 1.5x even with high grades", () => {
+    const candidateA = { ...candidate("A+", 95, "OPTIONS"), netRewardToRisk: 1.35 };
+    const candidateB = { ...candidate("A", 80, "OPTIONS"), netRewardToRisk: 1.05 };
+    const result = selectBestRecommendation([candidateA, candidateB]);
+    assert.equal(result.status, "NO_TRADE");
+    assert.equal(result.watchOnlyCount, 2);
+    assert.match(result.reason, /post-tax Net R:R >= 1.5x/);
+  });
 });

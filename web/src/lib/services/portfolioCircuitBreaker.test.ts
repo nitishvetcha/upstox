@@ -105,4 +105,30 @@ describe("portfolioCircuitBreaker", () => {
     assert.equal(state.status, "NORMAL");
     assert.equal(state.isTradeAllowed, true);
   });
+
+  it("trips DAILY_HALT when unrealized MTM loss plus realized loss breaches daily limit", () => {
+    // Realized loss 500, but open positions have 1,600 unrealized MTM loss -> Total 2,100 > 2,000 limit
+    circuitBreaker.recordTradeExit({ tradeId: "t1", realizedPnl: -500 });
+    const state = circuitBreaker.getState(new Date(), 1, 1600);
+    assert.equal(state.status, "DAILY_HALT");
+    assert.equal(state.isTradeAllowed, false);
+    assert.equal(state.totalDailyDrawdown, 2100);
+    assert.equal(state.unrealizedDailyLoss, 1600);
+    assert.ok(state.activeReasons[0].includes("MAX DAILY DRAWDOWN BREACHED"));
+
+    const gate = circuitBreaker.canOpenTrade(1, new Date(), 1600);
+    assert.equal(gate.allowed, false);
+    assert.equal(gate.code, "DAILY_HALT");
+  });
+
+  it("blocks simultaneous open trades in correlated equity indices (NIFTY + BANKNIFTY)", () => {
+    const gate1 = circuitBreaker.canOpenTrade(1, new Date(), 0, "BANKNIFTY", ["NIFTY"]);
+    assert.equal(gate1.allowed, false);
+    assert.equal(gate1.code, "CORRELATED_EXPOSURE_LIMIT");
+    assert.match(gate1.reason || "", /correlated indices/);
+
+    // Uncorrelated trades (e.g. CRUDEOIL with open NIFTY) are allowed
+    const gate2 = circuitBreaker.canOpenTrade(1, new Date(), 0, "CRUDEOIL", ["NIFTY"]);
+    assert.equal(gate2.allowed, true);
+  });
 });

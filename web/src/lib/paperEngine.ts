@@ -1,4 +1,4 @@
-import type { Analysis, DataSource, IndexId, OptionRow, Quote, Snapshot } from "./types.ts";
+import type { Analysis, DataSource, UnderlyingId, OptionRow, Quote, Snapshot } from "./types.ts";
 import type {
   FillPriceSource,
   PaperPortfolioSummary,
@@ -54,7 +54,7 @@ function quoteForLeg(row: OptionRow | undefined, type: "CE" | "PE"): Quote | und
  */
 export function matchLegQuote(
   snapshot: Snapshot,
-  trade: { index: IndexId; expiry: string },
+  trade: { index: UnderlyingId; expiry: string },
   leg: { strike: number; type: "CE" | "PE"; instrumentKey?: string | null },
 ): { quote: Quote | undefined; reason?: string } {
   if (snapshot.index !== trade.index) {
@@ -298,6 +298,30 @@ export class PaperTradingEngine {
     // 2. Status check: MUST be TRADE
     if (analysis.status !== "TRADE" || !plan) {
       return { created: false, trade: null, reason: `RECOMMENDATION_NOT_TRADE: Status is ${analysis.status}` };
+    }
+
+    // Production paper trades are execution-quality research, not optimistic
+    // backtests. Refuse a plan when an executable two-sided quote or its
+    // essential option metadata is absent. Mock-enabled engines deliberately
+    // retain their fixture-friendly behavior for deterministic simulations.
+    if (!this.allowMock) {
+      const msToExpiry = expiryInstant(snapshot.expiry).getTime() - now.getTime();
+      if (msToExpiry <= 60 * 60 * 1000) {
+        return { created: false, trade: null, reason: "EXECUTION_QUALITY_REJECTED: less than 60 minutes remain to expiry" };
+      }
+      for (const leg of plan.legs) {
+        const quote = quoteForLeg(rowForStrike(snapshot, leg.strike), leg.type);
+        if (!quote || quote.bid == null || quote.bid <= 0 || quote.ask == null || quote.ask <= 0) {
+          return { created: false, trade: null, reason: `EXECUTION_QUALITY_REJECTED: ${leg.strike} ${leg.type} lacks an executable two-sided quote` };
+        }
+        const spreadPct = ((quote.ask - quote.bid) / ((quote.ask + quote.bid) / 2)) * 100;
+        if (!Number.isFinite(spreadPct) || spreadPct > 2) {
+          return { created: false, trade: null, reason: `EXECUTION_QUALITY_REJECTED: ${leg.strike} ${leg.type} spread ${spreadPct.toFixed(2)}% exceeds 2.00%` };
+        }
+        if (!Number.isFinite(quote.iv) || quote.iv == null || quote.iv <= 0 || !Number.isFinite(quote.delta) || quote.delta == null) {
+          return { created: false, trade: null, reason: `EXECUTION_QUALITY_REJECTED: ${leg.strike} ${leg.type} is missing verified IV or delta` };
+        }
+      }
     }
 
     // 3. Duplicate check (idempotency): one active position per index + strategy, however old it is.

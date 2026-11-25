@@ -2,8 +2,8 @@ import { notFound } from "next/navigation";
 import { Card, Stat } from "@/components/ui";
 import { SECTIONS } from "@/lib/sections";
 import { getPaperTradingEngine } from "@/lib/services/paperStore";
-import type { IndexId } from "@/lib/types";
-import { INDICES } from "@/lib/services/instrumentRegistry";
+import type { UnderlyingId } from "@/lib/types";
+import { isUnderlyingId } from "@/lib/services/instrumentRegistry";
 import { SectionError } from "@/components/AnalysisPanels";
 import { loadSection } from "@/lib/sectionLoad";
 import { BacktestRunsView, MarketOverview, NewsView, OptionChainView, RecommendationView, SettingsView, StrategiesView, SystemHealthView } from "@/components/SectionViews";
@@ -161,7 +161,7 @@ export default async function SectionPage({ params, searchParams }: PageProps<"/
   }
 
   const rawIndex = (String((await searchParams).index ?? "nifty")).toLowerCase();
-  const index: IndexId = (INDICES as string[]).includes(rawIndex) ? rawIndex as IndexId : "nifty";
+  const index: UnderlyingId = isUnderlyingId(rawIndex) ? rawIndex : "nifty";
   const views: Record<string, () => Promise<React.ReactNode>> = {
     market: () => MarketOverview(),
     "option-chain": () => OptionChainView({ index }),

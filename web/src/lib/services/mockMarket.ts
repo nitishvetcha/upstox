@@ -1,5 +1,5 @@
 // MOCK provider: slices the mock snapshot into the provider contract. Always labelled source: MOCK.
-import type { IndexId, Indicators, MarketDataProvider, TechnicalAnalysis, Timeframe } from "../types.ts";
+import type { IndexId, UnderlyingId, Indicators, MarketDataProvider, TechnicalAnalysis, Timeframe } from "../types.ts";
 import { mockSnapshot } from "./mock.ts";
 import { InvalidRequestError } from "./errors.ts";
 
@@ -56,7 +56,7 @@ function addDays(ymd: string, days: number): string {
 }
 
 export function mockProvider(now = () => new Date()): MarketDataProvider {
-  const snap = (i: IndexId) => mockSnapshot(i, now());
+  const snap = (i: UnderlyingId) => mockSnapshot(i, now());
   return {
     name: "MOCK",
     getMarketSnapshot: async (index) => {
@@ -101,7 +101,24 @@ export function mockProvider(now = () => new Date()): MarketDataProvider {
     }),
     getBreadth: async (index) => {
       const s = snap(index);
-      return s.breadth!;
+      return s.breadth ?? {
+        index,
+        status: "UNAVAILABLE",
+        advances: 0,
+        declines: 0,
+        unchanged: 0,
+        total: 0,
+        expected: 50,
+        coverage: 0,
+        advanceDeclineRatio: 0,
+        advancePercent: 0,
+        declinePercent: 0,
+        breadthPercent: 0,
+        signal: 0,
+        classification: "NEUTRAL",
+        priceBreadthState: "NEUTRAL_ALIGNMENT",
+        fetchedAt: null,
+      };
     },
   };
 }

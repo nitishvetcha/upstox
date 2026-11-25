@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { sourceMeta, technicalMeta, withFallback } from "@/lib/services/market";
-import { INSTRUMENTS, isIndexId } from "@/lib/services/instrumentRegistry";
+import { getUnderlyingInstrument } from "@/lib/services/instrumentRegistry";
 import { DEFAULT_TIMEFRAME, TIMEFRAMES, isTimeframe } from "@/lib/services/candles";
 import { chartSeries } from "@/lib/services/technicalAnalysis";
 import { FALLBACK_LABELS } from "@/lib/fallback";
@@ -8,18 +8,19 @@ import { FALLBACK_LABELS } from "@/lib/fallback";
 // GET /api/technical/nifty?timeframe=15m   (5m | 15m | 30m | 1h | 1d)
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/technical/[index]">) {
   const { index } = await ctx.params;
-  if (!isIndexId(index)) return Response.json({ error: `Unknown index: ${index}` }, { status: 404 });
+  const inst = getUnderlyingInstrument(index);
+  if (!inst) return Response.json({ error: `Unknown index: ${index}` }, { status: 404 });
   const tf = req.nextUrl.searchParams.get("timeframe") ?? DEFAULT_TIMEFRAME;
   if (!isTimeframe(tf)) return Response.json({ error: `timeframe must be one of ${TIMEFRAMES.join(", ")}` }, { status: 400 });
 
   const { data, fallbackReason } = await withFallback(async (p) => {
-    const [tech, series] = await Promise.all([p.getTechnicals(index, tf), p.getCandles(index, tf)]);
+    const [tech, series] = await Promise.all([p.getTechnicals(inst.id, tf), p.getCandles(inst.id, tf)]);
     return { tech, series };
   });
   const t = data.tech.analysis;
   const meta = technicalMeta(data.tech.source, new Date());
   return Response.json({
-    index: INSTRUMENTS[index].symbol,
+    index: inst.symbol,
     timeframe: tf,
     status: data.tech.source.source === "UNAVAILABLE" ? "UNAVAILABLE" : meta.freshness,
     unavailableReason: data.tech.unavailableReason ?? (t ? null : "Technical data not available"),
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/technical/[i
       const f = t?.futuresVwap;
       if (!f) return null;
       return {
-        label: `${INSTRUMENTS[index].symbol} FUTURES VWAP`,
+        label: `${inst.symbol} FUTURES VWAP`,
         instrument: f.instrument,
         instrumentKey: f.instrumentKey,
         expiry: f.expiry,

@@ -14,6 +14,7 @@ import { telegramBotListener } from "../src/lib/services/telegramBotListener.ts"
 import { marketScheduleRunner } from "../src/lib/services/marketScheduleRunner.ts";
 import { getNotificationConfig, sendTelegramMessage } from "../src/lib/services/notificationService.ts";
 import { listTrackedPicks } from "../src/lib/services/trackedPicksStore.ts";
+import { recordBotHeartbeat } from "../src/lib/services/botHeartbeat.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -106,12 +107,19 @@ async function main() {
   const stop = () => {
     if (isStopping) return;
     isStopping = true;
+    recordBotHeartbeat({ status: "STOPPING" });
     console.log("\n[BOT-RUNNER] Stopping Telegram Market Bot runner...");
     process.exit(0);
   };
 
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
+
+  // Initialize first heartbeat
+  recordBotHeartbeat({
+    status: "RUNNING",
+    activeTrackedPicksCount: listTrackedPicks(true).length,
+  });
 
   // 3. Telegram polling loop (every 2 seconds)
   let pollRunning = false;
@@ -141,15 +149,28 @@ async function main() {
         console.log(`[BOT-RUNNER] [${getIstTimeStr(now)}] Triggered scheduled scan: ${res.label}`);
       }
 
+      const activeCount = listTrackedPicks(true).length;
+      recordBotHeartbeat({
+        status: "RUNNING",
+        lastTickTimestamp: now.toISOString(),
+        lastSlotExecuted: res.label || null,
+        activeTrackedPicksCount: activeCount,
+        consecutiveErrors: 0,
+      });
+
       // Heartbeat log every 15 minutes
       const istMinutes = (now.getUTCMinutes() + 30) % 60;
       if (istMinutes % 15 === 0 && istMinutes !== lastHeartbeatMinute) {
         lastHeartbeatMinute = istMinutes;
-        const activeCount = listTrackedPicks(true).length;
         console.log(`[BOT-RUNNER] [${getIstTimeStr(now)}] Heartbeat active · Active Tracked Picks: ${activeCount}`);
       }
     } catch (err) {
       console.error(`[BOT-RUNNER] Schedule tick error: ${(err as Error).message}`);
+      recordBotHeartbeat({
+        status: "ERROR",
+        consecutiveErrors: 1,
+        lastErrorMessage: (err as Error).message,
+      });
     } finally {
       tickRunning = false;
     }

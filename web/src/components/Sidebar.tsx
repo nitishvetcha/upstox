@@ -16,6 +16,7 @@ const PRIMARY = [
   { href: "/options-research", title: "Options Research Lab", Icon: Microscope },
   { href: "/strategy-performance", title: "Strategy Performance", Icon: BarChart3 },
   { href: "/strategy-validation", title: "Strategy Validator", Icon: CandlestickChart },
+  { href: "/readiness", title: "Strategy Readiness", Icon: ShieldCheck },
   { href: "/stock-v2", title: "Stock V2 Research", Icon: CandlestickChart },
   { href: "/options-engine", title: "Options Engine (Successor)", Icon: Layers },
   { href: "/system-health", title: "System Health", Icon: Gauge },

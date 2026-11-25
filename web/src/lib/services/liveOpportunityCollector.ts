@@ -110,6 +110,7 @@ function optionToPaper(
   c: ContractOpportunity,
   underlying: "NIFTY" | "BANKNIFTY",
   spot: number,
+  regime: string,
 ): PaperOpportunity {
   if (
     c.strategyType === "BEAR_PUT_SPREAD" ||
@@ -144,7 +145,7 @@ function optionToPaper(
     confidence: c.confidence,
     grade: c.grade,
     signalAgreement: c.signalAgreement,
-    regime: "LIVE",
+    regime,
     eventRisk: null,
     reasons: c.reasons,
     reasonCodes: [],
@@ -181,7 +182,10 @@ function stockToPaper(s: StockOpportunity): PaperOpportunity {
     confidence: 70,
     grade: s.grade,
     signalAgreement: 0,
-    regime: "LIVE",
+    // Sector trend is the only verified cross-sectional regime currently
+    // produced by the stock scanner. Do not label raw source provenance as a
+    // market regime: that would invalidate evidence diversity checks.
+    regime: s.sectorTrend ?? "UNCLASSIFIED",
     eventRisk: null,
     reasons: s.reasons,
     reasonCodes: [],
@@ -320,7 +324,7 @@ export async function runLiveOpportunityCollection(
         }
         result.accepted++;
         let paper: PaperOpportunity;
-        try { paper = optionToPaper(c, label as "NIFTY" | "BANKNIFTY", r.spot); }
+        try { paper = optionToPaper(c, label as "NIFTY" | "BANKNIFTY", r.spot, r.marketRegime); }
         catch (e) { result.rejected++; result.errors.push(`${label} ${c.strike}${c.optionType}: ${(e as Error).message}`); continue; }
         const key = buildIdentityKey(paper);
 

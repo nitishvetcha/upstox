@@ -9,6 +9,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   costsFor,
+  costsForAsset,
+  getExchangeProfile,
   autoSquareOffPenalty,
   resolveAccountPlan,
   r2,
@@ -16,6 +18,9 @@ import {
   BASIC_PLAN_COSTS,
   PLUS_PLAN_COSTS,
   AUTO_SQUARE_OFF_RATES,
+  MCX_FO_PROFILE,
+  NSE_FO_PROFILE,
+  BSE_FO_PROFILE,
   type Fill,
 } from "./transactionCosts.ts";
 
@@ -24,7 +29,7 @@ test("TC-NSE-1. NSE transaction charges and IPFT inclusion (NSE Circular NSE/FA/
   // Breakdown: ₹3,552.99 exchange fee (0.0355299%, multiplier: 0.000355299) + ₹0.01 IPFT (0.0000001%, multiplier: 0.000000001) per crore.
   // IPFT is included in the combined rate and must NEVER be added separately.
   assert.equal(DEFAULT_TRANSACTION_COSTS.exchangeTxnRate, 0.0003553);
-  
+
   // Test turnover of exactly 1 crore (10,000,000 INR)
   const fills: Fill[] = [{ side: "BUY", price: 100, quantity: 100_000 }];
   const c = costsFor(fills, { ...DEFAULT_TRANSACTION_COSTS, brokeragePerOrder: 0, sttRate: 0, gstRate: 0, sebiRate: 0, stampDutyRate: 0 });
@@ -200,6 +205,55 @@ test("TC-PARTIAL-FILLS-1. Brokerage is charged per executed order, not per parti
   // Explicit orderCountOverride:
   const overridden = costsFor(partialFills, BASIC_PLAN_COSTS, 2);
   assert.equal(overridden.brokerage, 40.00);
+});
+
+test("TC-EXCHANGE-PROFILE-1. Dynamic profile resolution for NSE, BSE, and MCX", () => {
+  const niftyProf = getExchangeProfile("nifty");
+  assert.equal(niftyProf.exchangeId, "NSE_FO");
+  assert.equal(niftyProf.taxType, "STT");
+  assert.equal(niftyProf.taxRate, 0.0015);
+  assert.equal(niftyProf.autoSquareOffTime, "15:15");
+
+  const sensexProf = getExchangeProfile("sensex");
+  assert.equal(sensexProf.exchangeId, "BSE_FO");
+  assert.equal(sensexProf.taxType, "STT");
+  assert.equal(sensexProf.exchangeTxnRate, 0.000375);
+
+  const crudeProf = getExchangeProfile("crudeoil");
+  assert.equal(crudeProf.exchangeId, "MCX_FO");
+  assert.equal(crudeProf.taxType, "CTT");
+  assert.equal(crudeProf.taxRate, 0.00125);
+  assert.equal(crudeProf.autoSquareOffTime, "23:15");
+  assert.equal(crudeProf.tradingHours.eveningSession?.close, "23:30");
+
+  const ngProf = getExchangeProfile("naturalgas");
+  assert.equal(ngProf.exchangeId, "MCX_FO");
+  assert.equal(ngProf.taxType, "CTT");
+});
+
+test("TC-MCX-COSTS-1. MCX statutory costs calculate CTT at 0.125% and Exchange Txn at 0.05%", () => {
+  // Buy 1 lot Crude Oil @ ₹6,000 (premium: ₹60,000)
+  // Sell 1 lot Crude Oil @ ₹6,200 (premium: ₹62,000)
+  const fills: Fill[] = [
+    { side: "BUY", price: 60, quantity: 100 },
+    { side: "SELL", price: 62, quantity: 100 },
+  ];
+  const c = costsForAsset(fills, "crudeoil", "BASIC");
+
+  assert.equal(c.exchange, "MCX_FO");
+  assert.equal(c.taxType, "CTT");
+  assert.equal(c.brokerage, 40.00, "2 orders * ₹20 = ₹40");
+
+  // Sell turnover = 62 * 100 = 6,200
+  // CTT = 6,200 * 0.00125 = 7.75
+  assert.equal(c.stt, 7.75, "MCX CTT is 0.125% on sell side premium");
+
+  // Total turnover = 6,000 + 6,200 = 12,200
+  // Exchange txn = 12,200 * 0.0005 = 6.10
+  assert.equal(c.exchangeCharges, 6.10, "MCX exchange charge is 0.05% of turnover");
+
+  // Buy turnover = 6,000. Stamp duty = 6,000 * 0.00003 = 0.18
+  assert.equal(c.stampDuty, 0.18);
 });
 
 

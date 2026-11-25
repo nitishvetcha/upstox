@@ -54,6 +54,15 @@ test("defaults to NIFTY when no underlying is supplied", async () => {
   assert.equal(json.underlying, "NIFTY");
 });
 
+test("accepts commodity underlyings (CRUDEOIL and NATURALGAS)", async () => {
+  for (const comm of ["crudeoil", "naturalgas"]) {
+    const res = await POST(post({ underlying: comm }));
+    const json = (await res.json()) as Record<string, unknown>;
+    assert.notEqual(res.status, 400, `expected no 400 for ${comm}, got ${JSON.stringify(json)}`);
+    assert.equal(json.underlying, comm.toUpperCase());
+  }
+});
+
 test("finnifty, midcpnifty, sensex and bankex are never mislabelled as BANKNIFTY", async () => {
   for (const index of ["finnifty", "midcpnifty", "sensex", "bankex"]) {
     const json = (await (await POST(post({ underlying: index }))).json()) as Record<string, unknown>;

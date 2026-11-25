@@ -1,7 +1,7 @@
 import { OpsPanel } from "./OpsPanel";
 import { OpsDetails } from "./OpsDetails";
 import Link from "next/link";
-import type { IndexId } from "@/lib/types";
+import type { IndexId, UnderlyingId } from "@/lib/types";
 import { getAnalysis, getDashboard, providerMode, withFallback } from "@/lib/services/market";
 import { OptionContractPicker } from "./OptionContractPicker";
 import { getRiskConfig } from "@/lib/services/risk/riskConfig";
@@ -18,7 +18,7 @@ import { NewsPanel } from "./NewsPanel";
 import { Badge, Card, SectionTitle, num } from "./ui";
 import { DataQualityPanel, IndexSwitch, LevelsPanel, MarketPanel, OptionsPanel, RecommendationSummary, RiskPanel, TechnicalsPanel } from "./AnalysisPanels";
 
-async function viewFor(index: IndexId) {
+async function viewFor(index: UnderlyingId) {
   const a = await getAnalysis(index);
   return { a, v: toDashboardView(a, getRiskConfig(), new Date().toISOString()) };
 }
@@ -29,7 +29,7 @@ function moneyness(strike: number, spot: number, atm: boolean): string {
   return strike < spot ? "CE ITM · PE OTM" : "CE OTM · PE ITM";
 }
 
-export async function RecommendationView({ index }: { index: IndexId }) {
+export async function RecommendationView({ index }: { index: UnderlyingId }) {
   const { a, v } = await viewFor(index);
   return (
     <div className="space-y-4">
@@ -60,7 +60,7 @@ export async function MarketOverview() {
   );
 }
 
-export async function OptionChainView({ index }: { index: IndexId }) {
+export async function OptionChainView({ index }: { index: UnderlyingId }) {
   const { a, v } = await viewFor(index);
   const s = a.snapshot;
   const expiryResult = await withFallback((p) => p.getExpiries(index)).catch(() => null);
@@ -101,7 +101,7 @@ export async function OptionChainView({ index }: { index: IndexId }) {
   );
 }
 
-export async function StrategiesView({ index }: { index: IndexId }) {
+export async function StrategiesView({ index }: { index: UnderlyingId }) {
   const { a, v } = await viewFor(index);
   return (
     <div className="space-y-4">
