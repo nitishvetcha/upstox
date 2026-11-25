@@ -4,6 +4,10 @@ export const dynamic = "force-dynamic";
 // paper evidence; it has no order-placement capability.
 import { timingSafeEqual, createHash } from "node:crypto";
 import { recordAutomationRun } from "@/lib/services/supabasePersistence";
+import {
+  checkpointPaperValidationState,
+  restorePaperValidationState,
+} from "@/lib/services/paperValidationPersistence";
 
 function equal(a: string, b: string): boolean {
   return timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest());
@@ -20,13 +24,15 @@ export async function POST(request: Request) {
   const origin = new URL(request.url).origin;
   const headers = { authorization: `Bearer ${operator}` };
   try {
+    const recovery = await restorePaperValidationState();
     const collectResponse = await fetch(`${origin}/api/paper-opportunities/collect`, { method: "POST", headers });
     const collect = await collectResponse.json();
     const monitorResponse = await fetch(`${origin}/api/paper-opportunities/monitor`, { method: "POST", headers });
     const monitor = await monitorResponse.json();
     const status = collectResponse.ok && monitorResponse.ok ? "SUCCESS" : "PARTIAL";
-    await recordAutomationRun(id, "PAPER_CYCLE", status, { collect, monitor });
-    return Response.json({ id, status, collect, monitor });
+    const checkpointed = await checkpointPaperValidationState();
+    await recordAutomationRun(id, "PAPER_CYCLE", status, { collect, monitor, recovery, checkpointed });
+    return Response.json({ id, status, collect, monitor, recovery, checkpointed });
   } catch {
     await recordAutomationRun(id, "PAPER_CYCLE", "ERROR", { error: "internal paper cycle request failed" });
     return Response.json({ id, error: "paper cycle failed" }, { status: 502 });
