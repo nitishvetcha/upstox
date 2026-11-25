@@ -40,6 +40,13 @@ export async function POST(request: Request) {
     const status = collectResponse.ok && monitorResponse.ok ? "SUCCESS" : "PARTIAL";
     stage = "checkpoint";
     const checkpointed = await checkpointPaperValidationState();
+    // Evidence collection is not operationally useful on Render's ephemeral
+    // filesystem unless the cloud checkpoint succeeds. Fail closed so GitHub
+    // cannot report a misleading green run while Supabase is unavailable.
+    if (!checkpointed) {
+      await recordAutomationRun(id, "PAPER_CYCLE", "ERROR", { error: "supabase_checkpoint_unavailable", collect, monitor, recovery });
+      return Response.json({ id, error: "supabase checkpoint unavailable", stage }, { status: 503 });
+    }
     await recordAutomationRun(id, "PAPER_CYCLE", status, { collect, monitor, recovery, checkpointed });
     return Response.json({ id, status, collect, monitor, recovery, checkpointed });
   } catch {
