@@ -160,6 +160,11 @@ export async function POST(req: Request) {
       () => getSnapshot("nifty").then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "NIFTY"))),
       () => getSnapshot("banknifty").then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "BANKNIFTY"))),
       () => scanStocks("intraday"),
+      new Date(),
+      { commodityFetchers: [
+        { label: "CRUDEOIL", fetch: () => getSnapshot("crudeoil").then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "CRUDEOIL"))) },
+        { label: "NATURALGAS", fetch: () => getSnapshot("naturalgas").then((s) => Promise.resolve(evaluateOptionsOpportunity(s, "NATURALGAS"))) },
+      ] },
     );
 
     saveCollectionRun({

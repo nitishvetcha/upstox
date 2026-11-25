@@ -2,8 +2,8 @@ name: Paper validation cycle
 
 on:
   schedule:
-    # 03:45-10:55 UTC, Mon-Fri. The app itself enforces NSE/MCX market hours.
-    - cron: "*/5 3-10 * * 1-5"
+    # 03:45-18:00 UTC, Mon-Fri. The app itself enforces NSE/MCX market hours.
+    - cron: "*/5 3-18 * * 1-5"
   workflow_dispatch:
 
 jobs:

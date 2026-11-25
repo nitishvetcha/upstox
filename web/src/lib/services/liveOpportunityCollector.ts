@@ -18,7 +18,7 @@ import type { ContractOpportunity, OptionsOpportunityResult } from "../engine/op
 import { OPPORTUNITY_ENGINE_VERSION } from "../engine/opportunityEngine.ts";
 import { STOCK_OPPORTUNITY_VERSION } from "../engine/stockOpportunityEngine.ts";
 import type { StockOpportunity, StockOpportunityResult } from "../engine/stockOpportunityEngine.ts";
-import { tradeFreshnessOf } from "../time.ts";
+import { commodityMarketStatus, tradeFreshnessOf } from "../time.ts";
 import { pruneRunFiles } from "./runLogRetention.ts";
 
 // ── Audit log ─────────────────────────────────────────────────────────────────
@@ -35,6 +35,8 @@ export interface LiveCollectionRun {
   rejectedCount: number;
   niftyCount: number;
   bankNiftyCount: number;
+  crudeOilCount?: number;
+  naturalGasCount?: number;
   stockCount: number;
   durationMs: number;
   errors: string[];
@@ -108,7 +110,7 @@ function isAllLive(dq: Record<string, string>): boolean {
 
 function optionToPaper(
   c: ContractOpportunity,
-  underlying: "NIFTY" | "BANKNIFTY",
+  underlying: string,
   spot: number,
   regime: string,
 ): PaperOpportunity {
@@ -207,6 +209,8 @@ export interface CollectionResult {
   rejected: number;
   niftyCount: number;
   bankNiftyCount: number;
+  crudeOilCount?: number;
+  naturalGasCount?: number;
   stockCount: number;
   errors: string[];
   reason?: string;
@@ -221,17 +225,24 @@ export async function runLiveOpportunityCollection(
   fetchBankNifty: () => Promise<OptionsOpportunityResult>,
   fetchStocks: () => Promise<StockOpportunityResult>,
   now = new Date(),
-  options?: { forceMarketOpen?: boolean },
+  options?: {
+    forceMarketOpen?: boolean;
+    commodityFetchers?: Array<{ label: "CRUDEOIL" | "NATURALGAS"; fetch: () => Promise<OptionsOpportunityResult> }>;
+  },
 ): Promise<CollectionResult> {
   const isForced = options?.forceMarketOpen || process.env.FORCE_MARKET_OPEN === "true";
-  const mStatus = isForced ? "OPEN" : marketStatus(now);
-  if (mStatus !== "OPEN") {
-    return { market: mStatus, source: "NONE", generated: 0, accepted: 0, created: 0, duplicates: 0, rejected: 0, niftyCount: 0, bankNiftyCount: 0, stockCount: 0, errors: [], reason: "MARKET_CLOSED" };
+  const equityStatus = isForced ? "OPEN" : marketStatus(now);
+  const commodityStatus = isForced ? "OPEN" : commodityMarketStatus(now);
+  const equityOpen = equityStatus === "OPEN";
+  const commodityOpen = commodityStatus === "OPEN";
+  const mStatus = equityOpen || commodityOpen ? "OPEN" : equityStatus;
+  if (!equityOpen && !commodityOpen) {
+    return { market: mStatus, source: "NONE", generated: 0, accepted: 0, created: 0, duplicates: 0, rejected: 0, niftyCount: 0, bankNiftyCount: 0, crudeOilCount: 0, naturalGasCount: 0, stockCount: 0, errors: [], reason: "MARKET_CLOSED" };
   }
   // Phase 2 evaluation rule (docs/intraday-evaluation-rules.md): no new entries at or after 14:30 IST.
   const istMin = Math.floor(((now.getTime() + 5.5 * 3600e3) % 86_400_000) / 60_000);
-  if (!isForced && istMin >= ENTRY_CUTOFF_IST_MIN) {
-    return { market: mStatus, source: "NONE", generated: 0, accepted: 0, created: 0, duplicates: 0, rejected: 0, niftyCount: 0, bankNiftyCount: 0, stockCount: 0, errors: [], reason: "ENTRY_CUTOFF" };
+  if (!isForced && equityOpen && !commodityOpen && istMin >= ENTRY_CUTOFF_IST_MIN) {
+    return { market: mStatus, source: "NONE", generated: 0, accepted: 0, created: 0, duplicates: 0, rejected: 0, niftyCount: 0, bankNiftyCount: 0, crudeOilCount: 0, naturalGasCount: 0, stockCount: 0, errors: [], reason: "ENTRY_CUTOFF" };
   }
 
   const existing = listPaperOpportunities();
@@ -252,6 +263,8 @@ export async function runLiveOpportunityCollection(
     rejected: 0,
     niftyCount: 0,
     bankNiftyCount: 0,
+    crudeOilCount: 0,
+    naturalGasCount: 0,
     stockCount: 0,
     errors: [],
   };
@@ -262,10 +275,10 @@ export async function runLiveOpportunityCollection(
   let hasAuthUnavailable = false;
 
   // ── Options ──────────────────────────────────────────────────────────────
-  for (const [fetchFn, label] of [
-    [fetchNifty, "NIFTY"],
-    [fetchBankNifty, "BANKNIFTY"],
-  ] as const) {
+  const optionSources: Array<{ label: "NIFTY" | "BANKNIFTY" | "CRUDEOIL" | "NATURALGAS"; fetch: () => Promise<OptionsOpportunityResult> }> = [];
+  if (equityOpen) optionSources.push({ label: "NIFTY", fetch: fetchNifty }, { label: "BANKNIFTY", fetch: fetchBankNifty });
+  if (commodityOpen) optionSources.push(...(options?.commodityFetchers ?? []));
+  for (const { fetch: fetchFn, label } of optionSources) {
     try {
       const r = await fetchFn();
       result.generated += r.topOpportunities.length + r.rejectedContracts.length;
@@ -324,7 +337,7 @@ export async function runLiveOpportunityCollection(
         }
         result.accepted++;
         let paper: PaperOpportunity;
-        try { paper = optionToPaper(c, label as "NIFTY" | "BANKNIFTY", r.spot, r.marketRegime); }
+        try { paper = optionToPaper(c, label, r.spot, r.marketRegime); }
         catch (e) { result.rejected++; result.errors.push(`${label} ${c.strike}${c.optionType}: ${(e as Error).message}`); continue; }
         const key = buildIdentityKey(paper);
 
@@ -343,10 +356,12 @@ export async function runLiveOpportunityCollection(
         existingKeys.add(key);
         result.created++;
         if (label === "NIFTY") result.niftyCount++;
-        else result.bankNiftyCount++;
+        else if (label === "BANKNIFTY") result.bankNiftyCount++;
+        else if (label === "CRUDEOIL") result.crudeOilCount = (result.crudeOilCount ?? 0) + 1;
+        else result.naturalGasCount = (result.naturalGasCount ?? 0) + 1;
 
         // Broadcast real-time signal to Telegram / Discord (non-blocking)
-        void notifyOpportunitySignal(paper, { underlying: label, lotSize: label === "NIFTY" ? 65 : 30 });
+        void notifyOpportunitySignal(paper, { underlying: label, lotSize: label === "NIFTY" ? 65 : label === "BANKNIFTY" ? 30 : label === "CRUDEOIL" ? 100 : 1250 });
       }
     } catch (e) {
       result.errors.push(`${label}: ${(e as Error).message}`);
@@ -354,7 +369,7 @@ export async function runLiveOpportunityCollection(
   }
 
   // ── Stocks ───────────────────────────────────────────────────────────────
-  try {
+  if (equityOpen) try {
     const stockResult = await fetchStocks();
     result.generated += stockResult.topOpportunities.length;
 
