@@ -6,7 +6,8 @@ import { TERMINAL_STATES, type PaperOpportunity } from "./paperOpportunityStore.
 import type { PaperTrade } from "../paperTypes.ts";
 
 export const PAPER_READINESS_REQUIREMENTS = {
-  minimumCompletedTrades: 100,
+  // Human-capital review requires a meaningful sample for each isolated market/setup.
+  minimumCompletedTrades: 250,
   minimumProfitFactor: 1.15,
   maximumDrawdownR: 15,
   minimumNetR: 0,
