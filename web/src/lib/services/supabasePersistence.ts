@@ -7,9 +7,23 @@ import type { PaperOpportunity } from "./paperOpportunityStore.ts";
 
 let pool: Pool | null = null;
 let schemaReady: Promise<void> | null = null;
+let lastPersistenceIssue: "DATABASE_URL_MISSING" | "AUTH_FAILED" | "TLS_VERIFICATION_FAILED" | "CONNECTION_FAILED" | "DATABASE_OPERATION_FAILED" | null = null;
 
 export function supabaseEnabled(): boolean {
   return Boolean(process.env.DATABASE_URL);
+}
+
+function classifyPersistenceError(error: unknown): NonNullable<typeof lastPersistenceIssue> {
+  const value = error as { code?: string; message?: string };
+  const text = String(value?.message ?? "").toLowerCase();
+  if (value?.code === "28P01" || text.includes("password authentication")) return "AUTH_FAILED";
+  if (text.includes("certificate") || text.includes("self-signed")) return "TLS_VERIFICATION_FAILED";
+  if (text.includes("connect") || text.includes("timeout") || text.includes("network")) return "CONNECTION_FAILED";
+  return "DATABASE_OPERATION_FAILED";
+}
+
+export function supabasePersistenceIssue(): typeof lastPersistenceIssue {
+  return supabaseEnabled() ? lastPersistenceIssue : "DATABASE_URL_MISSING";
 }
 
 function db(): Pool | null {
@@ -70,8 +84,10 @@ export async function savePaperValidationSnapshot(
          opportunities = EXCLUDED.opportunities`,
       [PAPER_VALIDATION_STATE_KEY, JSON.stringify(trades), JSON.stringify(events), JSON.stringify(opportunities)],
     );
+    lastPersistenceIssue = null;
     return true;
-  } catch {
+  } catch (error) {
+    lastPersistenceIssue = classifyPersistenceError(error);
     return false;
   }
 }

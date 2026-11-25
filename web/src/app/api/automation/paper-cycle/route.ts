@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 // Controlled entrypoint for GitHub Actions. It can only collect/monitor
 // paper evidence; it has no order-placement capability.
 import { timingSafeEqual, createHash } from "node:crypto";
-import { recordAutomationRun } from "@/lib/services/supabasePersistence";
+import { recordAutomationRun, supabasePersistenceIssue } from "@/lib/services/supabasePersistence";
 import {
   checkpointPaperValidationState,
   restorePaperValidationState,
@@ -44,8 +44,9 @@ export async function POST(request: Request) {
     // filesystem unless the cloud checkpoint succeeds. Fail closed so GitHub
     // cannot report a misleading green run while Supabase is unavailable.
     if (!checkpointed) {
-      await recordAutomationRun(id, "PAPER_CYCLE", "ERROR", { error: "supabase_checkpoint_unavailable", collect, monitor, recovery });
-      return Response.json({ id, error: "supabase checkpoint unavailable", stage }, { status: 503 });
+      const persistenceIssue = supabasePersistenceIssue();
+      await recordAutomationRun(id, "PAPER_CYCLE", "ERROR", { error: "supabase_checkpoint_unavailable", persistenceIssue, collect, monitor, recovery });
+      return Response.json({ id, error: "supabase checkpoint unavailable", persistenceIssue, stage }, { status: 503 });
     }
     await recordAutomationRun(id, "PAPER_CYCLE", status, { collect, monitor, recovery, checkpointed });
     return Response.json({ id, status, collect, monitor, recovery, checkpointed });
