@@ -23,18 +23,25 @@ export async function POST(request: Request) {
   const id = `scheduled_${Date.now()}`;
   const origin = new URL(request.url).origin;
   const headers = { authorization: `Bearer ${operator}` };
+  let stage = "restore";
   try {
     const recovery = await restorePaperValidationState();
+    stage = "collect_request";
     const collectResponse = await fetch(`${origin}/api/paper-opportunities/collect`, { method: "POST", headers });
+    stage = "collect_response";
     const collect = await collectResponse.json();
+    stage = "monitor_request";
     const monitorResponse = await fetch(`${origin}/api/paper-opportunities/monitor`, { method: "POST", headers });
+    stage = "monitor_response";
     const monitor = await monitorResponse.json();
     const status = collectResponse.ok && monitorResponse.ok ? "SUCCESS" : "PARTIAL";
+    stage = "checkpoint";
     const checkpointed = await checkpointPaperValidationState();
     await recordAutomationRun(id, "PAPER_CYCLE", status, { collect, monitor, recovery, checkpointed });
     return Response.json({ id, status, collect, monitor, recovery, checkpointed });
   } catch {
-    await recordAutomationRun(id, "PAPER_CYCLE", "ERROR", { error: "internal paper cycle request failed" });
-    return Response.json({ id, error: "paper cycle failed" }, { status: 502 });
+    console.error(JSON.stringify({ event: "paper_cycle_failed", id, stage }));
+    await recordAutomationRun(id, "PAPER_CYCLE", "ERROR", { error: "internal paper cycle request failed", stage });
+    return Response.json({ id, error: "paper cycle failed", stage }, { status: 502 });
   }
 }
