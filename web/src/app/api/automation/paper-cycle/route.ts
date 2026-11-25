@@ -8,6 +8,8 @@ import {
   checkpointPaperValidationState,
   restorePaperValidationState,
 } from "@/lib/services/paperValidationPersistence";
+import { POST as collectPaperOpportunities } from "@/app/api/paper-opportunities/collect/route";
+import { POST as monitorPaperOpportunities } from "@/app/api/paper-opportunities/monitor/route";
 
 function equal(a: string, b: string): boolean {
   return timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest());
@@ -21,20 +23,18 @@ export async function POST(request: Request) {
   if (!operator || operator.length < 32) return Response.json({ error: "scheduler is not configured with an operator token" }, { status: 503 });
 
   const id = `scheduled_${Date.now()}`;
-  // This route runs inside the same Render web process as collect/monitor. Calling
-  // the public onrender.com hostname from that process can fail on free instances;
-  // use the bound local listener instead of creating a public network loop.
-  const origin = `http://127.0.0.1:${process.env.PORT ?? "10000"}`;
   const headers = { authorization: `Bearer ${operator}` };
   let stage = "restore";
   try {
     const recovery = await restorePaperValidationState();
     stage = "collect_request";
-    const collectResponse = await fetch(`${origin}/api/paper-opportunities/collect`, { method: "POST", headers });
+    // Invoke the existing protected handlers directly. A Render free instance may
+    // have one web worker, so HTTP calls back into this same service can deadlock.
+    const collectResponse = await collectPaperOpportunities(new Request("http://internal/api/paper-opportunities/collect", { method: "POST", headers }));
     stage = "collect_response";
     const collect = await collectResponse.json();
     stage = "monitor_request";
-    const monitorResponse = await fetch(`${origin}/api/paper-opportunities/monitor`, { method: "POST", headers });
+    const monitorResponse = await monitorPaperOpportunities(new Request("http://internal/api/paper-opportunities/monitor", { method: "POST", headers }));
     stage = "monitor_response";
     const monitor = await monitorResponse.json();
     const status = collectResponse.ok && monitorResponse.ok ? "SUCCESS" : "PARTIAL";
