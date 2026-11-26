@@ -100,11 +100,11 @@ export function roundTripCharges(side: Side, entryPx: number, exitPx: number, qt
  * Calculate complete equity delivery round-trip costs under 2026 Upstox tariff.
  * Includes flat ₹20/order brokerage, 0.1% STT buy/sell, 0.015% stamp buy, ₹20 DP charge on sell, and 18% GST.
  */
-export function roundTripDeliveryCharges(side: Side, entryPx: number, exitPx: number, qty: number): DeliveryOrderCharges {
+export function roundTripDeliveryCharges(side: Side, entryPx: number, exitPx: number, qty: number, zeroBrokerage = false): DeliveryOrderCharges {
   const buyTurnover = (side === "LONG" ? entryPx : exitPx) * qty;
   const sellTurnover = (side === "LONG" ? exitPx : entryPx) * qty;
   const turnover = buyTurnover + sellTurnover;
-  const brokerage = DELIVERY_COSTS.brokerageFlatPerOrder * 2; // ₹20 entry + ₹20 exit
+  const brokerage = zeroBrokerage ? 0 : DELIVERY_COSTS.brokerageFlatPerOrder * 2; // ₹0 or ₹40
   const exchange = DELIVERY_COSTS.exchangePct * turnover;
   const sebi = DELIVERY_COSTS.sebiPct * turnover;
   const stt = DELIVERY_COSTS.sttBuyPct * buyTurnover + DELIVERY_COSTS.sttSellPct * sellTurnover;

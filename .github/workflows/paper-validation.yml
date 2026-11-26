@@ -2,15 +2,48 @@ name: Paper validation cycle
 
 on:
   schedule:
-    # 03:45-18:00 UTC, Mon-Fri. The app itself enforces NSE/MCX market hours.
-    - cron: "*/5 3-18 * * 1-5"
+    # Exact Indian Market Window (09:00 IST to 23:30 IST, Mon-Fri):
+    # 1. MCX Morning Open: 03:30, 03:40, 03:50 UTC (09:00, 09:10, 09:20 IST)
+    - cron: "30,40,50 3 * * 1-5"
+    # 2. Continuous Session (NSE + MCX): every 10 min from 04:00 to 17:50 UTC (09:30 to 23:20 IST)
+    - cron: "*/10 4-17 * * 1-5"
+    # 3. MCX Session Final Close: 18:00 UTC (23:30 IST)
+    - cron: "0 18 * * 1-5"
   workflow_dispatch:
 
 jobs:
   paper-cycle:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate IST market window
+        id: market-gate
+        run: |
+          IST_HOUR=$(TZ=Asia/Kolkata date +%-H)
+          IST_MIN=$(TZ=Asia/Kolkata date +%-M)
+          IST_DOW=$(TZ=Asia/Kolkata date +%u) # 1=Mon, 7=Sun
+          TOTAL_MIN=$(( IST_HOUR * 60 + IST_MIN ))
+          echo "Current IST Clock: ${IST_HOUR}:${IST_MIN} (Day of week: ${IST_DOW})"
+
+          # Weekend gate (Saturday=6, Sunday=7)
+          if [ "$IST_DOW" -ge 6 ]; then
+            echo "is_open=false" >> $GITHUB_OUTPUT
+            echo "reason=WEEKEND_CLOSED" >> $GITHUB_OUTPUT
+            echo "::notice title=Market Closed::Skipping paper cycle: Weekend (Indian markets closed)."
+            exit 0
+          fi
+
+          # Combined Market Hours: 09:00 IST (540m) to 23:30 IST (1410m)
+          if [ "$TOTAL_MIN" -ge 540 ] && [ "$TOTAL_MIN" -le 1410 ]; then
+            echo "is_open=true" >> $GITHUB_OUTPUT
+            echo "::notice title=Market Open::Indian Market is OPEN (${IST_HOUR}:${IST_MIN} IST). Executing paper validation cycle."
+          else
+            echo "is_open=false" >> $GITHUB_OUTPUT
+            echo "reason=OUTSIDE_MARKET_HOURS" >> $GITHUB_OUTPUT
+            echo "::notice title=Market Closed::Skipping paper cycle: Current time (${IST_HOUR}:${IST_MIN} IST) is outside trading hours (09:00-23:30 IST)."
+          fi
+
       - name: Ping health to ensure Render container is awake
+        if: steps.market-gate.outputs.is_open == 'true' || github.event_name == 'workflow_dispatch'
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
         run: |
@@ -19,6 +52,7 @@ jobs:
             "$APP_BASE_URL/api/health?probe=liveness"
 
       - name: Collect and monitor paper evidence
+        if: steps.market-gate.outputs.is_open == 'true' || github.event_name == 'workflow_dispatch'
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
@@ -29,6 +63,7 @@ jobs:
             --header "x-scheduler-token: $SCHEDULER_TOKEN"
 
       - name: Scan stock opportunities
+        if: steps.market-gate.outputs.is_open == 'true' || github.event_name == 'workflow_dispatch'
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
