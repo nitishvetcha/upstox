@@ -1,4 +1,5 @@
 import { COMMODITIES, type CommodityId } from "./instrumentRegistry.ts";
+import { getCachedMcxContract } from "./mcxContractResolver.ts";
 
 export interface McxContractHealth {
   underlying: CommodityId;
@@ -20,9 +21,10 @@ const keyEnv: Record<CommodityId, string> = {
 
 export function mcxContractHealth(now = new Date()): McxContractHealth[] {
   return (Object.keys(COMMODITIES) as CommodityId[]).map((underlying) => {
-    const configuredExpiry = process.env[expiryEnv[underlying]]?.trim() || null;
-    const keySource = process.env[keyEnv[underlying]]?.trim() ? "ENVIRONMENT" : "BUNDLED_DEFAULT";
-    const instrumentKey = COMMODITIES[underlying].underlyingKey;
+    const cached = getCachedMcxContract(underlying, now);
+    const configuredExpiry = cached?.expiry || process.env[expiryEnv[underlying]]?.trim() || null;
+    const keySource = cached ? "ENVIRONMENT" : (process.env[keyEnv[underlying]]?.trim() ? "ENVIRONMENT" : "BUNDLED_DEFAULT");
+    const instrumentKey = cached?.instrumentKey ?? COMMODITIES[underlying].underlyingKey;
     if (!configuredExpiry) return {
       underlying, instrumentKey, keySource, configuredExpiry: null, status: "EXPIRY_UNCONFIGURED",
       message: "Set the current contract expiry in the environment before treating this MCX feed as operational.",
