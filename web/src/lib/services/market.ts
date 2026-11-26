@@ -131,6 +131,24 @@ export async function buildSnapshot(p: MarketDataProvider, index: UnderlyingId, 
 export async function getSnapshot(index: UnderlyingId, deps?: FallbackDeps, now?: Date): Promise<Snapshot> {
   const current = now ?? deps?.now?.();
   const { data, fallbackReason } = await withFallback((p) => buildSnapshot(p, index, current), deps);
+  // Do not downgrade the entire workspace header to MOCK FALLBACK if a newly added
+  // mini commodity (goldm/silverm) has temporary Upstox coverage gaps while Upstox is connected.
+  if (
+    (index === "goldm" || index === "silverm") &&
+    fallbackReason &&
+    fallbackReason !== "UPSTOX_NOT_CONNECTED" &&
+    fallbackReason !== "UPSTOX_AUTH_EXPIRED"
+  ) {
+    return {
+      ...data,
+      fallbackReason: null,
+      sources: {
+        ...data.sources,
+        market: { source: "UNAVAILABLE", provider: "UPSTOX", fetchedAt: null },
+        optionChain: { source: "UNAVAILABLE", provider: "UPSTOX", fetchedAt: null },
+      },
+    };
+  }
   return { ...data, fallbackReason };
 }
 

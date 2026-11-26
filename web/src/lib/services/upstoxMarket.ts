@@ -325,7 +325,14 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     return { candles: mergeCandles(notFuture(h.candles), notFuture(d.candles)), fetchedAt, newestUsable };
   };
 
+  const ensureCommodityResolved = async (index: UnderlyingId) => {
+    if (isCommodityId(index) && !getCachedMcxContract(index, now())) {
+      await resolveMcxContract(index, token, now()).catch(() => {});
+    }
+  };
+
   const getCandles = async (index: UnderlyingId, timeframe: Timeframe): Promise<CandleSeries> => {
+    await ensureCommodityResolved(index);
     const inst = getUnderlyingInstrument(index);
     if (!inst) throw new UpstoxError("UPSTOX_INVALID_INSTRUMENT", `Unknown underlying: ${index}`);
     const { symbol, underlyingKey } = inst;
@@ -501,6 +508,7 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
   };
 
   const getOptionContracts = async (index: UnderlyingId) => {
+    await ensureCommodityResolved(index);
     const inst = getUnderlyingInstrument(index);
     if (!inst) throw new UpstoxError("UPSTOX_INVALID_INSTRUMENT", `Unknown underlying: ${index}`);
     const { symbol, underlyingKey } = inst;
@@ -519,7 +527,8 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
 
   return {
     name: "UPSTOX",
-    getMarketSnapshot: (index: UnderlyingId) => {
+    getMarketSnapshot: async (index: UnderlyingId) => {
+      await ensureCommodityResolved(index);
       const inst = getUnderlyingInstrument(index);
       if (!inst) throw new UpstoxError("UPSTOX_INVALID_INSTRUMENT", `Unknown underlying: ${index}`);
       const { symbol, underlyingKey } = inst;
