@@ -29,15 +29,50 @@ export function TopBar({
   upstoxStatus: "VERIFIED_CONNECTED" | "CONFIGURED_UNVERIFIED" | "VERIFICATION_FAILED" | "EXPIRED" | "MISSING" | "INVALID" | "UNKNOWN";
 }) {
   const [now, setNow] = useState<Date | null>(null); // null on the server: avoids a hydration mismatch
+  const [liveUpstoxStatus, setLiveUpstoxStatus] = useState(upstoxStatus);
+
+  useEffect(() => {
+    setLiveUpstoxStatus(upstoxStatus);
+  }, [upstoxStatus]);
 
   // Only the local clock ticks here. Market data is never re-fetched on a timer: every Upstox request must be
-  // deliberate (the Refresh data button). A timer re-running the server data loading would make live calls
-  // in the background, outside any approval.
+  // deliberate (the Refresh data button).
   useEffect(() => {
     const tick = () => setNow(new Date());
     tick();
     const clock = setInterval(tick, 1000);
     return () => clearInterval(clock);
+  }, []);
+
+  // Re-fetch lightweight auth/health status when returning to an idle tab (debounced 2.5s)
+  useEffect(() => {
+    let lastFetchAt = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const refreshStatus = () => {
+      if (document.visibilityState !== "visible") return;
+      const elapsed = Date.now() - lastFetchAt;
+      if (elapsed < 2500) {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(refreshStatus, 2500 - elapsed);
+        return;
+      }
+      lastFetchAt = Date.now();
+      fetch("/api/auth/health", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d?.upstoxStatus) setLiveUpstoxStatus(d.upstoxStatus);
+        })
+        .catch(() => {});
+    };
+
+    document.addEventListener("visibilitychange", refreshStatus);
+    window.addEventListener("focus", refreshStatus);
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", refreshStatus);
+      window.removeEventListener("focus", refreshStatus);
+    };
   }, []);
 
   const eqStatus = now ? marketStatus(now) : null;
@@ -89,7 +124,7 @@ export function TopBar({
         </Link>
         <StreamStatusPill />
         <span className="ml-auto" />
-        {upstoxStatus === "VERIFIED_CONNECTED" ? (
+        {liveUpstoxStatus === "VERIFIED_CONNECTED" ? (
           <span className="text-emerald-400">● Upstox Connected</span>
         ) : upstoxStatus === "CONFIGURED_UNVERIFIED" ? (
           <span className="text-amber-400" title="A credential is configured but no verification request has succeeded yet">◐ Upstox Not Verified</span>
