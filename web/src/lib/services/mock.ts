@@ -244,6 +244,60 @@ export function mockSnapshot(index: UnderlyingId, now = new Date()): Snapshot {
     };
   }
 
+  if (index === "goldm") {
+    const spot = 76500;
+    const prevClose = 76200;
+    const expiry = "2026-12-28";
+    return {
+      index,
+      name: "GOLD MINI",
+      spot,
+      prevClose,
+      expiry,
+      strikeStep: 100,
+      lotSize: 100,
+      indicators: {
+        ema9: 76400, ema21: 76100, ema50: 75500, ema200: 74200, vwap: 76450, rsi: 56.0, macdHist: 45,
+        atr: 350, pdh: 76700, pdl: 76000, orHigh: 76600, orLow: 76250,
+      },
+      ivPercentile: 48,
+      breadth: null,
+      news,
+      chain: makeChain(
+        { spot, step: 100, atmIv: 14.5, expiry, putPeak: 76000, callPeak: 77000, oiScale: 12_000, putOiRatio: 1.1, callChgPct: 0.1, putChgPct: 0.1 },
+        now,
+      ),
+      ...meta,
+    };
+  }
+
+  if (index === "silverm") {
+    const spot = 91500;
+    const prevClose = 91000;
+    const expiry = "2026-12-28";
+    return {
+      index,
+      name: "SILVER MINI",
+      spot,
+      prevClose,
+      expiry,
+      strikeStep: 250,
+      lotSize: 5,
+      indicators: {
+        ema9: 91300, ema21: 90800, ema50: 89900, ema200: 88000, vwap: 91400, rsi: 58.0, macdHist: 120,
+        atr: 650, pdh: 91900, pdl: 90700, orHigh: 91700, orLow: 91100,
+      },
+      ivPercentile: 54,
+      breadth: null,
+      news,
+      chain: makeChain(
+        { spot, step: 250, atmIv: 22.0, expiry, putPeak: 91000, callPeak: 92000, oiScale: 10_000, putOiRatio: 1.05, callChgPct: 0.12, putChgPct: 0.12 },
+        now,
+      ),
+      ...meta,
+    };
+  }
+
   // Do not use BANKNIFTY as a silent fallback for the other supported indices.
   // In local/mock mode that used to make FINNIFTY, MIDCPNIFTY, SENSEX and BANKEX
   // appear to have a BANKNIFTY price and option chain, which is worse than having
