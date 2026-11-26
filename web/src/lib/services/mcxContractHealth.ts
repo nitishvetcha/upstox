@@ -13,10 +13,14 @@ export interface McxContractHealth {
 const expiryEnv: Record<CommodityId, string> = {
   crudeoil: "MCX_CRUDEOIL_EXPIRY",
   naturalgas: "MCX_NATURALGAS_EXPIRY",
+  goldm: "MCX_GOLDM_EXPIRY",
+  silverm: "MCX_SILVERM_EXPIRY",
 };
 const keyEnv: Record<CommodityId, string> = {
   crudeoil: "MCX_CRUDEOIL_KEY",
   naturalgas: "MCX_NATURALGAS_KEY",
+  goldm: "MCX_GOLDM_KEY",
+  silverm: "MCX_SILVERM_KEY",
 };
 
 export function mcxContractHealth(now = new Date()): McxContractHealth[] {

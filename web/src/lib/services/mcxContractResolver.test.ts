@@ -366,3 +366,42 @@ test("resolveMcxContract: naturalgas contract resolves independently of crudeoil
 test("ROLLOVER_THRESHOLD_DAYS is exactly 3", () => {
   assert.equal(ROLLOVER_THRESHOLD_DAYS, 3);
 });
+
+test("resolveMcxContract: goldm resolves and rolls over when < 3 days to expiry", async () => {
+  clearMcxResolverCache();
+  const fakeContracts = [
+    { key: "MCX_FO|GOLDM_NEAR", symbol: "GOLDM26NOVFUT", expiry: "2026-11-28", lot: 100 },
+    { key: "MCX_FO|GOLDM_NEXT", symbol: "GOLDM26DECFUT", expiry: "2026-12-28", lot: 100 },
+  ];
+  const fakeResponse = makeFutBody(fakeContracts);
+
+  await withEnv({ MARKET_DATA_PROVIDER: "upstox" }, async () => {
+    const result = await withFetch(
+      () => Promise.resolve(new Response(fakeResponse, { status: 200 })),
+      () => resolveMcxContract("goldm", "fake-token", new Date("2026-11-26T10:00:00Z")),
+    );
+    assert.equal(result.commodityId, "goldm");
+    assert.equal(result.instrumentKey, "MCX_FO|GOLDM_NEXT");
+    assert.equal(result.rolledOver, true);
+    assert.equal(result.lotSize, 100);
+  });
+});
+
+test("resolveMcxContract: silverm resolves with 5 kg lot size", async () => {
+  clearMcxResolverCache();
+  const fakeContracts = [
+    { key: "MCX_FO|SILVERM_DEC", symbol: "SILVERM26DECFUT", expiry: "2026-12-28", lot: 5 },
+  ];
+  const fakeResponse = makeFutBody(fakeContracts);
+
+  await withEnv({ MARKET_DATA_PROVIDER: "upstox" }, async () => {
+    const result = await withFetch(
+      () => Promise.resolve(new Response(fakeResponse, { status: 200 })),
+      () => resolveMcxContract("silverm", "fake-token", new Date("2026-11-26T10:00:00Z")),
+    );
+    assert.equal(result.commodityId, "silverm");
+    assert.equal(result.instrumentKey, "MCX_FO|SILVERM_DEC");
+    assert.equal(result.rolledOver, false);
+    assert.equal(result.lotSize, 5);
+  });
+});

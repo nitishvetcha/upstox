@@ -258,9 +258,15 @@ export async function runLiveSwingScan(now = new Date()): Promise<SwingScanResul
   const niftyBars = await fetchDailyBarsFromUpstox(token, "NSE_INDEX|Nifty 50", toDate, fromDate);
   const stockData = new Map<string, DailyBar[]>();
 
+  const SWING_ETFS = [
+    { symbol: "GOLDBEES", instrumentKey: "NSE_EQ|INF204KB17I5" },
+    { symbol: "SILVERBEES", instrumentKey: "NSE_EQ|INF204KC1402" },
+  ];
+  const universe = [...ALL_LIQUID_CONSTITUENTS, ...SWING_ETFS];
+
   // Fetch in batches of 10 with 150ms spacing to respect Upstox rate limits
-  for (let i = 0; i < ALL_LIQUID_CONSTITUENTS.length; i += 10) {
-    const batch = ALL_LIQUID_CONSTITUENTS.slice(i, i + 10);
+  for (let i = 0; i < universe.length; i += 10) {
+    const batch = universe.slice(i, i + 10);
     const results = await Promise.all(
       batch.map(async (c) => {
         const bars = await fetchDailyBarsFromUpstox(token, c.instrumentKey, toDate, fromDate).catch(() => []);
@@ -270,7 +276,7 @@ export async function runLiveSwingScan(now = new Date()): Promise<SwingScanResul
     for (const r of results) {
       if (r.bars.length >= 50) stockData.set(r.symbol, r.bars);
     }
-    if (i + 10 < ALL_LIQUID_CONSTITUENTS.length) {
+    if (i + 10 < universe.length) {
       await new Promise((r) => setTimeout(r, 150));
     }
   }

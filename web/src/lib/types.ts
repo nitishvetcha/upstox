@@ -1,5 +1,5 @@
 export type IndexId = "nifty" | "banknifty" | "finnifty" | "midcpnifty" | "sensex" | "bankex";
-export type CommodityId = "crudeoil" | "naturalgas";
+export type CommodityId = "crudeoil" | "naturalgas" | "goldm" | "silverm";
 export type UnderlyingId = IndexId | CommodityId;
 
 // Where a piece of data came from. UNAVAILABLE = not produced yet (e.g. candle indicators before Phase 3).

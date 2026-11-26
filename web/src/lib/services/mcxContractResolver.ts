@@ -82,6 +82,18 @@ const COMMODITY_CONFIG: Record<CommodityId, CommodityFallbackConfig> = {
     envKeyVar: "MCX_NATURALGAS_KEY",
     searchQuery: "NATURALGAS",
   },
+  goldm: {
+    defaultKey: "MCX_FO|GOLDM",
+    defaultLotSize: 100,
+    envKeyVar: "MCX_GOLDM_KEY",
+    searchQuery: "GOLDM",
+  },
+  silverm: {
+    defaultKey: "MCX_FO|SILVERM",
+    defaultLotSize: 5,
+    envKeyVar: "MCX_SILVERM_KEY",
+    searchQuery: "SILVERM",
+  },
 };
 
 // --- In-memory cache (server process lifetime) ------------------------------
@@ -200,14 +212,20 @@ function envFallback(commodityId: CommodityId, now: Date): ResolvedMcxContract {
   const source: ResolvedMcxContract["source"] = envKey ? "ENV_FALLBACK" : "DEFAULT_FALLBACK";
 
   // Try to read the expiry from the sibling expiry env var
-  const expiryEnvVar = commodityId === "crudeoil" ? "MCX_CRUDEOIL_EXPIRY" : "MCX_NATURALGAS_EXPIRY";
+  const expiryEnvMap: Record<CommodityId, string> = {
+    crudeoil: "MCX_CRUDEOIL_EXPIRY",
+    naturalgas: "MCX_NATURALGAS_EXPIRY",
+    goldm: "MCX_GOLDM_EXPIRY",
+    silverm: "MCX_SILVERM_EXPIRY",
+  };
+  const expiryEnvVar = expiryEnvMap[commodityId];
   const expiry = process.env[expiryEnvVar]?.trim() ?? "1970-01-01";
   const days = daysUntilExpiry(expiry, now);
 
   return {
     commodityId,
     instrumentKey,
-    tradingSymbol: commodityId === "crudeoil" ? "CRUDEOIL FUT" : "NATURALGAS FUT",
+    tradingSymbol: `${commodityId.toUpperCase()} FUT`,
     lotSize: cfg.defaultLotSize,
     expiry,
     daysToExpiry: days,
@@ -313,11 +331,13 @@ export async function resolveAllMcxContracts(
   token: string,
   now = new Date(),
 ): Promise<Record<CommodityId, ResolvedMcxContract>> {
-  const [crude, gas] = await Promise.all([
+  const [crude, gas, goldm, silverm] = await Promise.all([
     resolveMcxContract("crudeoil", token, now),
     resolveMcxContract("naturalgas", token, now),
+    resolveMcxContract("goldm", token, now),
+    resolveMcxContract("silverm", token, now),
   ]);
-  return { crudeoil: crude, naturalgas: gas };
+  return { crudeoil: crude, naturalgas: gas, goldm, silverm };
 }
 
 /**

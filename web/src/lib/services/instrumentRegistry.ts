@@ -64,6 +64,26 @@ export const COMMODITIES: Record<CommodityId, CommodityInstrument> = {
     segment: "COMMODITY",
     exchange: "MCX",
   },
+  goldm: {
+    id: "goldm",
+    symbol: "GOLDM",
+    name: "GOLD MINI",
+    underlyingKey: process.env.MCX_GOLDM_KEY || "MCX_FO|GOLDM",
+    lotSize: 100, // 100g
+    strikeStep: 100,
+    segment: "COMMODITY",
+    exchange: "MCX",
+  },
+  silverm: {
+    id: "silverm",
+    symbol: "SILVERM",
+    name: "SILVER MINI",
+    underlyingKey: process.env.MCX_SILVERM_KEY || "MCX_FO|SILVERM",
+    lotSize: 5, // 5 kg
+    strikeStep: 250,
+    segment: "COMMODITY",
+    exchange: "MCX",
+  },
 };
 
 export const COMMODITY_IDS = Object.keys(COMMODITIES) as CommodityId[];
