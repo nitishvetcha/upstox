@@ -363,8 +363,17 @@ test("resolveMcxContract: naturalgas contract resolves independently of crudeoil
   });
 });
 
-test("ROLLOVER_THRESHOLD_DAYS is exactly 3", () => {
-  assert.equal(ROLLOVER_THRESHOLD_DAYS, 3);
+test("resolveMcxContract: goldm & silverm never emit invalid MCX_FO|GOLDM or MCX_FO|SILVERM on fallback", async () => {
+  clearMcxResolverCache();
+  await withEnv(
+    { MARKET_DATA_PROVIDER: "mock", MCX_GOLDM_KEY: undefined, MCX_SILVERM_KEY: undefined },
+    async () => {
+      const g = await resolveMcxContract("goldm", "fake-token", new Date("2026-11-26T10:00:00Z"));
+      const s = await resolveMcxContract("silverm", "fake-token", new Date("2026-11-26T10:00:00Z"));
+      assert.equal(g.instrumentKey, "");
+      assert.equal(s.instrumentKey, "");
+    },
+  );
 });
 
 test("resolveMcxContract: goldm resolves and rolls over when < 3 days to expiry", async () => {

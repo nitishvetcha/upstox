@@ -6,6 +6,7 @@
 //
 // Frozen constraint: NO Strategy 11.4 options math is touched here.
 
+import { gunzipSync } from "node:zlib";
 import { assertUpstoxNetworkAllowed } from "./upstoxNetworkGate.ts";
 import { UPSTOX_API_BASE } from "./upstoxEndpoints.ts";
 import type { CommodityId } from "./instrumentRegistry.ts";
@@ -83,13 +84,13 @@ const COMMODITY_CONFIG: Record<CommodityId, CommodityFallbackConfig> = {
     searchQuery: "NATURALGAS",
   },
   goldm: {
-    defaultKey: "MCX_FO|GOLDM",
+    defaultKey: "",
     defaultLotSize: 100,
     envKeyVar: "MCX_GOLDM_KEY",
     searchQuery: "GOLDM",
   },
   silverm: {
-    defaultKey: "MCX_FO|SILVERM",
+    defaultKey: "",
     defaultLotSize: 5,
     envKeyVar: "MCX_SILVERM_KEY",
     searchQuery: "SILVERM",
@@ -196,23 +197,52 @@ export function selectActiveContract(
 
 // --- Network layer ----------------------------------------------------------
 
+const MCX_MASTER_URL = "https://assets.upstox.com/market-quote/instruments/exchange/MCX.json.gz";
+let mcxMasterCache: { expiresAt: number; rows: RawSearchInstrument[] } | null = null;
+
+async function fetchMcxMaster(now: Date): Promise<RawSearchInstrument[]> {
+  if (mcxMasterCache && mcxMasterCache.expiresAt > now.getTime()) {
+    return mcxMasterCache.rows;
+  }
+  assertUpstoxNetworkAllowed("/market-quote/instruments/exchange/MCX.json.gz");
+  const res = await fetch(MCX_MASTER_URL, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
+  if (!res.ok) throw new Error(`MCX master HTTP ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  const json = JSON.parse(gunzipSync(buf).toString("utf8")) as RawSearchInstrument[];
+  const rows = Array.isArray(json) ? json : [];
+  mcxMasterCache = { expiresAt: now.getTime() + RESOLVER_TTL_MS, rows };
+  return rows;
+}
+
 async function fetchSearchResults(
   token: string,
   query: string,
+  now = new Date(),
 ): Promise<RawSearchInstrument[]> {
   assertUpstoxNetworkAllowed(SEARCH_PATH);
   const url = `${UPSTOX_API_BASE}${SEARCH_PATH}?q=${encodeURIComponent(query)}&exchanges=MCX&segment=MCX_FO`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    signal: AbortSignal.timeout(8_000),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Upstox search HTTP ${res.status} for "${query}"`);
-  const body = (await res.json()) as { status?: string; data?: unknown };
-  if (body?.status !== "success" || !Array.isArray(body?.data)) {
-    throw new Error(`Upstox search bad response for "${query}"`);
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(8_000),
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const body = (await res.json()) as { status?: string; data?: unknown };
+      if (body?.status === "success" && Array.isArray(body?.data) && body.data.length > 0) {
+        return body.data as RawSearchInstrument[];
+      }
+    }
+  } catch {
+    // Fall through to BOD MCX master
   }
-  return body.data as RawSearchInstrument[];
+  const master = await fetchMcxMaster(now);
+  const qUpper = query.toUpperCase();
+  return master.filter(
+    (r) =>
+      typeof r.trading_symbol === "string" &&
+      r.trading_symbol.toUpperCase().startsWith(qUpper)
+  );
 }
 
 // --- Env / default fallback -------------------------------------------------

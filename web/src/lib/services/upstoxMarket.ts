@@ -329,6 +329,12 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     if (isCommodityId(index) && !getCachedMcxContract(index, now())) {
       await resolveMcxContract(index, token, now()).catch(() => {});
     }
+    if (isCommodityId(index)) {
+      const inst = getUnderlyingInstrument(index);
+      if (!inst?.underlyingKey || !/^MCX_FO\|\d+$/.test(inst.underlyingKey)) {
+        throw new UpstoxError("UPSTOX_INVALID_INSTRUMENT", `Unresolved MCX key for ${index}`);
+      }
+    }
   };
 
   const getCandles = async (index: UnderlyingId, timeframe: Timeframe): Promise<CandleSeries> => {
