@@ -168,4 +168,28 @@ describe("notificationService — Dispatch, Deduplication & Fail-Safe", () => {
     });
     assert.equal(res.telegram.configured, true);
   });
+
+  it("formats Grade A alert with exact IST Theta Stop wall-clock timestamp", async () => {
+    process.env.TELEGRAM_BOT_TOKEN = "mock_bot_token";
+    process.env.TELEGRAM_CHAT_ID = "123456";
+
+    let sentBody = "";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      sentBody = String(init?.body ?? "");
+      return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => "" } as Response;
+    }) as typeof fetch;
+
+    try {
+      const opp = createDummyOpportunity({ grade: "A" });
+      const res = await notifyOpportunitySignal(opp);
+      assert.equal(res.telegram, true);
+      assert.ok(sentBody.includes("45m Theta Stop:</b> Exit by"));
+      assert.ok(sentBody.includes("IST if T1 not reached"));
+    } finally {
+      globalThis.fetch = originalFetch;
+      delete process.env.TELEGRAM_BOT_TOKEN;
+      delete process.env.TELEGRAM_CHAT_ID;
+    }
+  });
 });

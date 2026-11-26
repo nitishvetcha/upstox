@@ -207,6 +207,14 @@ export async function notifyOpportunitySignal(
 
   alertCache.set(dedupKey, now);
 
+  const thetaExitTime =
+    new Date(now + 45 * 60 * 1000).toLocaleTimeString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }) + " IST";
+
   const score = "opportunityScore" in item ? item.opportunityScore : item.score;
   const strategy = item.strategyType || (optType === "CE" ? "LONG_CALL" : "LONG_PUT");
   const entry = item.entry;
@@ -241,7 +249,7 @@ export async function notifyOpportunitySignal(
     ``,
     `🛡 <b>Rules:</b>`,
     `• Place LIMIT order at ₹${entry.toFixed(1)}. No market orders.`,
-    `• <b>45m Theta Stop:</b> If T1 not reached in 45m, close near breakeven.`,
+    `• <b>45m Theta Stop:</b> Exit by ${thetaExitTime} if T1 not reached.`,
     item.reasons && item.reasons.length > 0 ? `• <i>${item.reasons.slice(0, 2).join(" · ")}</i>` : "",
     ``,
     `📈 <b>Chart:</b> <a href="${getTradingViewChartUrl(underlying, "15")}">TradingView Live ${underlying}</a>`,
@@ -263,7 +271,7 @@ export async function notifyOpportunitySignal(
       { name: "Risk per Lot", value: `₹${riskPerLot.toLocaleString("en-IN")}`, inline: true },
       { name: "Capital per Lot", value: `₹${capitalPerLot.toLocaleString("en-IN")}`, inline: true },
       { name: "TradingView Chart", value: `[Open ${underlying} Chart](${getTradingViewChartUrl(underlying, "15")})`, inline: true },
-      { name: "Mandatory Safeguard", value: "Zero slippage: Exchange LIMIT only. 45m Theta time-stop.", inline: false },
+      { name: "Mandatory Safeguard", value: `Zero slippage: Exchange LIMIT only. 45m Theta time-stop (Exit by ${thetaExitTime} if T1 not reached).`, inline: false },
     ],
   };
 
