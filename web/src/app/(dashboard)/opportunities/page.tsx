@@ -26,6 +26,7 @@ import { summarizeSources } from "@/lib/provenanceDisplay";
 import { pickFromStock, pickFromContract } from "@/lib/savedPickMapping";
 import { selectBestRecommendation, type RecommendationCandidate } from "@/lib/bestRecommendation";
 import { TradingViewChart } from "@/components/TradingViewChart";
+import { TodaySwingPickCard } from "@/components/research/TodaySwingPickCard";
 import { getTradingViewChartUrl } from "@/lib/tradingView";
 import { ExternalLink, BarChart3 } from "lucide-react";
 // ── Decision funnel: real engine counts only. Rejections are reported as one total; the engines do not split them into data-quality, strategy and risk categories. ──
@@ -249,7 +250,7 @@ function EngineGovernanceBanner() {
     { name: "Intraday Stocks", status: "PAPER EVALUATION", tone: "border-sky-700/60 bg-sky-950/30 text-sky-300", desc: "1.5% max-risk structural stops, real volume/VWAP validation. Forward paper tracking." },
     { name: "Long-Term Bluechips", status: "FUNDAMENTAL RESEARCH", tone: "border-teal-700/60 bg-teal-950/30 text-teal-300", desc: "Quality balance sheet screener (ROCE > 15%, ROE > 15%, low D/E, moat analysis)." },
     { name: "Strategy 11.4", status: "FROZEN BENCHMARK", tone: "border-zinc-700 bg-zinc-900 text-zinc-400", desc: "SHA-256 byte-for-byte immutable historical baseline; not the unified pick engine." },
-    { name: "Swing Stocks", status: "RETIRED · WATCH ONLY", tone: "border-red-800/60 bg-red-950/30 text-red-300", desc: "Retired following negative 5y backtest. Retained for observational diagnostics only." },
+    { name: "Swing Stocks", status: "ACTIVE — SWING-V1 MODE B (₹10k)", tone: "border-emerald-700/60 bg-emerald-950/30 text-emerald-300", desc: "Daily EOD delivery swing engine (₹10k / 1 position / 15-day cap, +1.5R BE, 2.5x target)." },
   ];
 
   return (
@@ -965,12 +966,12 @@ function OptionRecCard({ contract, snapshotSource, lotSize, rank, daysLeft, scor
           </div>
           <div className="flex items-center gap-1.5">
             <span className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-[10px] text-teal-400">T2 (50%)</span>
-            <span>Ride momentum to <strong className="text-zinc-200">{fmt(contract.target2)}</strong>; exit before 15:15 IST (no overnight theta decay)</span>
+            <span>Ride momentum to <strong className="text-zinc-200">{fmt(contract.target2)}</strong>; exit before {contract.underlying === "CRUDEOIL" || contract.underlying === "NATURALGAS" ? "23:15 IST" : "15:15 IST"} (no overnight theta decay)</span>
           </div>
           {contract.isZeroDte && (
             <div className="flex items-center gap-1.5 text-amber-300">
               <span className="rounded bg-amber-900/40 px-1 py-0.5 font-mono text-[10px] text-amber-300">0-DTE Mandatory</span>
-              <span>Same-day expiry: Exit all positions before <strong className="text-zinc-100">15:15 IST</strong> to eliminate zero-loss settlement risk</span>
+              <span>Same-day expiry: Exit all positions before <strong className="text-zinc-100">{contract.underlying === "CRUDEOIL" || contract.underlying === "NATURALGAS" ? "23:15 IST" : "15:15 IST"}</strong> to eliminate zero-loss settlement risk</span>
             </div>
           )}
         </div>
@@ -1206,7 +1207,7 @@ function OptionsIndexSection({ result, altResult, now, scoreBands }: { result: O
         </p>
         {counts.requestedKeys > 0 && counts.unavailableKeys / counts.requestedKeys > 0.5 && (
           <p className="mt-0.5 text-[10px] text-amber-500/80">
-            ⚠ {Math.round((counts.unavailableKeys / counts.requestedKeys) * 100)}% contracts UNAVAILABLE — Upstox V3 live prices have limited coverage for BSE-listed ({result.underlying}) contracts. Evaluation accuracy is reduced; this is a provider limitation, not an engine failure.
+            ⚠ {Math.round((counts.unavailableKeys / counts.requestedKeys) * 100)}% contracts UNAVAILABLE — Upstox V3 live prices have limited coverage for {result.underlying === "CRUDEOIL" || result.underlying === "NATURALGAS" ? "MCX-listed" : "BSE-listed"} ({result.underlying}) contracts. Evaluation accuracy is reduced; this is a provider limitation, not an engine failure.
           </p>
         )}
         <p className="mt-0.5 text-[10px] text-zinc-600">
@@ -1467,22 +1468,28 @@ export default async function OpportunitiesPage() {
 
       <EngineGovernanceBanner />
 
-      {/* ── TradingView Live Terminal ── */}
-      <details className="app-surface rounded-2xl border border-zinc-800 p-5 group" open>
-        <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-zinc-200">
-          <div className="flex items-center gap-2">
-            <BarChart3 size={18} className="text-sky-400" />
-            <span>TradingView Live Terminal</span>
-            <span className="rounded bg-sky-950/60 border border-sky-800/50 px-2 py-0.5 text-[11px] font-medium text-sky-400">
-              NSE / BSE / MCX Live Charts
-            </span>
-          </div>
-          <span className="text-xs text-zinc-400 group-open:rotate-180 transition-transform">▼</span>
-        </summary>
-        <div className="mt-4">
-          <TradingViewChart symbol="NIFTY" timeframe="15" height={440} showInstrumentSelector={true} />
+      {/* ── TradingView Quick Links Bar ── */}
+      <div className="app-surface rounded-2xl border border-zinc-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-semibold text-zinc-200">
+          <BarChart3 size={16} className="text-sky-400" />
+          <span>Open in TradingView</span>
+          <span className="text-[11px] font-normal text-zinc-400">(15m Live Charts)</span>
         </div>
-      </details>
+        <div className="flex flex-wrap items-center gap-2">
+          {(["NIFTY", "BANKNIFTY", "CRUDEOIL", "NATURALGAS"] as const).map((sym) => (
+            <a
+              key={sym}
+              href={getTradingViewChartUrl(sym, "15")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs font-medium text-sky-300 hover:border-sky-500/60 hover:bg-zinc-800 transition-colors"
+            >
+              <span>{sym}</span>
+              <span className="text-[10px] text-zinc-400">↗</span>
+            </a>
+          ))}
+        </div>
+      </div>
 
       <DecisionFunnel
         options={indexOptions}
@@ -1543,6 +1550,10 @@ export default async function OpportunitiesPage() {
           )}
         </SubSection>
 
+        <div className="mb-4">
+          <TodaySwingPickCard />
+        </div>
+
         <SubSection title="Swing Stocks" tone="text-zinc-300">
           {swingLong.length > 0 || swingShort.length > 0 ? (
             <>
@@ -1574,15 +1585,19 @@ export default async function OpportunitiesPage() {
           </p>
         </SubSection>
 
-        <SubSection title="Long-Term Stocks (hold months+)" tone="text-zinc-300">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs">
-            <span className="text-emerald-300 font-medium">
-              Daily Fundamental Scoring · Moat, Capital Efficiency (ROCE/ROE) &amp; Solvency · Cached 24h (Static across 15-min Intraday Refreshes)
-            </span>
-            <span className="font-mono text-zinc-400 text-[11px]">
-              Universe: {ltResult.universe}
-            </span>
-          </div>
+        <details className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/30 p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-zinc-300">
+            Long-Term Bluechips (hold months+ · collapsed by default)
+          </summary>
+          <div className="mt-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs">
+              <span className="text-emerald-300 font-medium">
+                Daily Fundamental Scoring · Moat, Capital Efficiency (ROCE/ROE) &amp; Solvency · Cached 24h (Static across 15-min Intraday Refreshes)
+              </span>
+              <span className="font-mono text-zinc-400 text-[11px]">
+                Universe: {ltResult.universe}
+              </span>
+            </div>
 
           {ltResult.topOpportunities.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2">
@@ -1598,7 +1613,8 @@ export default async function OpportunitiesPage() {
               reason={ltResult.fundamentalDataAvailable ? null : ltResult.dataAvailabilityMessage}
             />
           )}
-        </SubSection>
+          </div>
+        </details>
       </Section>
 
       {/* ── B. OPTIONS RECOMMENDATIONS ────────────────────────────────── */}
