@@ -137,6 +137,7 @@ export function fmtIst(iso: string | Date, withSeconds = true) {
 }
 
 export function fmtDate(ymd: string) {
+  if (!ymd || Number.isNaN(Date.parse(ymd))) return "—";
   return new Date(ymd + "T00:00:00Z").toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",

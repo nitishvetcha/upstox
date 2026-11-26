@@ -1,6 +1,7 @@
 // Server-only entry point for market data. The UI and API routes call these functions and never
 // touch a provider directly. MARKET_DATA_PROVIDER=upstox uses live data when logged in, else mock.
 import { cache } from "react";
+import { getCachedMcxContract } from "./mcxContractResolver.ts";
 import { logEvent } from "../ops/structuredLog.ts";
 import type { FallbackReason, IndexId, UnderlyingId, MarketDataProvider, News, Snapshot, SourceInfo } from "../types.ts";
 import { getIndexNews } from "./newsProvider.ts";
@@ -99,13 +100,15 @@ export async function buildSnapshot(p: MarketDataProvider, index: UnderlyingId, 
       return await p.getOptionChain(index);
     } catch (e) {
       if (index === "goldm" || index === "silverm") {
+        const resolvedExpiry = getCachedMcxContract(index, now)?.expiry ?? "";
         return {
           index,
-          expiry: "",
+          expiry: resolvedExpiry,
           spot: 0,
           strikeStep: index === "goldm" ? 100 : 250,
           lotSize: null,
           rows: [],
+          optionPriceVerification: undefined,
           source: { source: "UNAVAILABLE" as const, provider: "UPSTOX" as const, fetchedAt: null },
         };
       }
