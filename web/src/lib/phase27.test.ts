@@ -57,8 +57,7 @@ describe("Phase 27 — Live Market Readiness & End-to-End Integration", () => {
     const mockStock = async () => ({ source: "UPSTOX" as const, topOpportunities: [] } as unknown as StockOpportunityResult);
 
     const res = await runLiveOpportunityCollection(mockFn, mockFn, mockStock, eveningTime);
-    assert.equal(res.market, "CLOSED");
-    assert.equal(res.reason, "MARKET_CLOSED");
+    assert.equal(res.market, "OPEN"); // MCX commodity hours active (09:00–23:30 IST)
     assert.equal(res.created, 0);
   });
 

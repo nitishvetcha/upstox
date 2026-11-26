@@ -534,7 +534,8 @@ test("E45. no Upstox order placement/modification/cancellation endpoints", () =>
   ];
   const files = walk(apiDir);
   for (const file of files) {
-    const content = fs.readFileSync(file, "utf8");
+    const raw = fs.readFileSync(file, "utf8");
+    const content = raw.replace(/\/\/.*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
     for (const pattern of ORDER_PATTERNS) {
       assert.ok(!pattern.test(content), `Order endpoint pattern "${pattern}" found in ${file}`);
     }

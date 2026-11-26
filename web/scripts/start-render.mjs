@@ -9,6 +9,7 @@
 // 7. Global unhandledRejection / uncaughtException handlers with exit code 1 propagation.
 
 import { spawn } from "node:child_process";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -159,6 +160,42 @@ function startBotRunner() {
   });
 }
 
+// Heartbeat and lock persistence for Render supervisor
+function updateRunnerHeartbeat(extra = {}) {
+  try {
+    const dataDir = path.join(webDir, ".data");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    const now = new Date();
+    const lockPayload = {
+      pid: process.pid,
+      updatedAt: now.toISOString(),
+      heartbeat: now.getTime(),
+      status: "RUNNING",
+      runner: "RENDER_SUPERVISOR_IN_PROCESS",
+      ...extra,
+    };
+    const lockJsonPath = path.join(dataDir, "paper-trading-lock.json");
+    const tmpJsonPath = path.join(dataDir, `paper-trading-lock-${Date.now()}.tmp`);
+    fs.writeFileSync(tmpJsonPath, JSON.stringify(lockPayload, null, 2), "utf8");
+    fs.renameSync(tmpJsonPath, lockJsonPath);
+
+    fs.writeFileSync(path.join(dataDir, "paper-live.lock"), String(process.pid), "utf8");
+  } catch (err) {
+    console.warn(`[RENDER:HEARTBEAT_WARN] Could not update lock files: ${err.message}`);
+  }
+}
+
+function cleanupLocks() {
+  try {
+    const lockJsonPath = path.join(webDir, ".data", "paper-trading-lock.json");
+    if (fs.existsSync(lockJsonPath)) fs.unlinkSync(lockJsonPath);
+    const lockPath = path.join(webDir, ".data", "paper-live.lock");
+    if (fs.existsSync(lockPath)) fs.unlinkSync(lockPath);
+  } catch {}
+}
+
 // 3. Autonomous In-Process Paper Cycle Loop
 let paperCycleTimer = null;
 
@@ -170,6 +207,7 @@ function startPaperCycleRunner() {
   }
 
   console.log("[RENDER] Spawning Autonomous Paper Cycle Loop (every 2m during market hours)...");
+  updateRunnerHeartbeat({ lastCycleAt: new Date().toISOString() });
 
   const runCycle = async () => {
     if (shuttingDown) return;
@@ -184,12 +222,19 @@ function startPaperCycleRunner() {
         const c = data.collect ?? {};
         const m = data.monitor ?? {};
         console.log(`[PAPER-CYCLE:OK] market=${c.market ?? "OPEN"} created=${c.created ?? 0} dup=${c.duplicates ?? 0} eval=${m.evaluated ?? 0} updated=${m.updated ?? 0} checkpointed=${data.checkpointed ?? false}`);
+        updateRunnerHeartbeat({
+          lastCycleAt: new Date().toISOString(),
+          market: c.market ?? "OPEN",
+          checkpointed: data.checkpointed ?? false,
+        });
       } else {
         console.warn(`[PAPER-CYCLE:WARN] HTTP ${res.status}: ${data.error ?? "cycle error"}`);
+        updateRunnerHeartbeat({ lastCycleError: data.error ?? `HTTP ${res.status}` });
       }
     } catch (e) {
       if (!shuttingDown) {
         console.warn(`[PAPER-CYCLE:ERROR] ${e.message}`);
+        updateRunnerHeartbeat({ lastCycleError: e.message });
       }
     }
   };
@@ -205,12 +250,106 @@ function startPaperCycleRunner() {
   }, 12_000);
 }
 
+// 4. Autonomous In-Process Stock Scan Loop (every 5m during NSE hours)
+let stockScanTimer = null;
+
+function startStockScanRunner() {
+  const schedulerToken = process.env.SCHEDULER_TOKEN;
+  if (!schedulerToken) {
+    console.log("[RENDER] NOTICE: SCHEDULER_TOKEN not set; skipping autonomous stock scan runner.");
+    return;
+  }
+
+  console.log("[RENDER] Spawning Autonomous Stock Scan Loop (every 5m during NSE hours)...");
+
+  const runStockScan = async () => {
+    if (shuttingDown) return;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/cron/stock-scan`, {
+        method: "POST",
+        headers: { "x-scheduler-token": schedulerToken },
+        signal: AbortSignal.timeout(90000),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        if (data.skipped) {
+          console.log(`[STOCK-SCAN:INFO] Skipped: ${data.reason ?? "market closed"}`);
+        } else {
+          console.log(`[STOCK-SCAN:OK] scanned=${data.stocksScanned ?? 0} available=${data.stocksAvailable ?? 0} topOpps=${data.topOpportunitiesCount ?? 0} duration=${data.durationMs ?? 0}ms`);
+        }
+      } else {
+        console.warn(`[STOCK-SCAN:WARN] HTTP ${res.status}: ${data.error ?? "scan error"}`);
+      }
+    } catch (e) {
+      if (!shuttingDown) {
+        console.warn(`[STOCK-SCAN:ERROR] ${e.message}`);
+      }
+    }
+  };
+
+  // Wait 25 seconds after Next.js starts listening before first execution
+  setTimeout(() => {
+    if (!shuttingDown) {
+      void runStockScan();
+      stockScanTimer = setInterval(() => {
+        void runStockScan();
+      }, 300_000); // every 5 minutes
+    }
+  }, 25_000);
+}
+
+// 5. Public Keep-Alive Pinger (prevents Render Free container from idling/sleeping)
+let keepAliveTimer = null;
+
+function startKeepAlivePinger() {
+  const externalUrl = process.env.APP_BASE_URL || process.env.RENDER_EXTERNAL_URL;
+  if (!externalUrl) {
+    console.log("[RENDER] NOTICE: APP_BASE_URL / RENDER_EXTERNAL_URL not set; skipping external keep-alive pinger.");
+    return;
+  }
+
+  const pingUrl = `${externalUrl.replace(/\/+$/, "")}/api/health?probe=keepalive`;
+  console.log(`[RENDER] Spawning Public Keep-Alive Pinger to ${pingUrl} (every 4m)...`);
+
+  const runPing = async () => {
+    if (shuttingDown) return;
+    try {
+      const res = await fetch(pingUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(30000),
+      });
+      if (res.ok) {
+        console.log(`[KEEP-ALIVE:OK] Render container activity refreshed (${res.status})`);
+      } else {
+        console.warn(`[KEEP-ALIVE:WARN] HTTP ${res.status}`);
+      }
+    } catch (e) {
+      if (!shuttingDown) {
+        console.warn(`[KEEP-ALIVE:ERROR] ${e.message}`);
+      }
+    }
+  };
+
+  // Wait 40 seconds before first keep-alive ping
+  setTimeout(() => {
+    if (!shuttingDown) {
+      void runPing();
+      keepAliveTimer = setInterval(() => {
+        void runPing();
+      }, 240_000); // every 4 minutes (well within Render's 15m idle threshold)
+    }
+  }, 40_000);
+}
+
 // Graceful termination
 const shutdown = (sig, exitCode = 0) => {
   if (shuttingDown) return;
   shuttingDown = true;
   if (paperCycleTimer) clearInterval(paperCycleTimer);
+  if (stockScanTimer) clearInterval(stockScanTimer);
+  if (keepAliveTimer) clearInterval(keepAliveTimer);
   if (botRestartTimer) clearTimeout(botRestartTimer);
+  cleanupLocks();
   console.log(`\n[RENDER] Received ${sig}, terminating child processes cleanly (exitCode ${exitCode})...`);
   for (const [label, child] of children.entries()) {
     try {
@@ -238,4 +377,6 @@ process.on("unhandledRejection", (reason) => {
 // Launch processes
 startNextServer();
 startPaperCycleRunner();
+startStockScanRunner();
+startKeepAlivePinger();
 startBotRunner();

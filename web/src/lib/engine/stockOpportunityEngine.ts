@@ -1254,8 +1254,17 @@ export async function scanStocks(kind: "intraday" | "swing", now = new Date(), d
     }
   }
 
+  const rawMaxPrice = process.env.STOCK_MAX_AFFORDABLE_PRICE;
+  const rawCapital = process.env.ACCOUNT_CAPITAL;
+  const maxAffordablePrice = rawMaxPrice
+    ? Number(rawMaxPrice)
+    : (rawCapital && Number(rawCapital) > 0 && Number(rawCapital) <= 15000 ? 3500 : Infinity);
+
   for (const q of available) {
-    if (q.ltp === null) { rejected++; continue; }
+    if (q.ltp === null || (Number.isFinite(maxAffordablePrice) && q.ltp > maxAffordablePrice)) {
+      rejected++;
+      continue;
+    }
 
     // Intraday recommendations use current-session LIVE quotes during market hours,
     // or latest completed trading session END_OF_DAY quotes outside market hours.

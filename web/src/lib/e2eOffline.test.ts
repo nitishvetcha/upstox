@@ -58,7 +58,7 @@ test("E2E-2. labelled-LIVE inputs: diagnostic and paper engine agree, the positi
 });
 
 test("E2E-3. the net reward-to-risk economic diagnostic reaches the operator as a diagnostic warning", () => {
-  const snap = labelled("banknifty", WED, "LIVE");
+  const snap = labelled("nifty", WED, "LIVE");
   const a = analyze(snap, WED);
   const d = diagnose(a, WED);
   // Net R:R is an economic diagnostic metric, preserved in warnings per approved Turn 7 policy

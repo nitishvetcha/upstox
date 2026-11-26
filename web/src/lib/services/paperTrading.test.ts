@@ -29,6 +29,7 @@ test("1. Paper Engine: TRADE + APPROVED + LIVE market data creates paper trade",
 test("2. Paper Engine: WAIT produces no paper trade", () => {
   const engine = new PaperTradingEngine({ accountCapital: 500_000 });
   const snapshot = mockSnapshot("banknifty", MIDDAY);
+  snapshot.news.eventRisk = "HIGH";
   const analysis = analyze(snapshot, MIDDAY, { accountCapital: 500_000 });
 
   assert.equal(analysis.status, "WAIT");

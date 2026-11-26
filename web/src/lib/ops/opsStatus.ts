@@ -42,17 +42,45 @@ export function deriveRunnerState(o: { lockPidAlive: boolean; market: string; la
 function pidIsPaperLive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); } catch { return false; }
-  try { return /paper-live\.mjs/.test(execFileSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8" })); } catch { return false; }
+  try { return /(paper-live\.mjs|start-render\.mjs)/.test(execFileSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8" })); } catch { return false; }
 }
 
 export function runnerStatus(market: string, now = new Date(), root = dataRoot()) {
   let lockPid: number | null = null;
-  try { lockPid = Number(fs.readFileSync(path.join(root, "paper-live.lock"), "utf8").trim()); } catch { /* no lock */ }
-  const lockPidAlive = lockPid !== null && pidIsPaperLive(lockPid);
+  let lockHeartbeatAlive = false;
+
+  // 1. Check .data/paper-trading-lock.json for in-process supervisor heartbeat
+  try {
+    const lockJsonPath = path.join(root, "paper-trading-lock.json");
+    if (fs.existsSync(lockJsonPath)) {
+      const lockData = JSON.parse(fs.readFileSync(lockJsonPath, "utf8"));
+      if (lockData && typeof lockData === "object") {
+        if (typeof lockData.pid === "number") lockPid = lockData.pid;
+        if (lockData.updatedAt) {
+          const ageS = (now.getTime() - new Date(lockData.updatedAt).getTime()) / 1000;
+          // Active heartbeat within 5 minutes (300 seconds)
+          if (ageS >= 0 && ageS <= 300) {
+            lockHeartbeatAlive = true;
+          }
+        }
+      }
+    }
+  } catch { /* ignore parse error */ }
+
+  // 2. Check legacy paper-live.lock PID file
+  if (lockPid === null) {
+    try { lockPid = Number(fs.readFileSync(path.join(root, "paper-live.lock"), "utf8").trim()); } catch { /* no lock */ }
+  }
+
+  const lockPidAlive = lockHeartbeatAlive || (lockPid !== null && pidIsPaperLive(lockPid));
+
   // Existing stores, sorted by timestamp. Only genuine runner records count (test runs leaked here before a fix).
-  const lastCollection = listCollectionRuns().find((r) => /^\d+_api$/.test(r.id) && r.sourceStatus === "LIVE") ?? null;
+  // Prefer runs with stockCount > 0 for last stock collection if available, falling back to any live collection.
+  const liveCollections = listCollectionRuns().filter((r) => /^\d+_api$/.test(r.id) && r.sourceStatus === "LIVE");
+  const lastStockCollection = liveCollections.find((r) => (r.stockCount ?? 0) > 0) ?? liveCollections[0] ?? null;
+  const lastCollection = liveCollections[0] ?? null;
   const lastMonitor = listMonitorRuns().find((r) => /^\d+_[a-z0-9]+$/.test(r.id)) ?? null; // real ids: <epoch ms>_<suffix>
-  const lastCollectionAt = lastCollection?.timestamp ?? null;
+  const lastCollectionAt = lastStockCollection?.timestamp ?? lastCollection?.timestamp ?? null;
   const health = readJsonl<HealthEvent>(path.join(root, "runner-health.jsonl"));
   return {
     ...deriveRunnerState({ lockPidAlive, market, lastCollectionAt, now }),

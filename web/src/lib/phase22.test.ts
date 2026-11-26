@@ -75,18 +75,18 @@ describe("VR22 — Current engine version", () => {
 // ── GR — Opportunity grades ───────────────────────────────────────────────────
 
 describe("GR — Opportunity grade logic", () => {
-  it("GR-01: A+ for score 75+, rr 2.0+, conf 70+, 5 live sources", () => {
-    assert.equal(gradeOpportunity(75, 2.0, 70, 5), "A+");
+  it("GR-01: A+ for score 80+, rr 2.0+, conf 70+, 5 live sources", () => {
+    assert.equal(gradeOpportunity(80, 2.0, 70, 5), "A+");
     assert.equal(gradeOpportunity(90, 3.0, 90, 5), "A+");
   });
 
-  it("GR-02: A for score 65+, rr 1.5+, conf 60+", () => {
-    assert.equal(gradeOpportunity(65, 1.5, 60, 5), "A");
-    assert.equal(gradeOpportunity(70, 1.52, 100, 5), "A");
+  it("GR-02: A for score 70+, rr 1.5+, conf 60+", () => {
+    assert.equal(gradeOpportunity(70, 1.5, 60, 5), "A");
+    assert.equal(gradeOpportunity(75, 1.52, 100, 5), "A");
   });
 
-  it("GR-03: B for score 50+, rr 1.2+, conf 50+", () => {
-    assert.equal(gradeOpportunity(50, 1.2, 50, 5), "B");
+  it("GR-03: B for score 60+, rr 1.2+, conf 50+", () => {
+    assert.equal(gradeOpportunity(60, 1.2, 50, 5), "B");
   });
 
   it("GR-04: C for score 40+, rr 1.0+", () => {
@@ -107,7 +107,7 @@ describe("GR — Opportunity grade logic", () => {
   it("GR-07: A+ scores above A (A+ requires higher rr)", () => {
     const grades: OpportunityGrade[] = ["A+", "A", "B", "C", "REJECT"];
     const aPlus = gradeOpportunity(80, 2.5, 80, 5);
-    const a = gradeOpportunity(65, 1.5, 60, 5);
+    const a = gradeOpportunity(70, 1.5, 60, 5);
     assert.equal(grades.indexOf(aPlus), 0);
     assert.equal(grades.indexOf(a), 1);
   });

@@ -49,6 +49,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps) {
   const isLong = pick.direction !== "SHORT";
   const isOption = pick.instrumentType.includes("OPTION");
+  const isStock = pick.instrumentType === "STOCK";
   const rawEntry = Number(pick.entry) || 0;
   const rawStop = Number(pick.stopLoss) || 0;
   const rawT1 = pick.targets?.[0] != null ? Number(pick.targets[0]) : 0;
@@ -70,7 +71,7 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
   const initialLtp = pick.livePrice != null && pick.livePrice > 0 ? pick.livePrice : rawEntry;
   const [lotSize, setLotSize] = useState<number>(detectedLotSize);
   const [lots, setLots] = useState<number>(1);
-  const [accountCapital, setAccountCapital] = useState<number>(100_000);
+  const [accountCapital, setAccountCapital] = useState<number>(isStock ? 10_000 : 100_000);
   const [simulatedLtp, setSimulatedLtp] = useState<number>(initialLtp);
   const [customLtpInput, setCustomLtpInput] = useState<string>(initialLtp ? String(initialLtp) : "");
 
@@ -146,6 +147,18 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
     } catch {
       // ignore
     }
+  };
+
+  const handleAutoSize10k = () => {
+    const cap = 10_000;
+    setAccountCapital(cap);
+    const riskPerShare = isLong ? Math.max(0.01, entry - stop) : Math.max(0.01, stop - entry);
+    const riskBudget = cap * 0.015; // 1.5% = ₹150
+    const riskQty = Math.floor(riskBudget / riskPerShare);
+    const cashQty = Math.floor(cap / (entry || 1));
+    const sizedQty = Math.max(1, Math.min(riskQty, cashQty));
+    setLots(sizedQty);
+    setLotSize(1);
   };
 
   // Quick Preset Handlers
@@ -813,6 +826,16 @@ export function SavedPickCalculator({ pick, onClose }: SavedPickCalculatorProps)
           <div className="mt-1 text-[10px] text-zinc-500 font-mono">
             Total Qty: {totalQuantity} units
           </div>
+          {isStock && (
+            <button
+              type="button"
+              onClick={handleAutoSize10k}
+              className="mt-1.5 inline-flex items-center gap-1 rounded bg-sky-950 px-2 py-1 text-[10px] font-semibold text-sky-300 border border-sky-800 hover:bg-sky-900 transition-colors"
+            >
+              <Sparkles size={11} />
+              Auto-Size for ₹10k (1.5% Risk)
+            </button>
+          )}
         </div>
 
         <div>

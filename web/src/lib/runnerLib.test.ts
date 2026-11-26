@@ -6,12 +6,11 @@ import { runLiveOpportunityCollection } from "./services/liveOpportunityCollecto
 const none = async () => ({ spot: 1, topOpportunities: [], rejectedContracts: [], dataQuality: { market: "LIVE" } }) as never;
 const stocks = async () => ({ source: "UPSTOX", freshness: "LIVE", topOpportunities: [] }) as never;
 
-test("09:10 IST start: the real collector says PRE_MARKET and the runner WAITS (does not end the session)", async () => {
+test("09:10 IST start: the real collector says OPEN (due to MCX opening at 09:00 IST) and the runner runs", async () => {
   const at0910 = new Date("2026-10-26T03:40:00.000Z"); // Monday 09:10 IST
   const r = await runLiveOpportunityCollection(none, none, stocks, at0910);
-  assert.equal(r.market, "PRE_MARKET");
-  assert.equal(r.reason, "MARKET_CLOSED", "collector's reason is misleading on its own");
-  assert.equal(cycleAction(r), "WAIT_PREOPEN");
+  assert.equal(r.market, "OPEN");
+  assert.equal(cycleAction(r), "RUN");
 });
 
 test("only a CLOSED market ends the session; cutoff and errors keep the runner going", () => {

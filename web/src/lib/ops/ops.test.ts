@@ -37,6 +37,74 @@ test("runner status with an empty data folder reports nothing running and no cra
   assert.deepEqual(r.healthEvents, []);
 });
 
+test("runner status detects active in-process supervisor heartbeat from paper-trading-lock.json", () => {
+  const d = tmp();
+  const c = path.join(d, "c");
+  fs.mkdirSync(c);
+  const now = new Date("2026-11-26T06:00:00.000Z");
+
+  // Write active heartbeat (30 seconds ago)
+  fs.writeFileSync(
+    path.join(d, "paper-trading-lock.json"),
+    JSON.stringify({
+      pid: 999999,
+      updatedAt: new Date(now.getTime() - 30_000).toISOString(),
+      heartbeat: now.getTime() - 30_000,
+      status: "RUNNING",
+      runner: "RENDER_SUPERVISOR_IN_PROCESS",
+    })
+  );
+
+  // Write recent collection run (45 seconds ago)
+  fs.writeFileSync(
+    path.join(c, "run_1000_api.json"),
+    JSON.stringify({
+      id: "1000_api",
+      timestamp: new Date(now.getTime() - 45_000).toISOString(),
+      marketStatus: "OPEN",
+      sourceStatus: "LIVE",
+      stockCount: 50,
+      errors: [],
+    })
+  );
+
+  process.env.COLLECTION_LOG_DIR = c;
+  process.env.MONITOR_LOG_DIR = path.join(d, "m");
+  const r = runnerStatus("OPEN", now, d);
+  delete process.env.COLLECTION_LOG_DIR;
+  delete process.env.MONITOR_LOG_DIR;
+
+  assert.equal(r.lockPidAlive, true);
+  assert.equal(r.state, "RUNNING");
+  assert.match(r.reason, /Last collection \d+ s ago/);
+  assert.equal(r.lastCollectionAt, new Date(now.getTime() - 45_000).toISOString());
+});
+
+test("runner status ignores expired paper-trading-lock.json heartbeat (> 5m ago)", () => {
+  const d = tmp();
+  const now = new Date("2026-11-26T06:00:00.000Z");
+
+  // Write stale heartbeat (10 minutes ago)
+  fs.writeFileSync(
+    path.join(d, "paper-trading-lock.json"),
+    JSON.stringify({
+      pid: 999999,
+      updatedAt: new Date(now.getTime() - 600_000).toISOString(),
+      heartbeat: now.getTime() - 600_000,
+      status: "RUNNING",
+    })
+  );
+
+  process.env.COLLECTION_LOG_DIR = path.join(d, "c");
+  process.env.MONITOR_LOG_DIR = path.join(d, "m");
+  const r = runnerStatus("OPEN", now, d);
+  delete process.env.COLLECTION_LOG_DIR;
+  delete process.env.MONITOR_LOG_DIR;
+
+  assert.equal(r.lockPidAlive, false);
+  assert.equal(r.state, "NOT_RUNNING");
+});
+
 test("last collection advances only on LIVE data, never on auth-failed or no-attempt runs", () => {
   const d = tmp();
   const c = path.join(d, "c");

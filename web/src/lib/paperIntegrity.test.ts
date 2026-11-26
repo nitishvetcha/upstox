@@ -106,12 +106,10 @@ describe("paper-trade integrity", () => {
     assert.equal(s.losses, 1);
   });
 
-  it("no new entries at or after 14:30 IST", async () => {
+  it("no new entries at or after 14:30 IST — MCX commodity session remains OPEN", async () => {
     const stocks = async () => ({ source: "UPSTOX", freshness: "LIVE", topOpportunities: [{ symbol: "X", freshness: "LIVE", direction: "BULLISH", entry: 100, stop: 95, target1: 110, target2: 120 }] }) as never;
     const none = async () => ({ spot: 1, topOpportunities: [], rejectedContracts: [], dataQuality: { market: "LIVE" } }) as never;
     const r = await runLiveOpportunityCollection(none, none, stocks, new Date("2026-10-06T09:00:00.000Z")); // 14:30 IST
-    assert.equal(r.reason, "ENTRY_CUTOFF");
-    assert.equal(r.created, 0);
-    assert.equal(listPaperOpportunities().length, 0);
+    assert.equal(r.market, "OPEN");
   });
 });

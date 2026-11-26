@@ -10,11 +10,30 @@ jobs:
   paper-cycle:
     runs-on: ubuntu-latest
     steps:
+      - name: Ping health to ensure Render container is awake
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-delay 5 --max-time 60 \
+            "$APP_BASE_URL/api/health?probe=liveness"
+
       - name: Collect and monitor paper evidence
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
           SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
         run: |
           curl --fail-with-body --silent --show-error \
+            --max-time 120 \
             --request POST "$APP_BASE_URL/api/automation/paper-cycle" \
             --header "x-scheduler-token: $SCHEDULER_TOKEN"
+
+      - name: Scan stock opportunities
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --max-time 120 \
+            --request POST "$APP_BASE_URL/api/cron/stock-scan" \
+            --header "x-scheduler-token: $SCHEDULER_TOKEN" || true

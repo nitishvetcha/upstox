@@ -245,11 +245,27 @@ test("20. bullish technicals + strongly bearish confident news → WAIT with con
 });
 
 test("21. bearish technicals + strongly bullish confident news → conflict flagged", () => {
-  const a = analyze(withNews("banknifty", { score: 0.8, confidence: 0.9, status: "LIVE" }), NOW);
+  const sBear = withNews("banknifty", { score: 0.8, confidence: 0.9, status: "LIVE" });
+  if (sBear.indicators) {
+    sBear.indicators.ema9 = sBear.spot * 0.98;
+    sBear.indicators.ema21 = sBear.spot * 1.02;
+    sBear.indicators.rsi = 35;
+    sBear.indicators.macdHist = -15;
+    (sBear.indicators as unknown as { supertrend: string }).supertrend = "BEARISH";
+  }
+  const a = analyze(sBear, NOW);
   assert.notEqual(a.status, "TRADE");
   assert.ok(a.blockers.includes("News direction conflicts with market and option-chain signals."));
   // Weak-confidence news does not trigger the conflict rule.
-  const weak = analyze(withNews("banknifty", { score: 0.8, confidence: 0.3, status: "LIVE" }), NOW);
+  const sWeak = withNews("banknifty", { score: 0.8, confidence: 0.3, status: "LIVE" });
+  if (sWeak.indicators) {
+    sWeak.indicators.ema9 = sWeak.spot * 0.98;
+    sWeak.indicators.ema21 = sWeak.spot * 1.02;
+    sWeak.indicators.rsi = 35;
+    sWeak.indicators.macdHist = -15;
+    (sWeak.indicators as unknown as { supertrend: string }).supertrend = "BEARISH";
+  }
+  const weak = analyze(sWeak, NOW);
   assert.ok(!weak.blockers.includes("News direction conflicts with market and option-chain signals."));
 });
 

@@ -187,6 +187,18 @@ function snapshotAt(index: IndexId, now: Date, exchangeTime = at(now, -5)): Snap
 // The pre-change breadth shape (LIVE status, no reason) for analysis fixtures that predate the MOCK breadth label.
 const legacyBreadth = (s: Snapshot): Snapshot => (s.breadth ? { ...s, breadth: { ...s.breadth, status: "LIVE", reason: null } } : s);
 
+function bearishSnapshot(s: Snapshot): Snapshot {
+  const c = structuredClone(s);
+  if (c.indicators) {
+    c.indicators.ema9 = c.spot * 0.98;
+    c.indicators.ema21 = c.spot * 1.02;
+    c.indicators.rsi = 35;
+    c.indicators.macdHist = -15;
+    (c.indicators as unknown as { supertrend: string }).supertrend = "BEARISH";
+  }
+  return c;
+}
+
 type LegRef = { strike: number; type: "CE" | "PE" };
 const quoteOf = (s: Snapshot, leg: LegRef) => {
   const row = s.chain.find((r) => r.strike === leg.strike);
@@ -1086,7 +1098,7 @@ describe("Phase 2.3.16 Stage 2 — deterministic multi-session paper evaluation 
     it("three positions reserve risk; the fourth is refused for insufficient available risk capital; releasing capital admits it", () => {
       let engine = startSession();
       const nifty = strategyApproval("nifty", T.s1Open);
-      const bank = analyze(snapshotAt("banknifty", T.s1Open), T.s1Open); // Strategy 11.4 says WAIT: SYNTHETIC approvals below
+      const bank = analyze(bearishSnapshot(snapshotAt("banknifty", T.s1Open)), T.s1Open); // Strategy 11.4 says WAIT: SYNTHETIC approvals below
       const lc = open(engine, nifty, T.s1Open);
       const bcs = open(engine, syntheticApproval(nifty, "Bull Call Spread"), T.s1Open);
       const bps = open(engine, syntheticApproval(bank, "Bear Put Spread"), T.s1Open);
@@ -1127,7 +1139,7 @@ describe("Phase 2.3.16 Stage 2 — deterministic multi-session paper evaluation 
       assert.deepEqual([s4.openPositions, s4.openRisk], [2, bcs.riskAmount + bps.riskAmount]);
 
       // The fourth position now fits (sized down by the post-fill check if needed).
-      const lp = open(engine, syntheticApproval(analyze(snapshotAt("banknifty", T.s1Mid), T.s1Mid), "Long Put"), T.s1Mid);
+      const lp = open(engine, syntheticApproval(analyze(bearishSnapshot(snapshotAt("banknifty", T.s1Mid)), T.s1Mid), "Long Put"), T.s1Mid);
       assert.ok(lp.riskAmount <= s4.availableRisk);
       const s5 = engine.getPortfolioSummary();
       const open3 = engine.getTrades().filter((t) => t.status === "OPEN");
@@ -1151,7 +1163,7 @@ describe("Phase 2.3.16 Stage 2 — deterministic multi-session paper evaluation 
       const nifty = strategyApproval("nifty", T.s1Open);
       const t1 = open(engine, nifty, T.s1Open);
       const t2 = open(engine, syntheticApproval(nifty, "Bull Call Spread"), T.s1Open);
-      const t3 = open(engine, syntheticApproval(analyze(snapshotAt("banknifty", T.s1Open), T.s1Open), "Bear Put Spread"), T.s1Open);
+      const t3 = open(engine, syntheticApproval(analyze(bearishSnapshot(snapshotAt("banknifty", T.s1Open)), T.s1Open), "Bear Put Spread"), T.s1Open);
       engine.closeTrade(engine.getTrade(t1.id)!, "CLOSED", snapshotAt("nifty", T.s1Mid), T.s1Mid);
       for (const idx of ["nifty", "banknifty"] as const) engine.evaluateOpenTrades(snapshotAt(idx, T.s1Eod, T.s1Last), T.s1Eod);
 
@@ -1166,7 +1178,7 @@ describe("Phase 2.3.16 Stage 2 — deterministic multi-session paper evaluation 
       // must be refused by the risk gate, creating no trade and writing no event.
       engine = startSession();
       const eventsBeforeRefusal = engine.getEvents().length;
-      const baseLp = syntheticApproval(analyze(snapshotAt("banknifty", T.s3Open), T.s3Open), "Long Put");
+      const baseLp = syntheticApproval(analyze(bearishSnapshot(snapshotAt("banknifty", T.s3Open)), T.s3Open), "Long Put");
       const lowRRLp: Analysis = {
         ...baseLp,
         plan: baseLp.plan ? { ...baseLp.plan, rr: 0.8 } : null,

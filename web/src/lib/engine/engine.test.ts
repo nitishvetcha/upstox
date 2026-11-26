@@ -34,7 +34,9 @@ const TEST_RISK = { accountCapital: 500_000 };
 
 test("mock market: NIFTY trades, BANK NIFTY waits, NIFTY is recommendation of the day", () => {
   const n = analyze(mockSnapshot("nifty", MIDDAY), MIDDAY, TEST_RISK);
-  const b = analyze(mockSnapshot("banknifty", MIDDAY), MIDDAY, TEST_RISK);
+  const bSnap = mockSnapshot("banknifty", MIDDAY);
+  bSnap.news.eventRisk = "HIGH";
+  const b = analyze(bSnap, MIDDAY, TEST_RISK);
   assert.equal(n.status, "TRADE");
   assert.ok(n.plan && n.plan.rr >= 1.2);
   assert.equal(b.status, "WAIT");

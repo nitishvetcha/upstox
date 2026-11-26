@@ -221,7 +221,7 @@ function makeStockResult(overrides: Partial<StockOpportunityResult> = {}): Stock
 }
 
 const openNow = makeIST(11, 0); // 11:00 IST weekday — market open
-const closedNow = makeIST(16, 0); // 16:00 IST — market closed
+const closedNow = makeIST(23, 45); // 23:45 IST — all markets (equity + MCX commodity) closed
 
 describe("LC24 — Live collection", () => {
   it("LC24-01: returns MARKET_CLOSED when market not open", async () => {
