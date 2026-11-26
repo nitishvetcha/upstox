@@ -10,6 +10,7 @@ import { getTradingViewChartUrl } from "../tradingView.ts";
 export interface NotificationConfig {
   enabled: boolean;
   minGrade: "A+" | "A" | "B";
+  allowedUnderlyings: string[];
   telegramBotToken?: string;
   telegramChatId?: string;
   discordWebhookUrl?: string;
@@ -44,13 +45,37 @@ export function getNotificationConfig(): NotificationConfig {
   const rawMinGrade = (process.env.NOTIFICATION_MIN_GRADE?.trim().toUpperCase() || "A") as "A+" | "A" | "B";
   const minGrade = rawMinGrade === "A+" || rawMinGrade === "A" || rawMinGrade === "B" ? rawMinGrade : "A";
 
+  const rawAllowed = process.env.NOTIFICATION_ALLOWED_UNDERLYINGS?.trim();
+  const allowedUnderlyings =
+    rawAllowed !== undefined && rawAllowed !== ""
+      ? rawAllowed
+          .split(",")
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean)
+      : ["NIFTY"];
+
   return {
     enabled,
     minGrade,
+    allowedUnderlyings,
     telegramBotToken,
     telegramChatId,
     discordWebhookUrl,
   };
+}
+
+/** Determines if an underlying asset is allowed to fire execution alerts. */
+export function isUnderlyingAllowed(underlying: string, allowed: string[]): boolean {
+  if (!allowed || allowed.length === 0 || allowed.includes("*") || allowed.includes("ALL")) return true;
+  const upper = underlying.toUpperCase().replace(/\s+/g, "");
+  return allowed.some((item) => {
+    const clean = item.toUpperCase().replace(/\s+/g, "");
+    if (clean === upper) return true;
+    if (clean === "NIFTY" && (upper === "NIFTY" || upper === "NIFTY50")) return true;
+    if (clean === "BANKNIFTY" && (upper === "BANKNIFTY" || upper === "NIFTYBANK")) return true;
+    if (clean === "MCX" && (upper.includes("CRUDE") || upper.includes("NATURAL") || upper.includes("MCX"))) return true;
+    return false;
+  });
 }
 
 /** Determines if a candidate grade meets the minimum notification threshold. */
@@ -189,12 +214,21 @@ export async function notifyOpportunitySignal(
     return { alerted: false, telegram: false, discord: false, reason: "Notifications disabled" };
   }
 
+  const underlying = context?.underlying || item.underlying || "NIFTY";
+  if (!isUnderlyingAllowed(underlying, cfg.allowedUnderlyings)) {
+    return {
+      alerted: false,
+      telegram: false,
+      discord: false,
+      reason: `Underlying ${underlying} not in allowed list (${cfg.allowedUnderlyings.join(", ")})`,
+    };
+  }
+
   if (!isGradeEligible(item.grade, cfg.minGrade)) {
     return { alerted: false, telegram: false, discord: false, reason: `Grade ${item.grade} below min ${cfg.minGrade}` };
   }
 
   // Deduplication check
-  const underlying = context?.underlying || item.underlying || "NIFTY";
   const strike = "strike" in item && item.strike != null ? item.strike : "STOCK";
   const optType = "optionType" in item && item.optionType != null ? item.optionType : item.direction;
   const dedupKey = `SIGNAL|${underlying}|${strike}|${optType}|${item.grade}`;
@@ -323,6 +357,15 @@ export async function notifyTradeExit(
   const cfg = getNotificationConfig();
   if (!cfg.enabled) {
     return { alerted: false, telegram: false, discord: false, reason: "Notifications disabled" };
+  }
+
+  if (!isUnderlyingAllowed(opp.underlying, cfg.allowedUnderlyings)) {
+    return {
+      alerted: false,
+      telegram: false,
+      discord: false,
+      reason: `Underlying ${opp.underlying} not in allowed list (${cfg.allowedUnderlyings.join(", ")})`,
+    };
   }
 
   const dedupKey = `EXIT|${opp.id}|${exitReason}`;

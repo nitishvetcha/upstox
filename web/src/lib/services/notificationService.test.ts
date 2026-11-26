@@ -2,6 +2,7 @@ import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   isGradeEligible,
+  isUnderlyingAllowed,
   getNotificationConfig,
   notifyOpportunitySignal,
   notifyTradeExit,
@@ -167,6 +168,31 @@ describe("notificationService — Dispatch, Deduplication & Fail-Safe", () => {
       telegramChatId: "1008179235, 1470303763",
     });
     assert.equal(res.telegram.configured, true);
+  });
+
+  it("isUnderlyingAllowed correctly filters assets while preventing naive substring matches", () => {
+    // Default NIFTY only
+    assert.equal(isUnderlyingAllowed("NIFTY", ["NIFTY"]), true);
+    assert.equal(isUnderlyingAllowed("NIFTY 50", ["NIFTY"]), true);
+    // BANKNIFTY must NOT match NIFTY
+    assert.equal(isUnderlyingAllowed("BANKNIFTY", ["NIFTY"]), false);
+    assert.equal(isUnderlyingAllowed("NIFTY BANK", ["NIFTY"]), false);
+
+    // MCX alias
+    assert.equal(isUnderlyingAllowed("CRUDEOIL", ["NIFTY", "MCX"]), true);
+    assert.equal(isUnderlyingAllowed("NATURALGAS", ["NIFTY", "MCX"]), true);
+    assert.equal(isUnderlyingAllowed("BANKNIFTY", ["NIFTY", "MCX"]), false);
+
+    // Wildcard
+    assert.equal(isUnderlyingAllowed("BANKNIFTY", ["*"]), true);
+  });
+
+  it("suppresses BANKNIFTY alerts when only NIFTY is allowed", async () => {
+    delete process.env.NOTIFICATION_ALLOWED_UNDERLYINGS; // defaults to NIFTY
+    const bankOpp = createDummyOpportunity({ underlying: "BANKNIFTY", grade: "A" });
+    const res = await notifyOpportunitySignal(bankOpp);
+    assert.equal(res.alerted, false);
+    assert.ok(res.reason?.includes("not in allowed list"));
   });
 
   it("formats Grade A alert with exact IST Theta Stop wall-clock timestamp", async () => {
