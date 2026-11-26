@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { RecommendationCard } from "@/components/RecommendationCard";
-import { MarketCard } from "@/components/MarketCard";
 import { DataStatus } from "@/components/DataStatus";
-import { PriceChart } from "@/components/PriceChart";
 import { NewsPanel } from "@/components/NewsPanel";
 import { getDashboard } from "@/lib/services/market";
 import { getRiskConfig } from "@/lib/services/risk/riskConfig";
@@ -15,66 +13,109 @@ import { OpsPanel } from "@/components/OpsPanel";
 import { BookOpen, Target } from "lucide-react";
 import { getAuthoritativeRecommendation } from "@/lib/services/authoritativeOpportunity";
 import { AuthoritativeRecommendationHero } from "@/components/AuthoritativeRecommendationHero";
+import { TodaySwingPickCard } from "@/components/research/TodaySwingPickCard";
+import { MarketPulseTable } from "@/components/MarketPulseTable";
+import { AccordionSection } from "@/components/ui/AccordionSection";
+import { TradingViewQuickBar } from "@/components/ui/TradingViewQuickBar";
 
 export default async function Dashboard() {
   const { analyses, today, generatedAt } = await getDashboard();
   const authoritativeBest = await getAuthoritativeRecommendation();
 
   return (
-    <div className="mx-auto max-w-[90rem] space-y-6">
-      <section className="app-surface overflow-hidden rounded-2xl p-5 sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
+    <div className="mx-auto max-w-[90rem] space-y-4">
+      {/* 1. Compact Status Strip (Always Open) */}
+      <section className="app-surface rounded-2xl p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
             <p className="app-kicker">Research command center</p>
-            <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">Market decisions, with the evidence visible</h1>
-            <p className="mt-2 text-sm leading-6 text-zinc-400 sm:text-base">Start with the strongest eligible opportunity, review its risk and freshness, then save it for manual monitoring.</p>
+            <h1 className="text-lg font-bold tracking-tight text-white sm:text-xl">
+              Market decisions, with the evidence visible
+            </h1>
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2 text-sm">
-          <Link href="/opportunities" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-sky-500 px-4 py-2 font-semibold text-zinc-950 shadow-lg shadow-sky-950/30 hover:bg-sky-400">
-            <Target size={16} aria-hidden /> Review opportunities
-          </Link>
-          <Link href="/opportunity-journal" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/80 px-4 py-2 font-semibold text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800">
-            <BookOpen size={16} aria-hidden /> Open journal
-          </Link>
+          <div className="flex shrink-0 flex-wrap gap-2 text-xs">
+            <Link
+              href="/opportunities"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-sky-500 px-3 py-2 font-semibold text-zinc-950 hover:bg-sky-400"
+            >
+              <Target size={14} aria-hidden /> Review opportunities
+            </Link>
+            <Link
+              href="/opportunity-journal"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900/80 px-3 py-2 font-semibold text-zinc-200 hover:border-zinc-500 hover:bg-zinc-800"
+            >
+              <BookOpen size={14} aria-hidden /> Journal
+            </Link>
           </div>
         </div>
-        <div className="mt-5 border-t border-zinc-800 pt-4"><DataStatus snaps={analyses.map((a) => a.snapshot)} refreshedAt={generatedAt} /></div>
+        <div className="mt-3 border-t border-zinc-800 pt-3">
+          <DataStatus snaps={analyses.map((a) => a.snapshot)} refreshedAt={generatedAt} />
+        </div>
       </section>
+
       <OpsPanel now={Date.parse(generatedAt)} />
 
-      {/* Authoritative Best Opportunity from modern Opportunity Engine */}
-      <AuthoritativeRecommendationHero best={authoritativeBest} />
+      {/* 2. Hero Command Row (2-Column Grid, Always Open) */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <AuthoritativeRecommendationHero best={authoritativeBest} />
+        <TodaySwingPickCard />
+      </div>
 
-      <StrategyMap />
+      {/* TradingView Quick-Link Bar */}
+      <TradingViewQuickBar />
 
-      {/* Historical Benchmark Reference (Strategy 11.4) */}
-      <section className="app-surface rounded-2xl border border-zinc-800/80 bg-zinc-950/40 p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
-          <div>
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Historical Benchmark</span>
-            <h2 className="text-base font-semibold text-zinc-200">Strategy 11.4 Reference (Frozen 2024 Baseline)</h2>
-            <p className="mt-0.5 text-xs text-zinc-400">Preserved byte-for-byte under SHA-256 lock for regression verification. Not the active pick engine.</p>
+      {/* 3. Market Pulse Accordion Table (Always Open, Compact) */}
+      <MarketPulseTable analyses={analyses} />
+
+      {/* 4. Collapsible Accordions (All Collapsed by Default) */}
+      <div className="space-y-3">
+        <AccordionSection
+          title="System Diagnostics, Source Matrix & Data Audit"
+          summary={<span>8 underlyings · Risk &amp; Data Quality</span>}
+          defaultOpen={false}
+        >
+          <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <RiskPanel v={toDashboardView(today, getRiskConfig(), generatedAt)} />
+              <DataQualityPanel v={toDashboardView(today, getRiskConfig(), generatedAt)} />
+            </div>
+            <ResearchLabSummary />
+            <StrategyMap />
           </div>
-          <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs font-mono text-zinc-400">
-            FROZEN BENCHMARK
-          </span>
-        </div>
-        <RecommendationCard a={today} />
-      </section>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <RiskPanel v={toDashboardView(today, getRiskConfig(), generatedAt)} />
-        <DataQualityPanel v={toDashboardView(today, getRiskConfig(), generatedAt)} />
+        </AccordionSection>
+
+        <AccordionSection
+          title="On-Demand Analysis & Recommendation Journal"
+          summary={<span>Interactive lookup &amp; saved entries</span>}
+          defaultOpen={false}
+        >
+          <div className="space-y-4">
+            <RecommendationWidget />
+            <RecommendationJournal />
+          </div>
+        </AccordionSection>
+
+        <AccordionSection
+          title="News Sentiment & Event Risk"
+          summary={<span>{analyses.length} underlyings</span>}
+          defaultOpen={false}
+        >
+          <NewsPanel analyses={analyses} />
+        </AccordionSection>
+
+        <AccordionSection
+          title="Legacy Benchmark (Strategy 11.4 Frozen Reference)"
+          badge={
+            <span className="rounded-full border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] font-mono text-zinc-400">
+              FROZEN BENCHMARK
+            </span>
+          }
+          summary={<span>SHA-256 locked 2024 baseline</span>}
+          defaultOpen={false}
+        >
+          <RecommendationCard a={today} />
+        </AccordionSection>
       </div>
-      <RecommendationWidget />
-      <RecommendationJournal />
-      <div className="grid gap-4 lg:grid-cols-2">
-        {analyses.map((a) => (
-          <MarketCard key={a.snapshot.index} a={a} />
-        ))}
-      </div>
-      <ResearchLabSummary />
-      <NewsPanel analyses={analyses} />
-      <PriceChart />
     </div>
   );
 }
@@ -86,6 +127,12 @@ function StrategyMap() {
       status: "ACTIVE SCREENING",
       statusClass: "border-emerald-700/60 bg-emerald-950/30 text-emerald-300",
       detail: "Opportunity Engine: defined-risk tactical screening with live-price, Greeks convexity, structural invalidation stops, and per-leg verification.",
+    },
+    {
+      title: "Swing stocks",
+      status: "ACTIVE — SWING-V1 MODE B (₹10k)",
+      statusClass: "border-emerald-700/60 bg-emerald-950/30 text-emerald-300",
+      detail: "Daily EOD delivery swing engine (₹10k / 1 position / 15-day cap, +1.5R BE, 2.5x target).",
     },
     {
       title: "Intraday stocks",
@@ -105,38 +152,22 @@ function StrategyMap() {
       statusClass: "border-zinc-700 bg-zinc-900 text-zinc-400",
       detail: "Preserved byte-for-byte under SHA-256 lock as an immutable historical reference; not the unified recommendation source.",
     },
-    {
-      title: "Swing / positional stocks",
-      status: "RETIRED · WATCH ONLY",
-      statusClass: "border-red-800/60 bg-red-950/30 text-red-300",
-      detail: "The prior positional strategy lost money in its five-year backtest. Results remain visible for observation, never as actionable picks.",
-    },
   ];
 
   return (
-    <section aria-labelledby="strategy-map-title" className="app-surface rounded-2xl p-5">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="app-kicker">Engine readiness</p>
-          <h2 id="strategy-map-title" className="mt-1 text-lg font-semibold text-zinc-100">Strategy status</h2>
-          <p className="mt-1 text-sm text-zinc-400">Know what is actionable, experimental, or retired before reviewing a candidate.</p>
-        </div>
-        <Link href="/opportunities" className="rounded-lg border border-zinc-700 px-3 py-2 text-sm font-semibold text-zinc-200 hover:bg-zinc-800">
-          Open unified opportunities
-        </Link>
-      </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {strategies.map((strategy) => (
-          <article key={strategy.title} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-base font-semibold text-zinc-200">{strategy.title}</h3>
-              <span className={`rounded-full border px-2 py-1 text-xs font-bold ${strategy.statusClass}`}>{strategy.status}</span>
-            </div>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-400">{strategy.detail}</p>
-          </article>
-        ))}
-      </div>
-    </section>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {strategies.map((strategy) => (
+        <article key={strategy.title} className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-zinc-200">{strategy.title}</h3>
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${strategy.statusClass}`}>
+              {strategy.status}
+            </span>
+          </div>
+          <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">{strategy.detail}</p>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -144,15 +175,16 @@ function ResearchLabSummary() {
   const inv = loadInventories()[0];
   const enabled = inv?.experiments.filter((e) => e.enabled).length ?? 0;
   return (
-    <Link href="/options-research" className="block rounded border border-zinc-800 bg-zinc-900/60 p-4 text-sm hover:border-zinc-600">
-      <div className="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-400">Historical Options Research Lab</div>
+    <Link href="/options-research" className="block rounded border border-zinc-800 bg-zinc-900/60 p-3 text-xs hover:border-zinc-600">
+      <div className="font-semibold uppercase tracking-[0.15em] text-zinc-400">Historical Options Research Lab</div>
       {inv ? (
         <p className="mt-1 text-zinc-300">
           Expired-contract history: {inv.expiredHistory.available ? "available" : `blocked (${inv.expiredHistory.errorCode})`} ·
           completed expiries: {inv.completedExpiriesRetrievable} · experiments enabled: {enabled}/{inv.experiments.length}
-          <span className="block text-xs text-zinc-500">Independent of the live options audit · inventory {inv.id}</span>
         </p>
-      ) : <p className="mt-1 text-zinc-500">No data inventory run yet.</p>}
+      ) : (
+        <p className="mt-1 text-zinc-500">No data inventory run yet.</p>
+      )}
     </Link>
   );
 }

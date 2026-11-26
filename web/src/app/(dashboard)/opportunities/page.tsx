@@ -25,7 +25,7 @@ import { PositionSizeCalculator } from "@/components/PositionSizeCalculator";
 import { summarizeSources } from "@/lib/provenanceDisplay";
 import { pickFromStock, pickFromContract } from "@/lib/savedPickMapping";
 import { selectBestRecommendation, type RecommendationCandidate } from "@/lib/bestRecommendation";
-import { TradingViewChart } from "@/components/TradingViewChart";
+import { TradingViewQuickBar } from "@/components/ui/TradingViewQuickBar";
 import { TodaySwingPickCard } from "@/components/research/TodaySwingPickCard";
 import { getTradingViewChartUrl } from "@/lib/tradingView";
 import { ExternalLink, BarChart3 } from "lucide-react";
@@ -1469,27 +1469,7 @@ export default async function OpportunitiesPage() {
       <EngineGovernanceBanner />
 
       {/* ── TradingView Quick Links Bar ── */}
-      <div className="app-surface rounded-2xl border border-zinc-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs font-semibold text-zinc-200">
-          <BarChart3 size={16} className="text-sky-400" />
-          <span>Open in TradingView</span>
-          <span className="text-[11px] font-normal text-zinc-400">(15m Live Charts)</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {(["NIFTY", "BANKNIFTY", "CRUDEOIL", "NATURALGAS"] as const).map((sym) => (
-            <a
-              key={sym}
-              href={getTradingViewChartUrl(sym, "15")}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900/80 px-2.5 py-1 text-xs font-medium text-sky-300 hover:border-sky-500/60 hover:bg-zinc-800 transition-colors"
-            >
-              <span>{sym}</span>
-              <span className="text-[10px] text-zinc-400">↗</span>
-            </a>
-          ))}
-        </div>
-      </div>
+      <TradingViewQuickBar />
 
       <DecisionFunnel
         options={indexOptions}
