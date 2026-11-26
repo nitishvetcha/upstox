@@ -142,23 +142,36 @@ export function selectActiveContract(
 } | null {
   const today = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
 
+  const normalizeExpiry = (raw: unknown): string | null => {
+    if (typeof raw === "string" && /^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+    if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+      return new Date(raw).toISOString().slice(0, 10);
+    }
+    return null;
+  };
+
   // Filter to FUT contracts with valid fields
   const futures = instruments
-    .filter(
-      (inst) =>
-        typeof inst.instrument_key === "string" &&
-        inst.instrument_key.startsWith("MCX_FO|") &&
-        typeof inst.trading_symbol === "string" &&
-        typeof inst.expiry === "string" &&
-        inst.expiry >= today &&
-        (inst.instrument_type === "FUT" || inst.instrument_type === "FUTCOM"),
-    )
-    .map((inst) => ({
-      instrumentKey: inst.instrument_key as string,
-      tradingSymbol: inst.trading_symbol as string,
-      expiry: inst.expiry as string,
-      lotSize: typeof inst.lot_size === "number" && inst.lot_size > 0 ? (inst.lot_size as number) : 0,
-    }))
+    .flatMap((inst) => {
+      const expiry = normalizeExpiry(inst.expiry);
+      const itype = typeof inst.instrument_type === "string" ? inst.instrument_type.toUpperCase() : "";
+      if (
+        typeof inst.instrument_key !== "string" ||
+        !inst.instrument_key.startsWith("MCX_FO|") ||
+        typeof inst.trading_symbol !== "string" ||
+        !expiry ||
+        expiry < today ||
+        (itype !== "FUT" && itype !== "FUTCOM")
+      ) {
+        return [];
+      }
+      return [{
+        instrumentKey: inst.instrument_key,
+        tradingSymbol: inst.trading_symbol,
+        expiry,
+        lotSize: typeof inst.lot_size === "number" && inst.lot_size > 0 ? inst.lot_size : 0,
+      }];
+    })
     .sort((a, b) => a.expiry.localeCompare(b.expiry));
 
   if (futures.length === 0) return null;
