@@ -46,7 +46,22 @@ export function chainMetrics(
 ): ChainMetrics {
   const rows = s.chain;
   const sum = (f: (r: OptionRow) => number) => rows.reduce((t, r) => t + f(r), 0);
-  const atm = rows.find((r) => r.strike === atmStrike(rows, s.spot))!;
+  const atm = rows.find((r) => r.strike === atmStrike(rows, s.spot));
+  if (!rows.length || !atm) {
+    return {
+      pcrOi: null,
+      pcrVolume: null,
+      maxPain: s.spot,
+      maxPainDistance: 0,
+      support: s.spot,
+      resistance: s.spot,
+      supportByOiChange: null,
+      resistanceByOiChange: null,
+      atmStrike: s.spot,
+      atmIv: { call: null, put: null, average: null },
+      expectedMove: null,
+    };
+  }
 
   // Max pain: the settlement strike where option writers pay out the least.
   let maxPain = atm.strike;
