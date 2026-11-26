@@ -44,15 +44,16 @@ export function MarketPulseTable({ analyses }: { analyses: Analysis[] }) {
               const t = s.technical;
               const ind = s.indicators;
               const isOpen = expandedIndex === s.index;
-              const spot = s.spot;
-              const prev = s.prevClose;
-              const chgPct = spot && prev ? ((spot - prev) / prev) * 100 : null;
-              const trendState = t?.trend?.state ?? "NEUTRAL";
-              const trendDir = t?.trend?.direction ?? 0;
-              const pcr = c?.pcrOi ?? null;
-              const atmIv = c?.atmIv?.average ?? null;
-              const score = a.factors?.length ? Math.round((a.factors.filter((f) => f.available).length / a.factors.length) * 100) : null;
               const src = s.sources?.market?.source ?? "UNAVAILABLE";
+              const isUnavailable = src === "UNAVAILABLE";
+              const spot = isUnavailable ? null : s.spot;
+              const prev = isUnavailable ? null : s.prevClose;
+              const chgPct = spot && prev ? ((spot - prev) / prev) * 100 : null;
+              const trendState = isUnavailable ? "UNAVAILABLE" : (t?.trend?.state ?? "NEUTRAL");
+              const trendDir = isUnavailable ? 0 : (t?.trend?.direction ?? 0);
+              const pcr = isUnavailable ? null : (c?.pcrOi ?? null);
+              const atmIv = isUnavailable ? null : (c?.atmIv?.average ?? null);
+              const score = isUnavailable ? null : (a.factors?.length ? Math.round((a.factors.filter((f) => f.available).length / a.factors.length) * 100) : null);
 
               return (
                 <Fragment key={s.index}>
