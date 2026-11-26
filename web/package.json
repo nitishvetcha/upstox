@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "env -u UPSTOX_ANALYTICS_TOKEN UPSTOX_TOKEN_FILE=.test-data/no-upstox-token.json SESSION_EVIDENCE_DIR=.test-data/paper-sessions PAPER_TRADES_DIR=.test-data/paper-trades node --test --experimental-strip-types \"src/**/*.test.ts\"",
+    "test": "env -u UPSTOX_ANALYTICS_TOKEN UPSTOX_TOKEN_FILE=.test-data/no-upstox-token.json SESSION_EVIDENCE_DIR=.test-data/paper-sessions PAPER_TRADES_DIR=.test-data/paper-trades PAPER_LEDGER_DB_PATH=.test-data/paper_ledger.db node --test --experimental-strip-types \"src/**/*.test.ts\"",
     "dev:upstox": "node scripts/dev-upstox.mjs",
     "upstox:login": "node scripts/upstox-login.mjs",
     "upstox:status": "node scripts/upstox-status.mjs",

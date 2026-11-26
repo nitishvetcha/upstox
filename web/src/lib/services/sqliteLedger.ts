@@ -11,10 +11,22 @@ let singletonDb: DatabaseSync | null = null;
 let currentDbPath: string | null = null;
 
 export function getDbPath(): string {
-  return (
-    process.env.PAPER_LEDGER_DB_PATH ??
-    path.join(process.cwd(), ".data", "paper_ledger.db")
-  );
+  if (process.env.PAPER_LEDGER_DB_PATH) {
+    return process.env.PAPER_LEDGER_DB_PATH;
+  }
+  const isTest =
+    process.env.NODE_ENV === "test" ||
+    process.argv.some(
+      (arg) =>
+        arg.includes(".test.") ||
+        arg.includes("/test/") ||
+        arg.includes("/tests/") ||
+        arg.includes("test-runner"),
+    );
+  if (isTest) {
+    return path.join(process.cwd(), ".test-data", "paper_ledger.db");
+  }
+  return path.join(process.cwd(), ".data", "paper_ledger.db");
 }
 
 /** Initializes database schema and sets WAL journaling mode. */
