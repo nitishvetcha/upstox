@@ -29,11 +29,8 @@ export function TopBar({
   upstoxStatus: "VERIFIED_CONNECTED" | "CONFIGURED_UNVERIFIED" | "VERIFICATION_FAILED" | "EXPIRED" | "MISSING" | "INVALID" | "UNKNOWN";
 }) {
   const [now, setNow] = useState<Date | null>(null); // null on the server: avoids a hydration mismatch
-  const [liveUpstoxStatus, setLiveUpstoxStatus] = useState(upstoxStatus);
-
-  useEffect(() => {
-    setLiveUpstoxStatus(upstoxStatus);
-  }, [upstoxStatus]);
+  const [polledUpstoxStatus, setPolledUpstoxStatus] = useState<typeof upstoxStatus | null>(null);
+  const liveUpstoxStatus = polledUpstoxStatus ?? upstoxStatus;
 
   // Only the local clock ticks here. Market data is never re-fetched on a timer: every Upstox request must be
   // deliberate (the Refresh data button).
@@ -61,7 +58,7 @@ export function TopBar({
       fetch("/api/auth/health", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
-          if (d?.upstoxStatus) setLiveUpstoxStatus(d.upstoxStatus);
+          if (d?.upstoxStatus) setPolledUpstoxStatus(d.upstoxStatus);
         })
         .catch(() => {});
     };
