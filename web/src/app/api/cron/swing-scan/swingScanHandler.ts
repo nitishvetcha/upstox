@@ -1,6 +1,6 @@
 import { timingSafeEqual, createHash } from "node:crypto";
 import { runLiveSwingScan, type SwingScanResult } from "../../../../lib/stockV2/swingLiveScanner.ts";
-import { sendSwingPickAlert } from "../../../../lib/services/notificationService.ts";
+import { sendSwingPickAlert, sendDailyWrapHeartbeat } from "../../../../lib/services/notificationService.ts";
 
 function equal(a: string, b: string): boolean {
   return timingSafeEqual(
@@ -12,6 +12,7 @@ function equal(a: string, b: string): boolean {
 export interface SwingScanCronDeps {
   scanFn?: (now?: Date) => Promise<SwingScanResult>;
   notifyFn?: typeof sendSwingPickAlert;
+  wrapFn?: typeof sendDailyWrapHeartbeat;
   now?: Date;
   token?: string;
 }
@@ -38,6 +39,20 @@ export async function handleSwingScan(
       const notify = deps.notifyFn ?? sendSwingPickAlert;
       const alertRes = await notify(result.pick).catch(() => ({ ok: false }));
       alertSent = Boolean(alertRes?.ok);
+    } else if (result.status === "NO_SETUP") {
+      const wrap = deps.wrapFn ?? sendDailyWrapHeartbeat;
+      const dateIst = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+      }).format(now);
+      const wrapRes = await wrap({
+        dateIst,
+        swingStatus: "NO_SETUP",
+        paperOptionsCount: 0,
+        runnerStatus: "Bot Healthy",
+      }).catch(() => ({ ok: false }));
+      alertSent = Boolean(wrapRes?.ok);
     }
 
     return Response.json({

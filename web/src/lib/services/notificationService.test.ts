@@ -7,6 +7,8 @@ import {
   notifyOpportunitySignal,
   notifyTradeExit,
   sendTestNotification,
+  sendSwingPickAlert,
+  sendDailyWrapHeartbeat,
   clearAlertCache,
 } from "./notificationService.ts";
 import type { PaperOpportunity } from "./paperOpportunityStore.ts";
@@ -210,8 +212,73 @@ describe("notificationService — Dispatch, Deduplication & Fail-Safe", () => {
       const opp = createDummyOpportunity({ grade: "A" });
       const res = await notifyOpportunitySignal(opp);
       assert.equal(res.telegram, true);
+      assert.ok(sentBody.includes("PAPER VALIDATION"));
       assert.ok(sentBody.includes("45m Theta Stop:</b> Exit by"));
       assert.ok(sentBody.includes("IST if T1 not reached"));
+    } finally {
+      globalThis.fetch = originalFetch;
+      delete process.env.TELEGRAM_BOT_TOKEN;
+      delete process.env.TELEGRAM_CHAT_ID;
+    }
+  });
+
+  it("prefixes sendSwingPickAlert with ACTIONABLE ₹10K SWING — MODE B", async () => {
+    process.env.TELEGRAM_BOT_TOKEN = "mock_bot_token";
+    process.env.TELEGRAM_CHAT_ID = "123456";
+
+    let sentBody = "";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      sentBody = String(init?.body ?? "");
+      return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => "" } as Response;
+    }) as typeof fetch;
+
+    try {
+      const res = await sendSwingPickAlert({
+        symbol: "TATAMOTORS",
+        setupType: "BREAKOUT",
+        signalDate: "2026-11-26",
+        referenceEntry: 850,
+        qty: 11,
+        stopLoss: 820,
+        stopPct: 3.53,
+        target: 925,
+        breakevenTrigger: 895,
+        maxExitDate: "2026-12-17",
+        rsVsNiftyPct: 4.2,
+        volumeRatio: 1.8,
+      });
+      assert.equal(res.ok, true);
+      assert.ok(sentBody.includes("ACTIONABLE ₹10K SWING — MODE B"));
+    } finally {
+      globalThis.fetch = originalFetch;
+      delete process.env.TELEGRAM_BOT_TOKEN;
+      delete process.env.TELEGRAM_CHAT_ID;
+    }
+  });
+
+  it("formats sendDailyWrapHeartbeat with NO_SETUP status", async () => {
+    process.env.TELEGRAM_BOT_TOKEN = "mock_bot_token";
+    process.env.TELEGRAM_CHAT_ID = "123456";
+
+    let sentBody = "";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      sentBody = String(init?.body ?? "");
+      return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => "" } as Response;
+    }) as typeof fetch;
+
+    try {
+      const res = await sendDailyWrapHeartbeat({
+        dateIst: "26 Nov",
+        swingStatus: "NO_SETUP",
+        paperOptionsCount: 3,
+      });
+      assert.equal(res.ok, true);
+      assert.ok(sentBody.includes("Daily Wrap (26 Nov IST)"));
+      assert.ok(sentBody.includes("Swing-V1: NO_SETUP"));
+      assert.ok(sentBody.includes("Options Paper Trades Today: 3"));
+      assert.ok(sentBody.includes("Bot Healthy"));
     } finally {
       globalThis.fetch = originalFetch;
       delete process.env.TELEGRAM_BOT_TOKEN;

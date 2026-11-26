@@ -53,8 +53,6 @@ export default async function Dashboard() {
         </div>
       </section>
 
-      <OpsPanel now={Date.parse(generatedAt)} />
-
       {/* 2. Hero Command Row (2-Column Grid, Always Open) */}
       <div className="grid gap-4 lg:grid-cols-2">
         <AuthoritativeRecommendationHero best={authoritativeBest} />
@@ -75,6 +73,7 @@ export default async function Dashboard() {
           defaultOpen={false}
         >
           <div className="space-y-4">
+            <OpsPanel now={Date.parse(generatedAt)} />
             <div className="grid gap-4 lg:grid-cols-2">
               <RiskPanel v={toDashboardView(today, getRiskConfig(), generatedAt)} />
               <DataQualityPanel v={toDashboardView(today, getRiskConfig(), generatedAt)} />
