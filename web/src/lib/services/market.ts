@@ -94,9 +94,28 @@ async function newsFeed(p: MarketDataProvider, index: UnderlyingId, now: Date): 
 }
 
 export async function buildSnapshot(p: MarketDataProvider, index: UnderlyingId, now = new Date()): Promise<Snapshot> {
+  const safeOptionChain = async () => {
+    try {
+      return await p.getOptionChain(index);
+    } catch (e) {
+      if (index === "goldm" || index === "silverm") {
+        return {
+          index,
+          expiry: "",
+          spot: 0,
+          strikeStep: index === "goldm" ? 100 : 250,
+          lotSize: null,
+          rows: [],
+          source: { source: "UNAVAILABLE" as const, provider: "UPSTOX" as const, fetchedAt: null },
+        };
+      }
+      throw e;
+    }
+  };
+
   const [quote, chain, tech, feed, breadth] = await Promise.all([
     p.getMarketSnapshot(index),
-    p.getOptionChain(index),
+    safeOptionChain(),
     p.getTechnicals(index),
     newsFeed(p, index, now),
     p.getBreadth(index),
