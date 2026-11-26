@@ -298,6 +298,50 @@ function startStockScanRunner() {
   }, 25_000);
 }
 
+// 4b. Daily EOD Swing-V1 Mode B Scanner (once per trading day at 15:40 IST)
+let swingScanTimer = null;
+let lastSwingScanIstDate = null;
+
+function startSwingScanRunner() {
+  const schedulerToken = process.env.SCHEDULER_TOKEN;
+  if (!schedulerToken) return;
+
+  console.log("[RENDER] Spawning Daily EOD Swing-V1 Mode B Scanner (15:40 IST)...");
+
+  const checkAndRunSwingScan = async () => {
+    if (shuttingDown) return;
+    const istNow = new Date(Date.now() + 330 * 60_000);
+    const day = istNow.getUTCDay();
+    if (day === 0 || day === 6) return; // Skip Sat/Sun
+    const istDate = istNow.toISOString().slice(0, 10);
+    const hhmm = istNow.getUTCHours() * 100 + istNow.getUTCMinutes();
+    if (hhmm < 1540 || lastSwingScanIstDate === istDate) return;
+
+    lastSwingScanIstDate = istDate;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/cron/swing-scan`, {
+        method: "POST",
+        headers: { "x-scheduler-token": schedulerToken },
+        signal: AbortSignal.timeout(120_000),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        console.log(`[SWING-SCAN:OK] status=${data.status} symbol=${data.pick?.symbol ?? "NONE"} alertSent=${data.alertSent}`);
+      } else {
+        console.warn(`[SWING-SCAN:WARN] HTTP ${res.status}: ${data.error ?? "scan error"}`);
+      }
+    } catch (e) {
+      if (!shuttingDown) {
+        console.warn(`[SWING-SCAN:ERROR] ${e.message}`);
+      }
+    }
+  };
+
+  swingScanTimer = setInterval(() => {
+    void checkAndRunSwingScan();
+  }, 60_000);
+}
+
 // 5. Public Keep-Alive Pinger (prevents Render Free container from idling/sleeping)
 let keepAliveTimer = null;
 
@@ -347,6 +391,7 @@ const shutdown = (sig, exitCode = 0) => {
   shuttingDown = true;
   if (paperCycleTimer) clearInterval(paperCycleTimer);
   if (stockScanTimer) clearInterval(stockScanTimer);
+  if (swingScanTimer) clearInterval(swingScanTimer);
   if (keepAliveTimer) clearInterval(keepAliveTimer);
   if (botRestartTimer) clearTimeout(botRestartTimer);
   cleanupLocks();
@@ -378,5 +423,6 @@ process.on("unhandledRejection", (reason) => {
 startNextServer();
 startPaperCycleRunner();
 startStockScanRunner();
+startSwingScanRunner();
 startKeepAlivePinger();
 startBotRunner();

@@ -3,6 +3,7 @@
 import { UPSTOX_API_BASE } from "./upstoxEndpoints.ts";
 import type { Candle, CandleSeries, ConstituentQuote, DataSource, FallbackReason, FuturesVwap, IndexId, UnderlyingId, IndexQuote, Indicators, MarketBreadth, MarketDataProvider, OptionChain, OptionRow, Quote, SourceInfo, TechnicalAnalysis, Technicals, Timeframe } from "../types.ts";
 import { INSTRUMENTS, COMMODITIES, getUnderlyingInstrument, isCommodityId } from "./instrumentRegistry.ts";
+import { getCachedMcxContract, resolveMcxContract } from "./mcxContractResolver.ts";
 import { strikeStep, validExpiries } from "./optionChainAnalytics.ts";
 import { InvalidRequestError, UpstoxError } from "./errors.ts";
 import { FUTURE_TIMESTAMP_TOLERANCE_MS, istToday, marketStatus, commodityMarketStatus, MIN_LTT_EPOCH_MS, tradeFreshnessOf } from "../time.ts";
@@ -355,14 +356,16 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     let contract: FuturesContract | null = null;
     try {
       if (isCommodityId(index)) {
-        const comm = COMMODITIES[index];
+        // Prefer the dynamically resolved active MCX contract.
+        // resolveMcxContract never throws — it falls back to env/defaults on error.
+        const resolved = getCachedMcxContract(index, now()) ?? await resolveMcxContract(index, token, now());
         contract = {
-          instrumentKey: underlyingKey,
-          tradingSymbol: `${symbol} FUT`,
-          underlyingKey,
-          expiry: "2026-12-28",
-          expiryAt: Date.now() + 35 * 86_400_000,
-          lotSize: comm.lotSize,
+          instrumentKey: resolved.instrumentKey,
+          tradingSymbol: resolved.tradingSymbol,
+          underlyingKey: resolved.instrumentKey,
+          expiry: resolved.expiry,
+          expiryAt: Date.parse(`${resolved.expiry}T23:30:00+05:30`),
+          lotSize: resolved.lotSize,
         };
       } else {
         const picked = selectFuturesContract(await fetchFuturesContracts(now()), underlyingKey, now());

@@ -1,6 +1,7 @@
 import { Badge, Card, Stat } from "@/components/ui";
 import { CandleChart, type Mark, type Overlay, type Level } from "@/components/research/CandleChart";
 import { LineChart } from "@/components/research/LineChart";
+import { TodaySwingPickCard } from "@/components/research/TodaySwingPickCard";
 import { buildChartPayload, equityAndDrawdown, loadDevelopment, loadTradesFile, toChartTime, type TradeRecord } from "@/lib/stockV2Dashboard";
 
 // Stock V2 research explorer. Reads stored historical research only. No broker or market-data request is made.
@@ -71,6 +72,8 @@ export default async function StockV2Page({ searchParams }: { searchParams: Prom
         <Badge tone="bear">NO-GO · 3 CANDIDATES REJECTED</Badge>
         <Badge tone="warn">RECOMMENDATION-ONLY · NO ORDERS</Badge>
       </header>
+
+      <TodaySwingPickCard />
 
       {!dev ? (
         <Card className="p-4 text-sm text-amber-300">No stored development results in .research-data/stock-v2/.</Card>

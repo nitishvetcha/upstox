@@ -9,6 +9,8 @@ on:
     - cron: "*/10 4-17 * * 1-5"
     # 3. MCX Session Final Close: 18:00 UTC (23:30 IST)
     - cron: "0 18 * * 1-5"
+    # 4. Daily EOD Swing-V1 Mode B backup: 10:15 UTC (15:45 IST)
+    - cron: "15 10 * * 1-5"
   workflow_dispatch:
 
 jobs:
@@ -71,4 +73,15 @@ jobs:
           curl --fail-with-body --silent --show-error \
             --max-time 120 \
             --request POST "$APP_BASE_URL/api/cron/stock-scan" \
+            --header "x-scheduler-token: $SCHEDULER_TOKEN" || true
+
+      - name: Daily EOD Swing-V1 Mode B scan (15:45 IST backup)
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '15 10 * * 1-5')
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --max-time 120 \
+            --request POST "$APP_BASE_URL/api/cron/swing-scan" \
             --header "x-scheduler-token: $SCHEDULER_TOKEN" || true

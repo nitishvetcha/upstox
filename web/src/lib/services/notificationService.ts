@@ -463,3 +463,40 @@ export async function sendTestNotification(
     },
   };
 }
+
+/** Sends a dedicated Telegram alert for today's #1 Swing-V1 Mode B (₹10k) pick. */
+export async function sendSwingPickAlert(pick: {
+  symbol: string;
+  setupType: "BREAKOUT" | "PULLBACK";
+  signalDate: string;
+  referenceEntry: number;
+  qty: number;
+  stopLoss: number;
+  stopPct: number;
+  target: number;
+  breakevenTrigger: number;
+  maxExitDate: string;
+  rsVsNiftyPct: number;
+  volumeRatio: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const cfg = getNotificationConfig();
+  if (!cfg.telegramBotToken || !cfg.telegramChatId) {
+    return { ok: false, error: "Telegram not configured" };
+  }
+
+  const text = [
+    `📈 <b>Swing-V1 Mode B (₹10k Delivery Pick)</b>`,
+    `<b>Symbol:</b> <code>${pick.symbol}</code> (${pick.setupType})`,
+    `<b>Signal Date:</b> ${pick.signalDate}`,
+    `<b>Next-Day Open Entry Ref:</b> ₹${pick.referenceEntry.toFixed(2)}`,
+    `<b>Exact Qty (₹10,000):</b> ${pick.qty} shares (₹${Math.round(pick.qty * pick.referenceEntry).toLocaleString("en-IN")})`,
+    `<b>Structural SL:</b> ₹${pick.stopLoss.toFixed(2)} (-${pick.stopPct.toFixed(2)}%)`,
+    `<b>2.5x Target:</b> ₹${pick.target.toFixed(2)}`,
+    `<b>Breakeven Trigger (+1.5R):</b> ₹${pick.breakevenTrigger.toFixed(2)}`,
+    `<b>15-Trading-Day Max Exit:</b> ${pick.maxExitDate}`,
+    `<b>Conviction:</b> RS vs NIFTY +${pick.rsVsNiftyPct.toFixed(2)}% | Vol ${pick.volumeRatio.toFixed(2)}x`,
+  ].join("\n");
+
+  const res = await sendTelegramMessage(text, cfg);
+  return { ok: res.success, error: res.error };
+}

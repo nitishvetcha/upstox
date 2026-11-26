@@ -1,5 +1,8 @@
 // The only place Upstox instrument keys live. Update here if Upstox renames an instrument.
+// Dynamic MCX contracts are resolved at runtime via mcxContractResolver.ts; the static
+// COMMODITIES entries below serve as the synchronous fallback / type source-of-truth.
 import type { IndexId, CommodityId, UnderlyingId } from "../types.ts";
+import { getCachedMcxContract } from "./mcxContractResolver.ts";
 
 export type { CommodityId, UnderlyingId };
 
@@ -78,7 +81,15 @@ export function isUnderlyingId(v: string): v is UnderlyingId {
 
 export function getUnderlyingInstrument(v: UnderlyingId | string): Instrument | CommodityInstrument | undefined {
   if (isIndexId(v)) return INSTRUMENTS[v];
-  if (isCommodityId(v)) return COMMODITIES[v];
+  if (isCommodityId(v)) {
+    // If the MCX resolver has already warmed the cache, return an overlay with the
+    // live instrument key so option chains and quotes auto-roll without a restart.
+    const cached = getCachedMcxContract(v);
+    if (cached) {
+      return { ...COMMODITIES[v], underlyingKey: cached.instrumentKey, lotSize: cached.lotSize };
+    }
+    return COMMODITIES[v];
+  }
   return undefined;
 }
 
@@ -89,6 +100,20 @@ export function getInstrumentBySymbol(symbol: string): Instrument | CommodityIns
   }
   for (const comm of Object.values(COMMODITIES)) {
     if (comm.symbol.toUpperCase() === upper) return comm;
+  }
+  return undefined;
+}
+
+/**
+ * Returns the active Upstox instrument key for a commodity, preferring the
+ * dynamically resolved key (if the cache is warm) over the static env/default.
+ * For index instruments, this is identical to `getUnderlyingInstrument(v)?.underlyingKey`.
+ */
+export function getActiveUnderlyingKey(v: UnderlyingId): string | undefined {
+  if (isIndexId(v)) return INSTRUMENTS[v].underlyingKey;
+  if (isCommodityId(v)) {
+    const cached = getCachedMcxContract(v);
+    return cached?.instrumentKey ?? COMMODITIES[v].underlyingKey;
   }
   return undefined;
 }
