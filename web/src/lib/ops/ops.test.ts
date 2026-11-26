@@ -23,6 +23,7 @@ test("runner state needs real evidence: a reachable UI is not a running collecto
   assert.equal(deriveRunnerState({ lockPidAlive: false, market: "OPEN", lastCollectionAt: null, now }).state, "NOT_RUNNING");
   assert.equal(deriveRunnerState({ lockPidAlive: true, market: "OPEN", lastCollectionAt: "2026-10-26T04:50:00Z", now }).state, "STALLED", "10 min old");
   assert.equal(deriveRunnerState({ lockPidAlive: true, market: "OPEN", lastCollectionAt: "2026-10-26T04:59:30Z", now }).state, "RUNNING");
+  assert.equal(deriveRunnerState({ lockPidAlive: false, market: "OPEN", lastCollectionAt: "2026-10-26T04:56:00Z", now }).state, "RUNNING", "cloud automation cycle within 4 min is active");
   assert.equal(deriveRunnerState({ lockPidAlive: false, market: "CLOSED", lastCollectionAt: null, now }).state, "IDLE_MARKET_CLOSED");
 });
 

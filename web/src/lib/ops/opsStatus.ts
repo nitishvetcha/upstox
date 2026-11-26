@@ -22,14 +22,18 @@ export interface HealthEvent {
   stockAggregateWarnings?: number;
 }
 
-// Pure decision, testable: running only if the lock's process is a live paper-live AND it collected recently.
+// Pure decision, testable: running if the lock's process is a live paper-live OR scheduled cloud automation collected recently.
 export function deriveRunnerState(o: { lockPidAlive: boolean; market: string; lastCollectionAt: string | null; now: Date }): { state: RunnerState; reason: string } {
   const ageS = o.lastCollectionAt ? (o.now.getTime() - new Date(o.lastCollectionAt).getTime()) / 1000 : null;
   if (o.market !== "OPEN") {
     return o.lockPidAlive ? { state: "RUNNING", reason: "Runner process alive; market not open (waiting or end-of-day pass)" }
       : { state: "IDLE_MARKET_CLOSED", reason: "Market not open; the runner starts at 09:10 IST on weekdays" };
   }
-  if (!o.lockPidAlive) return { state: "NOT_RUNNING", reason: "Market is open but no paper-live process holds the lock" };
+  // Cloud scheduled automation: GitHub Actions / external cron collects every 5-10 min without holding a continuous OS PID lock
+  if (!o.lockPidAlive && ageS !== null && ageS <= 600) {
+    return { state: "RUNNING", reason: `Scheduled automation active (last collection ${Math.round(ageS)} s ago)` };
+  }
+  if (!o.lockPidAlive) return { state: "NOT_RUNNING", reason: "Market is open but no paper-live process or scheduled automation is active" };
   if (ageS === null) return { state: "STALLED", reason: "Runner alive but no collection recorded yet" };
   if (ageS > 180) return { state: "STALLED", reason: `Runner alive but last collection was ${Math.round(ageS / 60)} min ago` };
   return { state: "RUNNING", reason: `Last collection ${Math.round(ageS)} s ago` };

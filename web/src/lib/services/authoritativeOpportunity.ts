@@ -2,6 +2,7 @@ import { getSnapshot } from "./market.ts";
 import { evaluateOptionsOpportunity } from "../engine/opportunityEngine.ts";
 import { scanStocks } from "../engine/stockOpportunityEngine.ts";
 import { selectBestRecommendation, type BestRecommendation, type RecommendationCandidate } from "../bestRecommendation.ts";
+import { commodityMarketStatus } from "../time.ts";
 
 export interface AuthoritativePickDisplay {
   label: string;
@@ -29,9 +30,13 @@ export interface AuthoritativePickDisplay {
 export async function getAuthoritativeRecommendation(
   now: Date = new Date()
 ): Promise<BestRecommendation<AuthoritativePickDisplay>> {
-  const [niftySnap, bnSnap, intradayResult] = await Promise.all([
+  const isMcxOpen = commodityMarketStatus(now) === "OPEN";
+
+  const [niftySnap, bnSnap, crudeSnap, ngSnap, intradayResult] = await Promise.all([
     getSnapshot("nifty").catch(() => null),
     getSnapshot("banknifty").catch(() => null),
+    isMcxOpen ? getSnapshot("crudeoil").catch(() => null) : Promise.resolve(null),
+    isMcxOpen ? getSnapshot("naturalgas").catch(() => null) : Promise.resolve(null),
     scanStocks("intraday", now).catch(() => ({
       stocksScanned: 0,
       stocksAvailable: 0,
@@ -44,6 +49,8 @@ export async function getAuthoritativeRecommendation(
   const activeOptionResults = [
     ...(niftySnap ? [evaluateOptionsOpportunity(niftySnap, "NIFTY", now)] : []),
     ...(bnSnap ? [evaluateOptionsOpportunity(bnSnap, "BANKNIFTY", now)] : []),
+    ...(crudeSnap ? [evaluateOptionsOpportunity(crudeSnap, "CRUDEOIL", now)] : []),
+    ...(ngSnap ? [evaluateOptionsOpportunity(ngSnap, "NATURALGAS", now)] : []),
   ];
 
   const candidates: RecommendationCandidate<AuthoritativePickDisplay>[] = [

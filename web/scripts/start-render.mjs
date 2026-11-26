@@ -159,10 +159,57 @@ function startBotRunner() {
   });
 }
 
+// 3. Autonomous In-Process Paper Cycle Loop
+let paperCycleTimer = null;
+
+function startPaperCycleRunner() {
+  const schedulerToken = process.env.SCHEDULER_TOKEN;
+  if (!schedulerToken) {
+    console.log("[RENDER] NOTICE: SCHEDULER_TOKEN not set; skipping autonomous paper cycle runner.");
+    return;
+  }
+
+  console.log("[RENDER] Spawning Autonomous Paper Cycle Loop (every 2m during market hours)...");
+
+  const runCycle = async () => {
+    if (shuttingDown) return;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/automation/paper-cycle`, {
+        method: "POST",
+        headers: { "x-scheduler-token": schedulerToken },
+        signal: AbortSignal.timeout(90000),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const c = data.collect ?? {};
+        const m = data.monitor ?? {};
+        console.log(`[PAPER-CYCLE:OK] market=${c.market ?? "OPEN"} created=${c.created ?? 0} dup=${c.duplicates ?? 0} eval=${m.evaluated ?? 0} updated=${m.updated ?? 0} checkpointed=${data.checkpointed ?? false}`);
+      } else {
+        console.warn(`[PAPER-CYCLE:WARN] HTTP ${res.status}: ${data.error ?? "cycle error"}`);
+      }
+    } catch (e) {
+      if (!shuttingDown) {
+        console.warn(`[PAPER-CYCLE:ERROR] ${e.message}`);
+      }
+    }
+  };
+
+  // Wait 12 seconds after Next.js starts listening before first execution
+  setTimeout(() => {
+    if (!shuttingDown) {
+      void runCycle();
+      paperCycleTimer = setInterval(() => {
+        void runCycle();
+      }, 120_000); // every 2 minutes
+    }
+  }, 12_000);
+}
+
 // Graceful termination
 const shutdown = (sig, exitCode = 0) => {
   if (shuttingDown) return;
   shuttingDown = true;
+  if (paperCycleTimer) clearInterval(paperCycleTimer);
   if (botRestartTimer) clearTimeout(botRestartTimer);
   console.log(`\n[RENDER] Received ${sig}, terminating child processes cleanly (exitCode ${exitCode})...`);
   for (const [label, child] of children.entries()) {
@@ -190,4 +237,5 @@ process.on("unhandledRejection", (reason) => {
 
 // Launch processes
 startNextServer();
+startPaperCycleRunner();
 startBotRunner();
