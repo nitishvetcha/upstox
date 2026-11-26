@@ -6,7 +6,6 @@
 //
 // Frozen constraint: NO Strategy 11.4 options math is touched here.
 
-import { gunzipSync } from "node:zlib";
 import { assertUpstoxNetworkAllowed } from "./upstoxNetworkGate.ts";
 import { UPSTOX_API_BASE } from "./upstoxEndpoints.ts";
 import type { CommodityId } from "./instrumentRegistry.ts";
@@ -206,9 +205,8 @@ async function fetchMcxMaster(now: Date): Promise<RawSearchInstrument[]> {
   }
   assertUpstoxNetworkAllowed("/market-quote/instruments/exchange/MCX.json.gz");
   const res = await fetch(MCX_MASTER_URL, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
-  if (!res.ok) throw new Error(`MCX master HTTP ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  const json = JSON.parse(gunzipSync(buf).toString("utf8")) as RawSearchInstrument[];
+  if (!res.ok || !res.body) throw new Error(`MCX master HTTP ${res.status}`);
+  const json = (await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).json()) as RawSearchInstrument[];
   const rows = Array.isArray(json) ? json : [];
   mcxMasterCache = { expiresAt: now.getTime() + RESOLVER_TTL_MS, rows };
   return rows;
