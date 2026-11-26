@@ -56,7 +56,7 @@ export function TodaySwingPickCard() {
   const pick = data?.pick ?? null;
 
   return (
-    <Card className="border-emerald-500/30 bg-emerald-950/10">
+    <Card className="p-5 border-emerald-500/30 bg-emerald-950/10">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-white">
