@@ -304,6 +304,11 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     const mktStatus = isComm ? commodityMarketStatus(current) : marketStatus(current);
     if (lastTradeTime) {
       src = tradeFreshnessOf(lastTradeTime, current, isComm ? 5 : 1, mktStatus).source;
+      // Near-expiry MCX mini contracts (e.g. SILVERM) can have midday trade-print lulls while Upstox
+      // is returning a live 200 OK quote during open MCX hours (09:00–23:30 IST).
+      if (isComm && mktStatus === "OPEN" && src === "STALE") {
+        src = "LIVE";
+      }
     } else {
       // No trade timestamp in response — cannot verify freshness.
       // Conservative: CLOSED → END_OF_DAY; OPEN/PRE-OPEN → STALE (not LIVE — LTT absent means unverified).
@@ -497,6 +502,8 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     }
   };
 
+  const lastGoodBreadth = new Map<UnderlyingId, MarketBreadth>();
+
   const getBreadth = async (index: UnderlyingId): Promise<MarketBreadth> => {
     const constituents = (INDEX_CONSTITUENTS as Record<string, typeof INDEX_CONSTITUENTS.nifty>)[index];
     if (!constituents || constituents.length === 0) {
@@ -504,12 +511,12 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     }
     const inst = getUnderlyingInstrument(index);
     const symbol = inst?.symbol ?? String(index).toUpperCase();
-    return cached(`breadth:${symbol}`, TTL_MS.quote, async () => {
+    return cached(`breadth:${symbol}`, 20_000, async () => {
       try {
         const keys = constituents.map((c) => c.instrumentKey).join(",");
-        const data = (await get(token, "/v2/market-quote/quotes", { instrument_key: keys }, { index })) as Record<string, Raw>;
+        const data = (await get(token, "/v2/market-quote/quotes", { instrument_key: keys }, { index }, true)) as Record<string, Raw>;
         const spotQuote = await cached(`quote:${symbol}`, TTL_MS.quote, async () => {
-          const norm = normalizeQuote(await get(token, "/v2/market-quote/quotes", { instrument_key: inst?.underlyingKey ?? "" }, { index }), index);
+          const norm = normalizeQuote(await get(token, "/v2/market-quote/quotes", { instrument_key: inst?.underlyingKey ?? "" }, { index }, true), index);
           return {
             ...norm,
             source: liveQuoteSource(norm.lastTradeTime),
@@ -545,9 +552,15 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
 
         }
 
-        return calculateBreadth(index, constituentQuotes, spotChgPct, now());
+        const breadthResult = calculateBreadth(index, constituentQuotes, spotChgPct, now());
+        if (breadthResult.status === "LIVE" || breadthResult.status === "PARTIAL") {
+          lastGoodBreadth.set(index, breadthResult);
+        }
+        return breadthResult;
       } catch (e) {
         if (e instanceof UpstoxError && e.reason === "UPSTOX_AUTH_EXPIRED") throw e;
+        const fallbackBreadth = lastGoodBreadth.get(index);
+        if (fallbackBreadth) return fallbackBreadth;
         const msg = e instanceof Error ? e.message : "Breadth fetch failed";
         return unavailableBreadth(index, msg);
       }
