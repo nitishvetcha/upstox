@@ -65,7 +65,13 @@ export function reasonFor(status: number, errorCode: string | null): FallbackRea
   return "UPSTOX_API_ERROR";
 }
 
-export async function get(token: string, endpoint: string, params: Record<string, string>, ctx: { index: UnderlyingId; expiry?: string }) {
+export async function get(
+  token: string,
+  endpoint: string,
+  params: Record<string, string>,
+  ctx: { index: UnderlyingId; expiry?: string },
+  retry429 = false,
+) {
   const t0 = Date.now();
   const log = (status: number | null, ok: boolean, extra: object = {}) =>
     console[ok ? "info" : "warn"](
@@ -76,7 +82,8 @@ export async function get(token: string, endpoint: string, params: Record<string
   assertUpstoxNetworkAllowed(endpoint); // gate: refuses unless MARKET_DATA_PROVIDER=upstox
   const qs = new URLSearchParams(params).toString();
   const reqUrl = `${HOST}${endpoint}${qs ? `?${qs}` : ""}`;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const maxAttempts = retry429 ? 3 : 1;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await acquireUpstoxSlot();
     try {
       const res = await fetch(reqUrl, {
@@ -85,7 +92,7 @@ export async function get(token: string, endpoint: string, params: Record<string
         cache: "no-store",
       });
       status = res.status;
-      if (status === 429 && attempt < 2) {
+      if (status === 429 && attempt < maxAttempts - 1) {
         releaseUpstoxSlot();
         await new Promise((r) => setTimeout(r, (attempt + 1) * 500 + Math.floor(Math.random() * 400)));
         continue;
@@ -296,7 +303,7 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     const isComm = index && isCommodityId(index);
     const mktStatus = isComm ? commodityMarketStatus(current) : marketStatus(current);
     if (lastTradeTime) {
-      src = tradeFreshnessOf(lastTradeTime, current, isComm ? 3 : 1, mktStatus).source;
+      src = tradeFreshnessOf(lastTradeTime, current, isComm ? 5 : 1, mktStatus).source;
     } else {
       // No trade timestamp in response — cannot verify freshness.
       // Conservative: CLOSED → END_OF_DAY; OPEN/PRE-OPEN → STALE (not LIVE — LTT absent means unverified).
@@ -573,7 +580,7 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
       if (!inst) throw new UpstoxError("UPSTOX_INVALID_INSTRUMENT", `Unknown underlying: ${index}`);
       const { symbol, underlyingKey } = inst;
       return cached(`quote:${symbol}`, TTL_MS.quote, async () => {
-        const norm = normalizeQuote(await get(token, "/v2/market-quote/quotes", { instrument_key: underlyingKey }, { index }), index);
+        const norm = normalizeQuote(await get(token, "/v2/market-quote/quotes", { instrument_key: underlyingKey }, { index }, true), index);
         return {
           ...norm,
           source: liveQuoteSource(norm.lastTradeTime, index),
