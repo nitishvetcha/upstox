@@ -3,53 +3,59 @@
 
 import { quoteManager } from "@/lib/services/streamingQuoteManager";
 import { upstoxStreamClient } from "@/lib/services/upstoxStreamClient";
+import { acquireStreamSlot } from "@/lib/services/streamSlots";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request): Promise<Response> {
-  // Ensure stream client / background ticker is running
+  const release = acquireStreamSlot();
+  if (!release) {
+    return Response.json({ error: "too many live streams" }, { status: 429 });
+  }
+
   void upstoxStreamClient.ensureStarted();
 
   const encoder = new TextEncoder();
+  let unsubscribe = () => {};
+  let keepaliveInterval: ReturnType<typeof setInterval> | null = null;
+
+  const teardown = () => {
+    unsubscribe();
+    if (keepaliveInterval) clearInterval(keepaliveInterval);
+    keepaliveInterval = null;
+    release();
+  };
 
   const stream = new ReadableStream({
     start(controller) {
-      // 1. Send initial snapshot of all currently known quotes
       const initialQuotes = quoteManager.getAllQuotes();
-      const snapshotPayload = JSON.stringify(initialQuotes);
-      controller.enqueue(
-        encoder.encode(`event: snapshot\ndata: ${snapshotPayload}\n\n`)
-      );
+      controller.enqueue(encoder.encode(`event: snapshot\ndata: ${JSON.stringify(initialQuotes)}\n\n`));
 
-      // 2. Subscribe to real-time tick ingestion events
-      const unsubscribe = quoteManager.subscribe((quote) => {
+      unsubscribe = quoteManager.subscribe((quote) => {
         try {
-          const tickPayload = JSON.stringify(quote);
-          controller.enqueue(
-            encoder.encode(`event: tick\ndata: ${tickPayload}\n\n`)
-          );
+          controller.enqueue(encoder.encode(`event: tick\ndata: ${JSON.stringify(quote)}\n\n`));
         } catch {
-          // Stream controller closed by client
+          teardown();
         }
       });
 
-      // 3. Keepalive ping every 15s to keep proxies / Cloudflare / local sockets alive
-      const keepaliveInterval = setInterval(() => {
+      keepaliveInterval = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(`: keepalive\n\n`));
         } catch {
-          clearInterval(keepaliveInterval);
+          teardown();
         }
       }, 15000);
 
-      // 4. Handle client disconnection / abort
       request.signal.addEventListener("abort", () => {
-        unsubscribe();
-        clearInterval(keepaliveInterval);
+        teardown();
         try {
           controller.close();
         } catch {}
       });
+    },
+    cancel() {
+      teardown();
     },
   });
 
@@ -58,7 +64,6 @@ export async function GET(request: Request): Promise<Response> {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
     },
   });
 }

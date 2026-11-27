@@ -6,8 +6,9 @@
 
 import { useEffect, useState } from "react";
 import type { StreamingQuote } from "@/lib/services/streamingQuoteManager";
+import { isStreamStale, streamAgeMs } from "./streamFreshness.ts";
 
-export type StreamStatus = "CONNECTING" | "STREAMING" | "DISCONNECTED" | "ERROR";
+export type StreamStatus = "CONNECTING" | "STREAMING" | "STALE" | "DISCONNECTED" | "ERROR";
 
 export interface MarketStreamState {
   quotes: Record<string, StreamingQuote>;
@@ -140,8 +141,9 @@ function handleVisibilityChange() {
   }
 }
 
-export function useMarketStream(): MarketStreamState {
+export function useMarketStream(): MarketStreamState & { ageMs: number | null } {
   const [state, setState] = useState<MarketStreamState>(sharedState);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     subscribers.add(setState);
@@ -156,9 +158,11 @@ export function useMarketStream(): MarketStreamState {
     const startTimer = setTimeout(() => {
       if (!sharedEs) connectStream();
     }, 0);
+    const clock = setInterval(() => setNow(Date.now()), 1_000);
 
     return () => {
       clearTimeout(startTimer);
+      clearInterval(clock);
       subscribers.delete(setState);
       if (subscribers.size === 0) {
         teardownTimer = setTimeout(() => {
@@ -174,5 +178,9 @@ export function useMarketStream(): MarketStreamState {
     };
   }, []);
 
-  return state;
+  return {
+    ...state,
+    status: isStreamStale(state.status, state.lastTickTime, now) ? "STALE" : state.status,
+    ageMs: streamAgeMs(state.lastTickTime, now),
+  };
 }

@@ -13,10 +13,21 @@ export const RESULTS_DIR = path.join(process.cwd(), ".research-data/stock-v3-his
 const IST_SHIFT_S = 19800;
 export const toChartTime = (iso: string) => Math.floor(Date.parse(iso) / 1000) + IST_SHIFT_S;
 
+const DIR_LIST_TTL_MS = 60_000;
+let dirListCache: { at: number; names: string[] } | null = null;
+
+function listHistoryDir(): string[] {
+  const now = Date.now();
+  if (!dirListCache || now - dirListCache.at > DIR_LIST_TTL_MS) {
+    dirListCache = { at: now, names: fs.readdirSync(HIST_DIR) };
+  }
+  return dirListCache.names;
+}
+
 export function loadSymbolSessions(symbol: string, through?: string): { date: string; bars: Bar[] }[] {
   let files: string[];
   try {
-    files = fs.readdirSync(HIST_DIR).filter((f) => f.endsWith(`-${symbol}.json`) && (!through || f.slice(0, 10) <= through)).sort();
+    files = listHistoryDir().filter((f) => f.endsWith(`-${symbol}.json`) && (!through || f.slice(0, 10) <= through)).sort();
   } catch {
     return [];
   }

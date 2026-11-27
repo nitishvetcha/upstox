@@ -26,6 +26,19 @@ export interface DispatchResult {
 
 // In-memory alert deduplication cache: key -> timestamp (epoch ms)
 const alertCache = new Map<string, number>();
+const ALERT_RETENTION_MS = 24 * 60 * 60 * 1000; // longer than the 30m entry window: exit alerts are checked with no window
+const ALERT_CACHE_MAX = 1000;
+
+export function rememberAlert(key: string, at: number): void {
+  for (const [k, t] of alertCache) if (at - t > ALERT_RETENTION_MS) alertCache.delete(k);
+  alertCache.delete(key);
+  alertCache.set(key, at);
+  while (alertCache.size > ALERT_CACHE_MAX) alertCache.delete(alertCache.keys().next().value as string);
+}
+
+export function alertCacheSize(): number {
+  return alertCache.size;
+}
 const DEDUPLICATION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes throttle for identical setups
 
 export function clearAlertCache(): void {
@@ -239,7 +252,7 @@ export async function notifyOpportunitySignal(
     return { alerted: false, telegram: false, discord: false, reason: "Throttled (recently alerted)" };
   }
 
-  alertCache.set(dedupKey, now);
+  rememberAlert(dedupKey, now);
 
   const thetaExitTime =
     new Date(now + 45 * 60 * 1000).toLocaleTimeString("en-IN", {
@@ -373,7 +386,7 @@ export async function notifyTradeExit(
   if (alertCache.has(dedupKey)) {
     return { alerted: false, telegram: false, discord: false, reason: "Already alerted exit" };
   }
-  alertCache.set(dedupKey, Date.now());
+  rememberAlert(dedupKey, Date.now());
 
   const isWin = realizedR > 0;
   const emoji = isWin ? "🏆" : "🛑";

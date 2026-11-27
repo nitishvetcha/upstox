@@ -122,12 +122,16 @@ export function requireOperator(req: Request, env: NodeJS.ProcessEnv = process.e
   return Response.json({ error: "unauthorized" }, { status: 401, headers: { "WWW-Authenticate": "Bearer" } });
 }
 
+function secureAttr(): string {
+  return process.env.NODE_ENV === "production" ? "; Secure" : "";
+}
+
 export function sessionCookieHeader(id: string): string {
-  return `${SESSION_COOKIE}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`;
+  return `${SESSION_COOKIE}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${secureAttr()}`;
 }
 
 export function clearedCookieHeader(): string {
-  return `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`;
+  return `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secureAttr()}`;
 }
 
 function safePath(url: string): string { try { return new URL(url).pathname; } catch { return "[unparseable]"; } }

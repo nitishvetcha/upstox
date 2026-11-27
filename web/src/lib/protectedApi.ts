@@ -5,6 +5,9 @@ const PROTECTED: RegExp[] = [
   /^\/api\/paper-opportunities(\/|$)/,
   /^\/api\/paper-trading(\/|$)/,
   /^\/api\/recommendations\/[^/]+\/paper-trade(\/|$)/,
+  /^\/api\/bot(\/|$)/,
+  /^\/api\/notifications(\/|$)/,
+  /^\/api\/market\/stream(\/|$)/,
 ];
 
 export function isProtectedApiPath(pathname: string): boolean {

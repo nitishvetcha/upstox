@@ -7,7 +7,20 @@ import { useMarketStream } from "@/hooks/useMarketStream";
 import { Activity } from "lucide-react";
 
 export function StreamStatusPill() {
-  const { status, latencyMs, quoteCount } = useMarketStream();
+  const { status, latencyMs, quoteCount, ageMs } = useMarketStream();
+
+  if (status === "STALE") {
+    const ageSec = Math.round((ageMs ?? 0) / 1000);
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-950/30 px-2.5 py-0.5 text-[11px] font-medium text-amber-300"
+        title={`No quote received for ${ageSec}s. Showing the last known values.`}
+      >
+        <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
+        <span>STALE (last tick {ageSec}s ago)</span>
+      </span>
+    );
+  }
 
   if (status === "STREAMING") {
     return (

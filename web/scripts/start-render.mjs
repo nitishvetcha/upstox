@@ -246,7 +246,7 @@ function startPaperCycleRunner() {
   // Trigger non-blocking server cache warmup 3s after Next.js starts listening
   setTimeout(() => {
     if (!shuttingDown) {
-      fetch(`http://127.0.0.1:${port}/api/market/warm`, { signal: AbortSignal.timeout(5000) }).catch(() => {});
+      fetch(`http://127.0.0.1:${port}/api/market/warm`, { headers: { "x-scheduler-token": process.env.SCHEDULER_TOKEN ?? "" }, signal: AbortSignal.timeout(5000) }).catch(() => {});
     }
   }, 3_000);
 

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { createSession, sessionCookieHeader } from "../../../../lib/operatorSession.ts";
 import { checkPin, setupPin, isValidPinFormat } from "../../../../lib/operatorPin.ts";
 import { warmWorkspaceCaches } from "../../../../lib/services/warmup.ts";
+import { clearIpFailures, clientIp, ipLockRemainingMs, recordIpFailure } from "../../../../lib/loginThrottle.ts";
 
 // Operator sign-in with the 6-digit PIN. Generic errors only; the lock reveals only how long to wait.
 export async function POST(req: Request) {
@@ -11,8 +12,13 @@ export async function POST(req: Request) {
   try { body = await req.json(); } catch { return Response.json({ error: "invalid request" }, { status: 400 }); }
   const pin = (body as { pin?: unknown })?.pin;
   if (!isValidPinFormat(pin)) return Response.json({ error: "Enter the 6-digit PIN." }, { status: 400 });
+  const ip = clientIp(req);
+  const now = Date.now();
+  const ipWait = ipLockRemainingMs(ip, now);
+  if (ipWait > 0) return Response.json({ error: `Too many attempts from this network. Try again in ${Math.ceil(ipWait / 60_000)} minutes.` }, { status: 429 });
   const r = checkPin(pin);
   if (r.ok) {
+    clearIpFailures(ip);
     void warmWorkspaceCaches().catch(() => {});
     return Response.json({ ok: true }, { headers: { "Set-Cookie": sessionCookieHeader(createSession()) } });
   }
@@ -25,5 +31,6 @@ export async function POST(req: Request) {
     return Response.json({ error: "PIN is not set up. Please try again." }, { status: 503 });
   }
   if (r.reason === "LOCKED") return Response.json({ error: `Too many attempts. Try again in ${Math.ceil(r.retryAfterSec / 60)} minutes.` }, { status: 429 });
+  recordIpFailure(ip, now);
   return Response.json({ error: "Wrong PIN." }, { status: 401 });
 }
