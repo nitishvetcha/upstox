@@ -26,7 +26,9 @@ const keyEnv: Record<CommodityId, string> = {
 export function mcxContractHealth(now = new Date()): McxContractHealth[] {
   return (Object.keys(COMMODITIES) as CommodityId[]).map((underlying) => {
     const cached = getCachedMcxContract(underlying, now);
-    const configuredExpiry = cached?.expiry || process.env[expiryEnv[underlying]]?.trim() || null;
+    const rawEnvExpiry = process.env[expiryEnv[underlying]]?.trim() || null;
+    const sanitizedEnvExpiry = rawEnvExpiry && /^28\d{2}-/.test(rawEnvExpiry) ? rawEnvExpiry.replace(/^28/, "20") : rawEnvExpiry;
+    const configuredExpiry = cached?.expiry || sanitizedEnvExpiry;
     const keySource = cached ? "ENVIRONMENT" : (process.env[keyEnv[underlying]]?.trim() ? "ENVIRONMENT" : "BUNDLED_DEFAULT");
     const instrumentKey = cached?.instrumentKey ?? COMMODITIES[underlying].underlyingKey;
     if (!configuredExpiry) return {
