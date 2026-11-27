@@ -10,6 +10,7 @@ import {
 } from "@/lib/services/paperValidationPersistence";
 import { POST as collectPaperOpportunities } from "@/app/api/paper-opportunities/collect/route";
 import { POST as monitorPaperOpportunities } from "@/app/api/paper-opportunities/monitor/route";
+import { runOpenFlow } from "@/lib/services/paperOpportunityOpenFlow";
 
 function equal(a: string, b: string): boolean {
   return timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest());
@@ -33,6 +34,8 @@ export async function POST(request: Request) {
     const collectResponse = await collectPaperOpportunities(new Request("http://internal/api/paper-opportunities/collect", { method: "POST", headers }));
     stage = "collect_response";
     const collect = await collectResponse.json();
+    stage = "auto_open";
+    for (const id of (collect.createdIndexOpportunityIds ?? []) as string[]) await runOpenFlow(id).catch(() => null);
     stage = "monitor_request";
     const monitorResponse = await monitorPaperOpportunities(new Request("http://internal/api/paper-opportunities/monitor", { method: "POST", headers }));
     stage = "monitor_response";

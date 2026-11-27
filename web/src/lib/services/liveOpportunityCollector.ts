@@ -214,6 +214,7 @@ export interface CollectionResult {
   stockCount: number;
   errors: string[];
   reason?: string;
+  createdIndexOpportunityIds?: string[];
 }
 
 export const ENTRY_CUTOFF_IST_MIN = 14 * 60 + 30;
@@ -267,6 +268,7 @@ export async function runLiveOpportunityCollection(
     naturalGasCount: 0,
     stockCount: 0,
     errors: [],
+    createdIndexOpportunityIds: [],
   };
 
   let hasLive = false;
@@ -355,6 +357,7 @@ export async function runLiveOpportunityCollection(
         openKeys.add(key);
         existingKeys.add(key);
         result.created++;
+        if (label === "NIFTY" || label === "BANKNIFTY") result.createdIndexOpportunityIds!.push(paper.id);
         if (label === "NIFTY") result.niftyCount++;
         else if (label === "BANKNIFTY") result.bankNiftyCount++;
         else if (label === "CRUDEOIL") result.crudeOilCount = (result.crudeOilCount ?? 0) + 1;
