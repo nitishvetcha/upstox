@@ -252,6 +252,7 @@ function startPaperCycleRunner() {
 
 // 4. Autonomous In-Process Stock Scan Loop (every 5m during NSE hours)
 let stockScanTimer = null;
+let stockScanInFlight = false;
 
 function startStockScanRunner() {
   const schedulerToken = process.env.SCHEDULER_TOKEN;
@@ -263,7 +264,8 @@ function startStockScanRunner() {
   console.log("[RENDER] Spawning Autonomous Stock Scan Loop (every 5m during NSE hours)...");
 
   const runStockScan = async () => {
-    if (shuttingDown) return;
+    if (shuttingDown || stockScanInFlight) return;
+    stockScanInFlight = true;
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/cron/stock-scan`, {
         method: "POST",
@@ -284,6 +286,8 @@ function startStockScanRunner() {
       if (!shuttingDown) {
         console.warn(`[STOCK-SCAN:ERROR] ${e.message}`);
       }
+    } finally {
+      stockScanInFlight = false;
     }
   };
 

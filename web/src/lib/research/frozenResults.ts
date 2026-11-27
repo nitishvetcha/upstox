@@ -12,6 +12,10 @@ function readSummary<T>(file: string, pick: (d: Record<string, unknown>) => T): 
     const hit = cache.get(file);
     if (hit && hit.mtime === mtime) return { value: hit.value as T, file: rel, error: null };
     const value = pick(JSON.parse(fs.readFileSync(file, "utf8")));
+    if (cache.size >= 8) {
+      const oldest = cache.keys().next().value;
+      if (oldest) cache.delete(oldest);
+    }
     cache.set(file, { mtime, value });
     return { value, file: rel, error: null };
   } catch (e) {

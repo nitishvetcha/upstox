@@ -79,6 +79,10 @@ class StreamingQuoteManager {
     };
 
     this.quotes.set(input.instrumentKey, quote);
+    if (this.quotes.size > 500) {
+      const oldest = this.quotes.keys().next().value;
+      if (oldest) this.quotes.delete(oldest);
+    }
 
     // Notify registered real-time SSE listeners
     for (const listener of this.listeners) {

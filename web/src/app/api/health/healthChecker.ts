@@ -12,6 +12,7 @@ import { getNotificationConfig } from "../../../lib/services/notificationService
 import { listTrackedPicks } from "../../../lib/services/trackedPicksStore.ts";
 import { isScheduledScanTime, SCHEDULE_SLOTS } from "../../../lib/services/marketScheduleRunner.ts";
 import { readBotHeartbeat, type BotHeartbeatState } from "../../../lib/services/botHeartbeat.ts";
+import { upstoxCacheSize } from "../../../lib/services/cache.ts";
 import { istToday, isTradingDay, marketStatus } from "../../../lib/time.ts";
 
 export const FROZEN_STRATEGY_114_SHA256 = "d0170b40a4b9fb6265697edda03917779b9b8acddcaddc4c43488a4b29eb3f18";
@@ -54,6 +55,14 @@ export interface SystemHealthReport {
     strategySha256: string;
     strategyTampered: boolean;
     tradingVerdict: "NO-GO";
+  };
+  memory: {
+    rssMb: number;
+    heapUsedMb: number;
+    heapTotalMb: number;
+    externalMb: number;
+    arrayBuffersMb: number;
+    upstoxCacheEntries: number;
   };
 }
 
@@ -247,6 +256,18 @@ export async function generateHealthReport(
       strategyTampered: !strategyCheck.matchesBaseline,
       tradingVerdict: "NO-GO",
     },
+    memory: (() => {
+      const m = process.memoryUsage();
+      const mb = (b: number) => Math.round((b / 1024 / 1024) * 10) / 10;
+      return {
+        rssMb: mb(m.rss),
+        heapUsedMb: mb(m.heapUsed),
+        heapTotalMb: mb(m.heapTotal),
+        externalMb: mb(m.external),
+        arrayBuffersMb: mb(m.arrayBuffers),
+        upstoxCacheEntries: upstoxCacheSize(),
+      };
+    })(),
   };
 
   const statusCode = overallStatus === "UNHEALTHY" ? 503 : 200;
