@@ -150,9 +150,38 @@ export async function buildSnapshot(p: MarketDataProvider, index: UnderlyingId, 
   };
 }
 
+const lastLiveSnapshotCache = new Map<UnderlyingId, Snapshot>();
+
 export async function getSnapshot(index: UnderlyingId, deps?: FallbackDeps, now?: Date): Promise<Snapshot> {
   const current = now ?? deps?.now?.();
   const { data, fallbackReason } = await withFallback((p) => buildSnapshot(p, index, current), deps);
+
+  if (!deps && !fallbackReason && data.sources?.market?.source !== "MOCK") {
+    lastLiveSnapshotCache.set(index, data);
+    return { ...data, fallbackReason: null };
+  }
+
+  // If Upstox is connected and a transient API/429 error occurred, serve the last good live snapshot
+  // marked STALE rather than poisoning the UI with hardcoded MOCK prices.
+  if (
+    !deps &&
+    fallbackReason &&
+    fallbackReason !== "UPSTOX_NOT_CONNECTED" &&
+    fallbackReason !== "UPSTOX_AUTH_EXPIRED"
+  ) {
+    const cachedLive = lastLiveSnapshotCache.get(index);
+    if (cachedLive) {
+      return {
+        ...cachedLive,
+        fallbackReason: null,
+        sources: {
+          ...cachedLive.sources,
+          market: { ...cachedLive.sources.market, source: "STALE" },
+        },
+      };
+    }
+  }
+
   // Do not downgrade the entire workspace header to MOCK FALLBACK if a newly added
   // mini commodity (goldm/silverm) has temporary Upstox coverage gaps while Upstox is connected.
   if (
@@ -181,7 +210,16 @@ export const getDashboard = cache(async () => {
   const now = new Date();
   const commActive = commodityMarketStatus(now) === "OPEN";
   const targetUnderlyings = commActive ? [...INDICES, ...COMMODITY_IDS] : INDICES;
-  const analyses = await Promise.all(targetUnderlyings.map((id) => getAnalysis(id)));
+  // Stagger in batches of 2 to avoid bursting 80+ simultaneous Upstox requests (HTTP 429)
+  const analyses = [];
+  for (let i = 0; i < targetUnderlyings.length; i += 2) {
+    const batch = targetUnderlyings.slice(i, i + 2);
+    const res = await Promise.all(batch.map((id) => getAnalysis(id)));
+    analyses.push(...res);
+    if (i + 2 < targetUnderlyings.length) {
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
   return { analyses, today: recommendationOfTheDay(analyses), generatedAt: now.toISOString() };
 });
 

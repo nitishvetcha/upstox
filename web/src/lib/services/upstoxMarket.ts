@@ -52,34 +52,42 @@ export async function get(token: string, endpoint: string, params: Record<string
   let status: number | null = null;
   let errorCode: string | null = null;
   assertUpstoxNetworkAllowed(endpoint); // gate: refuses unless MARKET_DATA_PROVIDER=upstox
-  try {
-    const qs = new URLSearchParams(params).toString();
-    const res = await fetch(`${HOST}${endpoint}${qs ? `?${qs}` : ""}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      cache: "no-store",
-    });
-    status = res.status;
-    const body = await res.json().catch(() => null);
-    if (!res.ok) {
-      const msg = body?.errors?.[0]?.message ?? `HTTP ${status}`;
-      const code = typeof body?.errors?.[0]?.errorCode === "string" ? body.errors[0].errorCode : null;
-      errorCode = code;
-      throw new UpstoxError(reasonFor(status, code), msg, status);
+  const qs = new URLSearchParams(params).toString();
+  const reqUrl = `${HOST}${endpoint}${qs ? `?${qs}` : ""}`;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(reqUrl, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        cache: "no-store",
+      });
+      status = res.status;
+      if (status === 429 && attempt === 0) {
+        await new Promise((r) => setTimeout(r, 450 + Math.floor(Math.random() * 350)));
+        continue;
+      }
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg = body?.errors?.[0]?.message ?? `HTTP ${status}`;
+        const code = typeof body?.errors?.[0]?.errorCode === "string" ? body.errors[0].errorCode : null;
+        errorCode = code;
+        throw new UpstoxError(reasonFor(status, code), msg, status);
+      }
+      if (!body || body.status !== "success" || body.data == null) throw new UpstoxError("UPSTOX_BAD_RESPONSE", "malformed response", status);
+      log(status, true);
+      return body.data as unknown;
+    } catch (e) {
+      const err =
+        e instanceof UpstoxError
+          ? e
+          : (e as Error).name === "TimeoutError"
+            ? new UpstoxError("UPSTOX_TIMEOUT", `no response within ${TIMEOUT_MS} ms`)
+            : new UpstoxError("UPSTOX_NETWORK", (e as Error).message);
+      log(status, false, { reason: err.reason, message: err.message, errorCode, instrumentKey: params.instrument_key ?? null });
+      throw err;
     }
-    if (!body || body.status !== "success" || body.data == null) throw new UpstoxError("UPSTOX_BAD_RESPONSE", "malformed response", status);
-    log(status, true);
-    return body.data as unknown;
-  } catch (e) {
-    const err =
-      e instanceof UpstoxError
-        ? e
-        : (e as Error).name === "TimeoutError"
-          ? new UpstoxError("UPSTOX_TIMEOUT", `no response within ${TIMEOUT_MS} ms`)
-          : new UpstoxError("UPSTOX_NETWORK", (e as Error).message);
-    log(status, false, { reason: err.reason, message: err.message, errorCode, instrumentKey: params.instrument_key ?? null });
-    throw err;
   }
+  throw new UpstoxError("UPSTOX_RATE_LIMITED", "Rate limited after retry", 429);
 }
 
 // --- normalizers (pure; exported for tests) ---
