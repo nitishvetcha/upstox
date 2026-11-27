@@ -7,11 +7,14 @@ import { fmtIst, marketStatus, commodityMarketStatus } from "@/lib/time";
 import { Badge, num, signed } from "./ui";
 import { dataAge } from "./dataAgeUtils";
 import { StreamStatusPill } from "./StreamStatusPill";
+import { useMarketStream } from "@/hooks/useMarketStream";
 
 export { dataAge } from "./dataAgeUtils";
 
 export interface Ticker {
   name: string;
+  symbol?: string;
+  instrumentKey?: string;
   spot: number;
   change: number | null;
   expiry: string;
@@ -31,6 +34,16 @@ export function TopBar({
   const [now, setNow] = useState<Date | null>(null); // null on the server: avoids a hydration mismatch
   const [polledUpstoxStatus, setPolledUpstoxStatus] = useState<typeof upstoxStatus | null>(null);
   const liveUpstoxStatus = polledUpstoxStatus ?? upstoxStatus;
+  const { quotes: streamQuotes, lastTickTime } = useMarketStream();
+
+  const quoteBySymbol = new Map<string, (typeof streamQuotes)[string]>();
+  for (const q of Object.values(streamQuotes)) {
+    if (q.symbol) quoteBySymbol.set(q.symbol.toUpperCase(), q);
+  }
+  const latestFeedAt =
+    lastTickTime && lastTickTime > Date.parse(generatedAt)
+      ? new Date(lastTickTime).toISOString()
+      : generatedAt;
 
   // Only the local clock ticks here. Market data is never re-fetched on a timer: every Upstox request must be
   // deliberate (the Refresh data button).
@@ -93,15 +106,25 @@ export function TopBar({
     <header className="sticky top-0 z-30 border-b border-zinc-800/80 bg-zinc-950/90 px-4 py-2.5 text-xs backdrop-blur-xl md:px-6">
       <div className="flex items-center gap-5 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {tickers.map((t) => {
-        const pct = t.change === null ? null : (t.change / (t.spot - t.change)) * 100;
-        const color = (t.change ?? 0) >= 0 ? "text-emerald-400" : "text-red-400";
+        const streamQ =
+          (t.instrumentKey ? streamQuotes[t.instrumentKey] : undefined) ??
+          quoteBySymbol.get((t.symbol ?? t.name).toUpperCase());
+        const useStream = Boolean(
+          streamQ && streamQ.ltp > 0 && streamQ.ltt > Date.parse(generatedAt)
+        );
+        const spot = useStream ? streamQ!.ltp : t.spot;
+        const prevClose = t.change !== null && t.spot > 0 ? t.spot - t.change : null;
+        const change = useStream && prevClose !== null ? spot - prevClose : t.change;
+        const denom = spot - (change ?? 0);
+        const pct = change === null || denom === 0 ? null : (change / denom) * 100;
+        const color = (change ?? 0) >= 0 ? "text-emerald-400" : "text-red-400";
         return (
           <div key={t.name} className="flex shrink-0 items-baseline gap-2 rounded-lg border border-zinc-800/80 bg-zinc-900/55 px-2.5 py-1.5">
             <span className="font-semibold text-zinc-200">{t.name}</span>
-            <span className="font-mono text-sm font-semibold tabular-nums text-zinc-100">{num(t.spot)}</span>
-            {t.change !== null && pct !== null && (
+            <span className="font-mono text-sm font-semibold tabular-nums text-zinc-100">{spot > 0 ? num(spot) : "—"}</span>
+            {change !== null && pct !== null && (
               <span className={`font-mono tabular-nums ${color}`}>
-                {signed(t.change)} ({signed(pct)}%)
+                {signed(change)} ({signed(pct)}%)
               </span>
             )}
             <span className="text-zinc-500">{t.expiry}</span>
@@ -112,9 +135,9 @@ export function TopBar({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-zinc-800/60 pt-2 text-zinc-400">
         {renderMarketBadge()}
         <span className="font-mono font-semibold tabular-nums text-zinc-300">{now ? `${fmtIst(now)} IST` : "--:--:-- IST"}</span>
-        <span className="flex items-center gap-1" title={`Data fetched at ${fmtIst(generatedAt)} IST`}>
-          <RefreshCw size={12} aria-hidden /> {fmtIst(generatedAt)}
-          {now && <span className="text-zinc-600">({dataAge(now, generatedAt)})</span>}
+        <span className="flex items-center gap-1" title={`Data fetched at ${fmtIst(latestFeedAt)} IST`}>
+          <RefreshCw size={12} aria-hidden /> {fmtIst(latestFeedAt)}
+          {now && <span className="text-zinc-600">({dataAge(now, latestFeedAt)})</span>}
         </span>
         <Link href="/system-health#data-sources" title="Which inputs are live, stale, mock or unavailable" className="inline-flex min-h-[24px] items-center rounded py-1">
           <Badge tone={dataLabel === "LIVE DATA" || dataLabel === "END OF DAY" ? "neutral" : "warn"}>{dataLabel}{dataLabel !== "LIVE DATA" && dataLabel !== "END OF DAY" ? " — why?" : ""}</Badge>

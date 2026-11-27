@@ -13,10 +13,10 @@ export const RESULTS_DIR = path.join(process.cwd(), ".research-data/stock-v3-his
 const IST_SHIFT_S = 19800;
 export const toChartTime = (iso: string) => Math.floor(Date.parse(iso) / 1000) + IST_SHIFT_S;
 
-export function loadSymbolSessions(symbol: string): { date: string; bars: Bar[] }[] {
+export function loadSymbolSessions(symbol: string, through?: string): { date: string; bars: Bar[] }[] {
   let files: string[];
   try {
-    files = fs.readdirSync(HIST_DIR).filter((f) => f.endsWith(`-${symbol}.json`)).sort();
+    files = fs.readdirSync(HIST_DIR).filter((f) => f.endsWith(`-${symbol}.json`) && (!through || f.slice(0, 10) <= through)).sort();
   } catch {
     return [];
   }
@@ -46,7 +46,7 @@ export interface ChartPayload {
 // Indicator series for one stock on one session. EMA uses the full stored history up to the session (causal).
 // VWAP is session-anchored. Null values are omitted rather than filled.
 export function buildChartPayload(symbol: string, date: string): ChartPayload | null {
-  const sessions = loadSymbolSessions(symbol);
+  const sessions = loadSymbolSessions(symbol, date);
   const idx = sessions.findIndex((s) => s.date === date);
   if (idx < 0) return null;
   const all: Bar[] = sessions.flatMap((s) => s.bars);

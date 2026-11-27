@@ -3,6 +3,7 @@
 import { useState, Fragment } from "react";
 import { ChevronRight } from "lucide-react";
 import { getTradingViewChartUrl } from "@/lib/tradingView";
+import { useMarketStream } from "@/hooks/useMarketStream";
 import type { Analysis } from "@/lib/types";
 
 const fmt = (n: number | null | undefined, d = 2) =>
@@ -10,6 +11,12 @@ const fmt = (n: number | null | undefined, d = 2) =>
 
 export function MarketPulseTable({ analyses }: { analyses: Analysis[] }) {
   const [expandedIndex, setExpandedIndex] = useState<string | null>(null);
+  const { quotes: streamQuotes } = useMarketStream();
+
+  const quoteBySymbol = new Map<string, (typeof streamQuotes)[string]>();
+  for (const q of Object.values(streamQuotes)) {
+    if (q.symbol) quoteBySymbol.set(q.symbol.toUpperCase(), q);
+  }
 
   return (
     <section className="rounded-2xl border border-zinc-800 bg-zinc-950/60 overflow-hidden">
@@ -46,7 +53,10 @@ export function MarketPulseTable({ analyses }: { analyses: Analysis[] }) {
               const isOpen = expandedIndex === s.index;
               const src = s.sources?.market?.source ?? "UNAVAILABLE";
               const isUnavailable = src === "UNAVAILABLE";
-              const spot = isUnavailable ? null : s.spot;
+              const streamQ = quoteBySymbol.get(s.index.toUpperCase());
+              const fetchedMs = s.sources?.market?.fetchedAt ? Date.parse(s.sources.market.fetchedAt) : 0;
+              const useStream = Boolean(streamQ && streamQ.ltp > 0 && streamQ.ltt > fetchedMs && !isUnavailable);
+              const spot = isUnavailable ? null : useStream ? streamQ!.ltp : s.spot;
               const prev = isUnavailable ? null : s.prevClose;
               const chgPct = spot && prev ? ((spot - prev) / prev) * 100 : null;
               const trendState = isUnavailable ? "UNAVAILABLE" : (t?.trend?.state ?? "NEUTRAL");

@@ -14,7 +14,7 @@ const NOTE = {
   "MOCK FALLBACK": "Upstox data unavailable, showing simulated data. This is not live market data.",
 } as const;
 
-export function DataStatus({ snaps, refreshedAt }: { snaps: Snapshot[]; refreshedAt: string }) {
+export function DataStatus({ snaps, refreshedAt, isWarming = false }: { snaps: Snapshot[]; refreshedAt: string; isWarming?: boolean }) {
   const label = dataLabel(snaps);
   const reason = snaps.find((s) => s.fallbackReason)?.fallbackReason;
   const live = label === "LIVE DATA";
@@ -39,7 +39,7 @@ export function DataStatus({ snaps, refreshedAt }: { snaps: Snapshot[]; refreshe
       <span>{NOTE[label]}</span>
       <span className="ml-auto flex flex-wrap items-center gap-3 font-mono text-xs">
         <span>Source: {provider} · Last refresh {fmtIst(refreshedAt)} IST</span>
-        <AutoRefreshControl />
+        <AutoRefreshControl isWarming={isWarming} />
       </span>
     </div>
   );

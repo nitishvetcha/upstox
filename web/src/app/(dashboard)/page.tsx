@@ -19,8 +19,10 @@ import { AccordionSection } from "@/components/ui/AccordionSection";
 import { TradingViewQuickBar } from "@/components/ui/TradingViewQuickBar";
 
 export default async function Dashboard() {
-  const { analyses, today, generatedAt } = await getDashboard();
-  const authoritativeBest = await getAuthoritativeRecommendation();
+  const [{ analyses, today, generatedAt, warming }, authoritativeBest] = await Promise.all([
+    getDashboard(),
+    getAuthoritativeRecommendation(),
+  ]);
 
   return (
     <div className="mx-auto max-w-[90rem] space-y-4">
@@ -49,7 +51,7 @@ export default async function Dashboard() {
           </div>
         </div>
         <div className="mt-3 border-t border-zinc-800 pt-3">
-          <DataStatus snaps={analyses.map((a) => a.snapshot)} refreshedAt={generatedAt} />
+          <DataStatus snaps={analyses.map((a) => a.snapshot)} refreshedAt={generatedAt} isWarming={Boolean(warming)} />
         </div>
       </section>
 

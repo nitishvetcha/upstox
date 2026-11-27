@@ -1,12 +1,12 @@
 // Near-month index futures: contract discovery + session VWAP. Futures VWAP is a proxy/reference for the
 // index (index candles carry no volume) and is always labelled as FUTURES VWAP, never as spot VWAP.
-import { gunzipSync } from "node:zlib";
 import type { Candle, FuturesVwap, SourceInfo, Timeframe } from "../types.ts";
 import { isTradingDay, istMinutes, istToday } from "../time.ts";
 import { istDate } from "./technicalAnalysis.ts";
 import { cached } from "./cache.ts";
 import { UpstoxError } from "./errors.ts";
 import { assertUpstoxNetworkAllowed } from "./upstoxNetworkGate.ts";
+import { parseGzipJsonArrayStream } from "./streamJsonArray.ts";
 
 // Upstox's public, daily-refreshed NSE instrument master (no token needed).
 const INSTRUMENTS_URLS = ["NSE", "BSE"].map((x) => `https://assets.upstox.com/market-quote/instruments/exchange/${x}.json.gz`);
@@ -91,10 +91,27 @@ export function fetchFuturesContracts(now: Date): Promise<FuturesContract[]> {
         const res = await fetch(url, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
         status = res.status;
         if (!res.ok) throw new UpstoxError("UPSTOX_API_ERROR", `instrument master HTTP ${status}`, status);
-        let rawJson: unknown = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8"));
-        const parsed = normalizeFuturesContracts(rawJson);
-        rawJson = null; // Release multi-MB raw array immediately for GC
-        list.push(...parsed.filter((c) => TRACKED_INDEX_UNDERLYING_KEYS.has(c.underlyingKey)));
+        const parsed = await parseGzipJsonArrayStream<FuturesContract>(res, (x) => {
+          if (
+            x?.instrument_type !== "FUT" ||
+            (x.segment !== "NSE_FO" && x.segment !== "BSE_FO") ||
+            typeof x.instrument_key !== "string" ||
+            typeof x.underlying_key !== "string" ||
+            typeof x.expiry !== "number" ||
+            !TRACKED_INDEX_UNDERLYING_KEYS.has(x.underlying_key)
+          ) {
+            return null;
+          }
+          return {
+            instrumentKey: x.instrument_key,
+            tradingSymbol: String(x.trading_symbol ?? x.instrument_key),
+            underlyingKey: x.underlying_key,
+            expiry: istDate(new Date(x.expiry).toISOString()),
+            expiryAt: x.expiry,
+            lotSize: typeof x.lot_size === "number" ? x.lot_size : null,
+          };
+        });
+        list.push(...parsed);
         await new Promise((r) => setImmediate(r));
       }
       log(status, true, { futures: list.length });

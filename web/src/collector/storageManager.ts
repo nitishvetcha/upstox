@@ -57,8 +57,16 @@ export interface ParquetRowRecord {
 }
 
 export function computeFileSha256(filePath: string): string {
-  const content = fs.readFileSync(filePath);
-  return createHash("sha256").update(content).digest("hex");
+  const hash = createHash("sha256");
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const chunk = Buffer.alloc(1 << 20);
+    let n: number;
+    while ((n = fs.readSync(fd, chunk, 0, chunk.length, null)) > 0) hash.update(chunk.subarray(0, n));
+  } finally {
+    fs.closeSync(fd);
+  }
+  return hash.digest("hex");
 }
 
 export class StorageManager {

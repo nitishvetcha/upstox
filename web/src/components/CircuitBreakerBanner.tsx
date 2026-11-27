@@ -14,27 +14,60 @@ export function CircuitBreakerBanner() {
 
   useEffect(() => {
     let active = true;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let currentController: AbortController | null = null;
+
+    const scheduleNext = () => {
+      if (!active) return;
+      pollTimer = setTimeout(() => {
+        void load();
+      }, 15_000);
+    };
+
     const load = async () => {
+      if (!active) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        scheduleNext();
+        return;
+      }
+      currentController?.abort();
+      const controller = new AbortController();
+      currentController = controller;
       try {
-        const res = await fetch("/api/risk/circuit-breaker");
+        const res = await fetch("/api/risk/circuit-breaker", { signal: controller.signal });
         if (res.ok && active) {
           const json = await res.json();
           setState(json.data);
         }
       } catch {
-        // Ignore background fetch error
+        // Ignore aborted / transient background fetch error
+      } finally {
+        if (currentController === controller) currentController = null;
+        scheduleNext();
       }
     };
 
-    const timer = setTimeout(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && active) {
+        if (pollTimer) {
+          clearTimeout(pollTimer);
+          pollTimer = null;
+        }
+        void load();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    const startTimer = setTimeout(() => {
       void load();
     }, 0);
-    const interval = setInterval(load, 15000); // 15s poll
 
     return () => {
       active = false;
-      clearTimeout(timer);
-      clearInterval(interval);
+      clearTimeout(startTimer);
+      if (pollTimer) clearTimeout(pollTimer);
+      currentController?.abort();
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 

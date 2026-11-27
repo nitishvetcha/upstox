@@ -15,6 +15,8 @@ import { chainMetrics } from "./optionChainAnalytics.ts";
 import { chainFreshness } from "./chainFreshness.ts";
 import { analyze, recommendationOfTheDay } from "../engine/strategy.ts";
 import { freshnessOf, tradeFreshnessOf, commodityMarketStatus } from "../time.ts";
+import { quoteManager } from "./streamingQuoteManager.ts";
+import { STOCK_OPPORTUNITY_VERSION } from "../engine/stockOpportunityEngine.ts";
 
 export { INDICES };
 export type ProviderMode = "mock" | "upstox";
@@ -155,6 +157,25 @@ const inFlightSnapshot = new Map<UnderlyingId, Promise<Snapshot>>();
 const SNAPSHOT_TTL_MS = 5_000;
 const LIVE_GRACE_MS = 90_000;
 
+export function getCachedSnapshot(index: UnderlyingId): Snapshot | null {
+  return lastLiveSnapshotCache.get(index)?.snap ?? null;
+}
+
+function syncSnapshotTickToStream(index: UnderlyingId, snap: Snapshot): void {
+  if (!snap || snap.spot <= 0 || snap.sources?.market?.source !== "LIVE") return;
+  const inst = getUnderlyingInstrument(index);
+  if (!inst?.underlyingKey) return;
+  const ltt = snap.sources.market.fetchedAt ? Date.parse(snap.sources.market.fetchedAt) : Date.now();
+  const existing = quoteManager.getQuote(inst.underlyingKey);
+  if (existing && existing.ltt >= ltt) return;
+  quoteManager.ingestTick({
+    instrumentKey: inst.underlyingKey,
+    symbol: inst.symbol,
+    ltp: snap.spot,
+    ltt: Number.isFinite(ltt) ? ltt : Date.now(),
+  });
+}
+
 export async function getSnapshot(index: UnderlyingId, deps?: FallbackDeps, now?: Date): Promise<Snapshot> {
   if (!deps) {
     const cached = lastLiveSnapshotCache.get(index);
@@ -175,6 +196,7 @@ export async function getSnapshot(index: UnderlyingId, deps?: FallbackDeps, now?
         if (nowMs - v.cachedAt > LIVE_GRACE_MS * 2) lastLiveSnapshotCache.delete(k);
       }
       lastLiveSnapshotCache.set(index, { snap: data, cachedAt: nowMs });
+      syncSnapshotTickToStream(index, data);
       return { ...data, fallbackReason: null };
     }
 
@@ -229,8 +251,57 @@ export async function getSnapshot(index: UnderlyingId, deps?: FallbackDeps, now?
 
 export const getAnalysis = cache(async (index: UnderlyingId) => analyze(await getSnapshot(index)));
 
-// Deduped per request: the layout's top bar and the dashboard page share one fetch.
-export const getDashboard = cache(async () => {
+export type DashboardData = {
+  analyses: ReturnType<typeof analyze>[];
+  today: ReturnType<typeof recommendationOfTheDay>;
+  generatedAt: string;
+  warming?: boolean;
+};
+
+const DASHBOARD_FRESH_MS = 20_000;
+const DASHBOARD_STALE_MS = 10 * 60_000;
+const DASHBOARD_COLD_BUDGET_MS = 1_500;
+
+const gMarket = globalThis as typeof globalThis & {
+  __warmDashboard?: { data: DashboardData; updatedAt: number };
+  __refreshingDashboard?: Promise<DashboardData> | null;
+};
+
+function buildWarmingSnapshot(id: UnderlyingId, now: Date): Snapshot {
+  const cachedSnap = lastLiveSnapshotCache.get(id)?.snap;
+  if (cachedSnap) return cachedSnap;
+  const inst = getUnderlyingInstrument(id);
+  const unavail: SourceInfo = { source: "UNAVAILABLE", provider: "UPSTOX", fetchedAt: null };
+  return {
+    index: id,
+    name: inst?.name ?? String(id).toUpperCase(),
+    spot: 0,
+    prevClose: null,
+    expiry: "",
+    strikeStep: 50,
+    lotSize: null,
+    indicators: null,
+    ivPercentile: null,
+    breadth: null,
+    news: {
+      score: 0,
+      bullishPct: 0,
+      neutralPct: 100,
+      bearishPct: 0,
+      eventRisk: null,
+      status: "UNAVAILABLE",
+      confidence: 0,
+    },
+    chain: [],
+    technical: null,
+    sources: { market: unavail, optionChain: unavail, technical: unavail, news: unavail, breadth: unavail },
+    technicalReasonCode: null,
+    technicalReason: `Warming live feed (${STOCK_OPPORTUNITY_VERSION})`,
+    fallbackReason: null,
+  };
+}
+
+async function computeDashboardFresh(): Promise<DashboardData> {
   const now = new Date();
   const commActive = commodityMarketStatus(now) === "OPEN";
   const targetUnderlyings = commActive ? [...INDICES, ...COMMODITY_IDS] : INDICES;
@@ -246,7 +317,64 @@ export const getDashboard = cache(async () => {
       await new Promise((r) => setTimeout(r, 150));
     }
   }
-  return { analyses, today: recommendationOfTheDay(analyses), generatedAt: now.toISOString() };
+  const payload: DashboardData = {
+    analyses,
+    today: recommendationOfTheDay(analyses),
+    generatedAt: now.toISOString(),
+    warming: false,
+  };
+  gMarket.__warmDashboard = { data: payload, updatedAt: Date.now() };
+  return payload;
+}
+
+export function triggerDashboardRevalidate(): Promise<DashboardData> {
+  if (gMarket.__refreshingDashboard) return gMarket.__refreshingDashboard;
+  gMarket.__refreshingDashboard = computeDashboardFresh().finally(() => {
+    gMarket.__refreshingDashboard = null;
+  });
+  return gMarket.__refreshingDashboard;
+}
+
+export function clearDashboardWarmCache(): void {
+  gMarket.__warmDashboard = undefined;
+  gMarket.__refreshingDashboard = null;
+}
+
+// Deduped per request & stale-while-revalidate across renders: Overview / layout respond in <2s instead of blocking on 10-underlying cold fetch.
+export const getDashboard = cache(async (): Promise<DashboardData> => {
+  const nowMs = Date.now();
+  const cachedEntry = gMarket.__warmDashboard;
+
+  if (cachedEntry && nowMs - cachedEntry.updatedAt <= DASHBOARD_FRESH_MS) {
+    return cachedEntry.data;
+  }
+
+  if (cachedEntry && nowMs - cachedEntry.updatedAt <= DASHBOARD_STALE_MS) {
+    void triggerDashboardRevalidate().catch(() => {});
+    return cachedEntry.data;
+  }
+
+  const refreshPromise = triggerDashboardRevalidate();
+  const completed = await Promise.race<DashboardData | null>([
+    refreshPromise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), DASHBOARD_COLD_BUDGET_MS)),
+  ]);
+
+  if (completed) return completed;
+
+  // Re-check in case another concurrent call just finished
+  if (gMarket.__warmDashboard) return gMarket.__warmDashboard.data;
+
+  const now = new Date();
+  const commActive = commodityMarketStatus(now) === "OPEN";
+  const targetUnderlyings = commActive ? [...INDICES, ...COMMODITY_IDS] : INDICES;
+  const analyses = targetUnderlyings.map((id) => analyze(buildWarmingSnapshot(id, now), now));
+  return {
+    analyses,
+    today: recommendationOfTheDay(analyses),
+    generatedAt: now.toISOString(),
+    warming: true,
+  };
 });
 
 // --- normalized API shapes (no raw Upstox fields) ---

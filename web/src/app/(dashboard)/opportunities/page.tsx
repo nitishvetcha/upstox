@@ -2,12 +2,12 @@ export const dynamic = "force-dynamic";
 
 // Defect fixed (Phase 29): page was HTTP-fetching itself at localhost:3000 which fails when
 // the dev server runs on a different port. Now calls engines directly as a server component.
-import { getSnapshot } from "@/lib/services/market";
-import { INDICES, INSTRUMENTS, COMMODITY_IDS, COMMODITIES } from "@/lib/services/instrumentRegistry";
 import { evaluateOptionsOpportunity, validateSpreadIntegrity } from "@/lib/engine/opportunityEngine";
 import { scanStocks } from "@/lib/engine/stockOpportunityEngine";
 import { POSITIONAL_RETIRED_NOTE } from "@/lib/engine/positionalTrend";
 import { scanLongTerm, type LongTermOpportunity } from "@/lib/engine/longTermEngine";
+import { getOpportunitiesSWR, computeAlternativeScenario } from "@/lib/services/opportunitiesCache";
+import Link from "next/link";
 import { listOpportunityRecords } from "@/lib/services/opportunityTrackingStore";
 import { listPaperOpportunities, isFixture, scoreBandAccuracy, type ScoreBandStat } from "@/lib/services/paperOpportunityStore";
 import { gradeGap, scoreBreakdownRows, type GradeGap, type BreakdownRow } from "@/lib/engine/gradeGap";
@@ -92,31 +92,7 @@ function DecisionFunnel({ options, stockScans }: {
 
 async function loadData() {
   try {
-    const now = new Date();
-    const [snaps, commSnaps, intradayResult, swingResult, ltResult] = await Promise.all([
-      Promise.allSettled(INDICES.map((i) => getSnapshot(i))),
-      Promise.allSettled(COMMODITY_IDS.map((c) => getSnapshot(c))),
-      scanStocks("intraday", now),
-      scanStocks("swing", now),
-      scanLongTerm(),
-    ]);
-    const allSnaps = [
-      ...snaps.map((r, k) => ({ r, sym: INSTRUMENTS[INDICES[k]].symbol })),
-      ...commSnaps.map((r, k) => ({ r, sym: COMMODITIES[COMMODITY_IDS[k]].symbol })),
-    ];
-    const indexOptions = allSnaps.flatMap(({ r, sym }) => {
-      if (r.status !== "fulfilled") return [];
-      const primary = evaluateOptionsOpportunity(r.value, sym, now);
-      // Also evaluate the counter-direction so users see all three scenarios.
-      const counterType: "CE" | "PE" = primary.marketDirection === "BEARISH" ? "CE" : "PE";
-      const counter = evaluateOptionsOpportunity(r.value, sym, now, counterType);
-      counter.isAlternativeScenario = true;
-      return [primary, counter];
-    });
-    const failedIndices = allSnaps.flatMap(({ r, sym }) =>
-      r.status === "rejected" ? [`${sym}: ${(r.reason as Error)?.message ?? "failed"}`] : [],
-    );
-    return { indexOptions, failedIndices, intradayResult, swingResult, ltResult, now };
+    return await getOpportunitiesSWR({ scanStocks, scanLongTerm });
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -1267,6 +1243,16 @@ function OptionsIndexSection({ result, altResult, now, scoreBands }: { result: O
         </SubSection>
       )}
 
+      {!altResult && (
+        <Link
+          href={`/opportunities?alt=${encodeURIComponent(result.underlying)}`}
+          scroll={false}
+          className="mt-3 inline-block text-xs text-sky-400 hover:text-sky-300"
+        >
+          Show counter-direction scenario (computed on demand)
+        </Link>
+      )}
+
       {altResult && (() => {
         const altType = altResult.topOpportunities[0]?.optionType;
         const altCands = altResult.topOpportunities;
@@ -1348,8 +1334,9 @@ function OutcomeRow({ r }: { r: OpportunityRecord }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default async function OpportunitiesPage() {
-  const result = await loadData();
+export default async function OpportunitiesPage({ searchParams }: { searchParams: Promise<{ alt?: string }> }) {
+  const [result, { alt }] = await Promise.all([loadData(), searchParams]);
+  const altResult = alt ? await computeAlternativeScenario(alt).catch(() => null) : null;
   const outcomes: OpportunityRecord[] = listOpportunityRecords().slice(0, 5);
   const scoreBands: ScoreBandStat[] = scoreBandAccuracy(listPaperOpportunities().filter((o) => !isFixture(o)));
 
@@ -1373,7 +1360,7 @@ export default async function OpportunitiesPage() {
       primaryByUnderlying.set(o.underlying, o);
     }
   }
-  const altByUnderlying = new Map(rawIndexOptions.filter((o) => o.isAlternativeScenario).map((o) => [o.underlying, o]));
+  const altByUnderlying = new Map(altResult ? [[altResult.underlying, altResult]] : []);
   const indexOptions = Array.from(primaryByUnderlying.values()).sort((a, b) => {
     const aActionable = a.topOpportunities.some((c) => c.grade !== "REJECT" && c.grade !== "C");
     const bActionable = b.topOpportunities.some((c) => c.grade !== "REJECT" && c.grade !== "C");
@@ -1450,7 +1437,7 @@ export default async function OpportunitiesPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <AutoRefreshControl />
+          <AutoRefreshControl isWarming={Boolean(result.warming)} />
           <nav className="flex flex-wrap gap-2 text-xs" aria-label="Jump to section">
             {[["#sec-stocks", "Stocks"], ["#sec-options", "Options"], ["#sec-rejected", "Rejected"]].map(([href, label]) => (
               <a key={href} href={href} className="rounded border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-zinc-300 hover:bg-zinc-700">{label}</a>

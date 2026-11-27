@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition, useCallback, useSyncExternalStore } from "react";
+import { useEffect, useState, useTransition, useCallback, useSyncExternalStore, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, Pause, Play } from "lucide-react";
 
@@ -24,9 +24,11 @@ function getServerSnapshot(): number {
   return DEFAULT_INTERVAL_SEC;
 }
 
-export function AutoRefreshControl() {
+export function AutoRefreshControl({ isWarming = false }: { isWarming?: boolean }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const isPendingRef = useRef(isPending);
+  isPendingRef.current = isPending;
   const storedInterval = useSyncExternalStore(
     subscribeStorage,
     getStoredIntervalSnapshot,
@@ -44,29 +46,70 @@ export function AutoRefreshControl() {
   );
 
   const triggerRefresh = useCallback(() => {
+    if (isPendingRef.current) return;
     startTransition(() => {
       router.refresh();
     });
   }, [router]);
 
+  // If the server returned a warming cold-boot snapshot, schedule one quick non-overlapping sync after 3.5s
+  useEffect(() => {
+    if (!isWarming || isPaused) return;
+    const warmTimer = setTimeout(() => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") {
+        triggerRefresh();
+      }
+    }, 3_500);
+    return () => clearTimeout(warmTimer);
+  }, [isWarming, isPaused, triggerRefresh]);
+
+  // Non-overlapping setTimeout countdown: waits until isPending returns false before counting down the next cycle
   useEffect(() => {
     if (isPaused || intervalSec <= 0) return;
 
+    let cancelled = false;
     let remaining = intervalSec;
+    let stepTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const timer = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      remaining -= 1;
-      if (remaining <= 0) {
-        remaining = intervalSec;
-        setSecondsLeft(intervalSec);
-        triggerRefresh();
-      } else {
-        setSecondsLeft(remaining);
+    const scheduleStep = () => {
+      if (cancelled) return;
+      stepTimer = setTimeout(() => {
+        if (cancelled) return;
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+          scheduleStep();
+          return;
+        }
+        // Pause countdown while previous router.refresh() transition is still running
+        if (isPendingRef.current) {
+          scheduleStep();
+          return;
+        }
+        remaining -= 1;
+        if (remaining <= 0) {
+          remaining = intervalSec;
+          setSecondsLeft(intervalSec);
+          triggerRefresh();
+        } else {
+          setSecondsLeft(remaining);
+        }
+        scheduleStep();
+      }, 1000);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && stepTimer === null && !cancelled) {
+        scheduleStep();
       }
-    }, 1000);
+    };
 
-    return () => clearInterval(timer);
+    document.addEventListener("visibilitychange", handleVisibility);
+    scheduleStep();
+
+    return () => {
+      cancelled = true;
+      if (stepTimer) clearTimeout(stepTimer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [intervalSec, isPaused, refreshTrigger, triggerRefresh]);
 
   const handleManualRefresh = () => {

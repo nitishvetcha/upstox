@@ -1,9 +1,10 @@
 // Phase 3 — React Hook for Streaming Market Quotes via Server-Sent Events (SSE).
-// Connects to /api/market/stream, maintains real-time quotes, tracks latency and tick direction.
+// Uses a single shared EventSource per browser tab across all UI components
+// (TopBar, StreamStatusPill, MarketPulseTable), with visibility-aware reconnects.
 
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState } from "react";
 import type { StreamingQuote } from "@/lib/services/streamingQuoteManager";
 
 export type StreamStatus = "CONNECTING" | "STREAMING" | "DISCONNECTED" | "ERROR";
@@ -16,115 +17,162 @@ export interface MarketStreamState {
   quoteCount: number;
 }
 
+const INITIAL_STATE: MarketStreamState = {
+  quotes: {},
+  status: "CONNECTING",
+  latencyMs: 0,
+  lastTickTime: null,
+  quoteCount: 0,
+};
+
+let sharedState: MarketStreamState = INITIAL_STATE;
+const subscribers = new Set<(state: MarketStreamState) => void>();
+let sharedEs: EventSource | null = null;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let teardownTimer: ReturnType<typeof setTimeout> | null = null;
+let visibilityBound = false;
+
+function notifySubscribers() {
+  for (const listener of subscribers) {
+    listener(sharedState);
+  }
+}
+
+function updateSharedState(updater: (prev: MarketStreamState) => MarketStreamState) {
+  sharedState = updater(sharedState);
+  notifySubscribers();
+}
+
+function closeStream() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (sharedEs) {
+    sharedEs.close();
+    sharedEs = null;
+  }
+}
+
+function connectStream() {
+  if (typeof window === "undefined") return;
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+  if (sharedEs) return;
+
+  if (teardownTimer) {
+    clearTimeout(teardownTimer);
+    teardownTimer = null;
+  }
+
+  updateSharedState((prev) => ({ ...prev, status: "CONNECTING" }));
+
+  try {
+    const es = new EventSource("/api/market/stream");
+    sharedEs = es;
+
+    es.addEventListener("open", () => {
+      updateSharedState((prev) => ({ ...prev, status: "STREAMING" }));
+    });
+
+    es.addEventListener("snapshot", (event) => {
+      try {
+        const snapshot = JSON.parse(event.data) as StreamingQuote[];
+        const nextMap: Record<string, StreamingQuote> = { ...sharedState.quotes };
+        for (const q of snapshot) {
+          nextMap[q.instrumentKey] = q;
+        }
+        const avgLat = snapshot.length > 0
+          ? Math.round(snapshot.reduce((acc, q) => acc + q.latencyMs, 0) / snapshot.length)
+          : sharedState.latencyMs;
+        updateSharedState((prev) => ({
+          quotes: nextMap,
+          status: prev.status,
+          latencyMs: avgLat,
+          lastTickTime: snapshot.length > 0 ? Date.now() : prev.lastTickTime,
+          quoteCount: Object.keys(nextMap).length,
+        }));
+      } catch {
+        // Ignore malformed snapshot frame
+      }
+    });
+
+    es.addEventListener("tick", (event) => {
+      try {
+        const quote = JSON.parse(event.data) as StreamingQuote;
+        updateSharedState((prev) => {
+          const quotes = { ...prev.quotes, [quote.instrumentKey]: quote };
+          return {
+            quotes,
+            status: "STREAMING",
+            latencyMs: quote.latencyMs,
+            lastTickTime: Date.now(),
+            quoteCount: Object.keys(quotes).length,
+          };
+        });
+      } catch {
+        // Ignore malformed tick frame
+      }
+    });
+
+    es.onerror = () => {
+      closeStream();
+      updateSharedState((prev) => ({ ...prev, status: "DISCONNECTED" }));
+      if (subscribers.size > 0 && !reconnectTimer) {
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          if (subscribers.size > 0) connectStream();
+        }, 4_000);
+      }
+    };
+  } catch {
+    updateSharedState((prev) => ({ ...prev, status: "ERROR" }));
+  }
+}
+
+function handleVisibilityChange() {
+  if (typeof document === "undefined") return;
+  if (document.visibilityState === "visible") {
+    if (subscribers.size > 0 && !sharedEs) {
+      connectStream();
+    }
+  } else {
+    closeStream();
+  }
+}
+
 export function useMarketStream(): MarketStreamState {
-  const [quotes, setQuotes] = useState<Record<string, StreamingQuote>>({});
-  const [status, setStatus] = useState<StreamStatus>("CONNECTING");
-  const [latencyMs, setLatencyMs] = useState<number>(0);
-  const [lastTickTime, setLastTickTime] = useState<number | null>(null);
-
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const connectRef = useRef<() => void>(() => {});
-
-  const connect = useCallback(() => {
-    if (typeof window === "undefined") return;
-
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    setStatus("CONNECTING");
-
-    try {
-      const es = new EventSource("/api/market/stream");
-      eventSourceRef.current = es;
-
-      es.addEventListener("open", () => {
-        setStatus("STREAMING");
-      });
-
-      // Handle full snapshot on initial connection
-      es.addEventListener("snapshot", (event) => {
-        try {
-          const snapshot = JSON.parse(event.data) as StreamingQuote[];
-          const nextMap: Record<string, StreamingQuote> = {};
-          for (const q of snapshot) {
-            nextMap[q.instrumentKey] = q;
-          }
-          setQuotes(nextMap);
-          if (snapshot.length > 0) {
-            const avgLat = Math.round(
-              snapshot.reduce((acc, q) => acc + q.latencyMs, 0) / snapshot.length
-            );
-            setLatencyMs(avgLat);
-            setLastTickTime(Date.now());
-          }
-        } catch {
-          // Parse error
-        }
-      });
-
-      // Handle high-frequency tick events
-      es.addEventListener("tick", (event) => {
-        try {
-          const quote = JSON.parse(event.data) as StreamingQuote;
-          setQuotes((prev) => ({
-            ...prev,
-            [quote.instrumentKey]: quote,
-          }));
-          setLatencyMs(quote.latencyMs);
-          setLastTickTime(Date.now());
-          setStatus("STREAMING");
-        } catch {
-          // Parse error
-        }
-      });
-
-      es.onerror = () => {
-        setStatus("DISCONNECTED");
-        es.close();
-        eventSourceRef.current = null;
-
-        // Schedule auto-reconnect with backoff
-        if (!reconnectTimeoutRef.current) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectTimeoutRef.current = null;
-            connectRef.current();
-          }, 3000);
-        }
-      };
-    } catch {
-      setStatus("ERROR");
-    }
-  }, []);
+  const [state, setState] = useState<MarketStreamState>(sharedState);
 
   useEffect(() => {
-    connectRef.current = connect;
-  }, [connect]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      connect();
+    subscribers.add(setState);
+    if (teardownTimer) {
+      clearTimeout(teardownTimer);
+      teardownTimer = null;
+    }
+    if (!visibilityBound && typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      visibilityBound = true;
+    }
+    const startTimer = setTimeout(() => {
+      if (!sharedEs) connectStream();
     }, 0);
 
     return () => {
-      clearTimeout(timer);
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+      clearTimeout(startTimer);
+      subscribers.delete(setState);
+      if (subscribers.size === 0) {
+        teardownTimer = setTimeout(() => {
+          if (subscribers.size === 0) {
+            closeStream();
+            if (visibilityBound && typeof document !== "undefined") {
+              document.removeEventListener("visibilitychange", handleVisibilityChange);
+              visibilityBound = false;
+            }
+          }
+        }, 500);
       }
     };
-  }, [connect]);
+  }, []);
 
-  return {
-    quotes,
-    status,
-    latencyMs,
-    lastTickTime,
-    quoteCount: Object.keys(quotes).length,
-  };
+  return state;
 }

@@ -198,6 +198,7 @@ function cleanupLocks() {
 
 // 3. Autonomous In-Process Paper Cycle Loop
 let paperCycleTimer = null;
+let paperCycleInFlight = false;
 
 function startPaperCycleRunner() {
   const schedulerToken = process.env.SCHEDULER_TOKEN;
@@ -210,7 +211,8 @@ function startPaperCycleRunner() {
   updateRunnerHeartbeat({ lastCycleAt: new Date().toISOString() });
 
   const runCycle = async () => {
-    if (shuttingDown) return;
+    if (shuttingDown || paperCycleInFlight) return;
+    paperCycleInFlight = true;
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/automation/paper-cycle`, {
         method: "POST",
@@ -236,8 +238,17 @@ function startPaperCycleRunner() {
         console.warn(`[PAPER-CYCLE:ERROR] ${e.message}`);
         updateRunnerHeartbeat({ lastCycleError: e.message });
       }
+    } finally {
+      paperCycleInFlight = false;
     }
   };
+
+  // Trigger non-blocking server cache warmup 3s after Next.js starts listening
+  setTimeout(() => {
+    if (!shuttingDown) {
+      fetch(`http://127.0.0.1:${port}/api/market/warm`, { signal: AbortSignal.timeout(5000) }).catch(() => {});
+    }
+  }, 3_000);
 
   // Wait 12 seconds after Next.js starts listening before first execution
   setTimeout(() => {
@@ -291,7 +302,7 @@ function startStockScanRunner() {
     }
   };
 
-  // Wait 25 seconds after Next.js starts listening before first execution
+  // Wait 45 seconds after Next.js starts listening before first stock scan so boot/login stay snappy
   setTimeout(() => {
     if (!shuttingDown) {
       void runStockScan();
@@ -299,7 +310,7 @@ function startStockScanRunner() {
         void runStockScan();
       }, 300_000); // every 5 minutes
     }
-  }, 25_000);
+  }, 45_000);
 }
 
 // 4b. Daily EOD Swing-V1 Mode B Scanner (once per trading day at 15:40 IST)

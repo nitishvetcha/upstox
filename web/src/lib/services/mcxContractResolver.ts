@@ -198,26 +198,41 @@ export function selectActiveContract(
 
 const MCX_MASTER_URL = "https://assets.upstox.com/market-quote/instruments/exchange/MCX.json.gz";
 let mcxMasterCache: { expiresAt: number; rows: RawSearchInstrument[] } | null = null;
+let inFlightMcxMaster: Promise<RawSearchInstrument[]> | null = null;
 
 async function fetchMcxMaster(now: Date): Promise<RawSearchInstrument[]> {
   if (mcxMasterCache && mcxMasterCache.expiresAt > now.getTime()) {
     return mcxMasterCache.rows;
   }
-  assertUpstoxNetworkAllowed("/market-quote/instruments/exchange/MCX.json.gz");
-  const res = await fetch(MCX_MASTER_URL, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
-  if (!res.ok || !res.body) throw new Error(`MCX master HTTP ${res.status}`);
-  const json = (await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).json()) as RawSearchInstrument[];
-  // Retain only active FUT/FUTCOM rows for our 4 tracked commodities so the full MCX master is GC'd immediately
-  const prefixes = ["CRUDEOIL", "NATURALGAS", "GOLDM", "SILVERM"];
-  const rows = Array.isArray(json)
-    ? json.filter((r) => {
+  if (inFlightMcxMaster) return inFlightMcxMaster;
+  inFlightMcxMaster = (async () => {
+    try {
+      assertUpstoxNetworkAllowed("/market-quote/instruments/exchange/MCX.json.gz");
+      const res = await fetch(MCX_MASTER_URL, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
+      if (!res.ok || !res.body) throw new Error(`MCX master HTTP ${res.status}`);
+      const { parseGzipJsonArrayStream } = await import("./streamJsonArray.ts");
+      const prefixes = ["CRUDEOIL", "NATURALGAS", "GOLDM", "SILVERM"];
+      const rows = await parseGzipJsonArrayStream<RawSearchInstrument>(res, (r) => {
         const itype = typeof r.instrument_type === "string" ? r.instrument_type.toUpperCase() : "";
         const sym = typeof r.trading_symbol === "string" ? r.trading_symbol.toUpperCase() : "";
-        return (itype === "FUT" || itype === "FUTCOM") && prefixes.some((p) => sym.startsWith(p));
-      })
-    : [];
-  mcxMasterCache = { expiresAt: now.getTime() + RESOLVER_TTL_MS, rows };
-  return rows;
+        if ((itype !== "FUT" && itype !== "FUTCOM") || !prefixes.some((p) => sym.startsWith(p))) {
+          return null;
+        }
+        return {
+          instrument_key: typeof r.instrument_key === "string" ? r.instrument_key : undefined,
+          trading_symbol: typeof r.trading_symbol === "string" ? r.trading_symbol : undefined,
+          expiry: typeof r.expiry === "number" || typeof r.expiry === "string" ? r.expiry : undefined,
+          lot_size: typeof r.lot_size === "number" ? r.lot_size : undefined,
+          instrument_type: typeof r.instrument_type === "string" ? r.instrument_type : undefined,
+        };
+      });
+      mcxMasterCache = { expiresAt: now.getTime() + RESOLVER_TTL_MS, rows };
+      return rows;
+    } finally {
+      inFlightMcxMaster = null;
+    }
+  })();
+  return inFlightMcxMaster;
 }
 
 async function fetchSearchResults(

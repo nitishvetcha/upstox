@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { dataRoot } from "../dataRoot.ts";
-import { gunzipSync } from "node:zlib";
+import { parseGzipJsonArrayStream } from "./streamJsonArray.ts";
 import { get, upstoxHistoryFetcher } from "./upstoxMarket.ts";
 import { getAccessToken } from "./upstoxAuth.ts";
 import { INSTRUMENTS } from "./instrumentRegistry.ts";
@@ -72,7 +72,10 @@ const CONSTITUENTS: StockInstrument[] = [...new Map([...NIFTY_50, ...BANK_NIFTY]
   symbol: c.symbol, name: c.name, exchange: "NSE" as const, instrumentKey: c.instrumentKey, kind: "EQUITY" as const,
 }])).values()];
 
-const g = globalThis as typeof globalThis & { __nseEq?: { at: number; list: StockInstrument[]; source: string } };
+const g = globalThis as typeof globalThis & {
+  __nseEq?: { at: number; list: StockInstrument[]; source: string };
+  __nseEqPromise?: Promise<{ at: number; list: StockInstrument[]; source: string }>;
+};
 
 export async function equityMaster(fetchImpl: typeof fetch = fetch, now = Date.now()): Promise<{ at: number; list: StockInstrument[]; source: string }> {
   // Mock mode never contacts Upstox and never writes the protected data directory: the offline constituent list is used.
@@ -84,19 +87,38 @@ export async function equityMaster(fetchImpl: typeof fetch = fetch, now = Date.n
       return (g.__nseEq = { at: st.mtimeMs, list: JSON.parse(fs.readFileSync(MASTER_FILE, "utf8")), source: "UPSTOX_INSTRUMENT_MASTER" });
     }
   } catch { /* no cache yet */ }
-  try {
-    const res = await fetchImpl(MASTER_URL, { signal: AbortSignal.timeout(20_000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const rows = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8")) as Record<string, string>[];
-    const list: StockInstrument[] = rows
-      .filter((r) => r.segment === "NSE_EQ" && r.instrument_type === "EQ")
-      .map((r) => ({ symbol: r.trading_symbol, name: r.name, exchange: "NSE", instrumentKey: r.instrument_key, kind: "EQUITY" }));
-    fs.mkdirSync(path.dirname(MASTER_FILE), { recursive: true });
-    fs.writeFileSync(MASTER_FILE, JSON.stringify(list));
-    return (g.__nseEq = { at: now, list, source: "UPSTOX_INSTRUMENT_MASTER" });
-  } catch {
-    return { at: now, list: CONSTITUENTS, source: "CONSTITUENT_FALLBACK" };
-  }
+  if (g.__nseEqPromise) return g.__nseEqPromise;
+  g.__nseEqPromise = (async () => {
+    try {
+      const res = await fetchImpl(MASTER_URL, { signal: AbortSignal.timeout(20_000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const list = await parseGzipJsonArrayStream<StockInstrument>(res, (r) => {
+        if (
+          r?.segment !== "NSE_EQ" ||
+          r?.instrument_type !== "EQ" ||
+          typeof r.trading_symbol !== "string" ||
+          typeof r.instrument_key !== "string"
+        ) {
+          return null;
+        }
+        return {
+          symbol: r.trading_symbol,
+          name: typeof r.name === "string" ? r.name : r.trading_symbol,
+          exchange: "NSE",
+          instrumentKey: r.instrument_key,
+          kind: "EQUITY",
+        };
+      });
+      fs.mkdirSync(path.dirname(MASTER_FILE), { recursive: true });
+      fs.writeFileSync(MASTER_FILE, JSON.stringify(list));
+      return (g.__nseEq = { at: now, list, source: "UPSTOX_INSTRUMENT_MASTER" });
+    } catch {
+      return { at: now, list: CONSTITUENTS, source: "CONSTITUENT_FALLBACK" };
+    } finally {
+      g.__nseEqPromise = undefined;
+    }
+  })();
+  return g.__nseEqPromise;
 }
 
 export function searchInstruments(list: StockInstrument[], q: string, limit = 20): StockInstrument[] {

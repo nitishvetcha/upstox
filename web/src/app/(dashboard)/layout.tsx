@@ -4,6 +4,7 @@ import { getDashboard } from "@/lib/services/market";
 import { fmtDate } from "@/lib/time";
 import { dataLabel } from "@/lib/dataStatus";
 import { verifyCurrentCredentialCached } from "@/lib/services/upstoxAuth";
+import { getActiveUnderlyingKey } from "@/lib/services/instrumentRegistry";
 
 // Live dashboard shell. Market data and token status are read here, for these pages only.
 export const dynamic = "force-dynamic";
@@ -12,6 +13,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const [{ analyses, generatedAt }, token] = await Promise.all([getDashboard(), verifyCurrentCredentialCached()]);
   const tickers = analyses.map(({ snapshot: s }) => ({
     name: s.name,
+    symbol: s.index.toUpperCase(),
+    instrumentKey: getActiveUnderlyingKey(s.index),
     spot: s.spot,
     change: s.prevClose === null ? null : s.spot - s.prevClose,
     expiry: fmtDate(s.expiry),
