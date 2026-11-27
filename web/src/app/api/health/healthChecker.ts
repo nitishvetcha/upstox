@@ -194,7 +194,7 @@ export async function generateHealthReport(
   const telegramHealth = await checkTelegramConnectivity(cfg.telegramBotToken, forceRefresh);
 
   // 2. Verify background BOT-RUNNER liveness via IPC heartbeat
-  const botHeartbeat = readBotHeartbeat(60);
+  const botHeartbeat = readBotHeartbeat(120);
   const botRunnerHealth: BotRunnerHealthResult = {
     alive: botHeartbeat.alive,
     ageSeconds: botHeartbeat.ageSeconds,

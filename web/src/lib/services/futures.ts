@@ -91,7 +91,9 @@ export function fetchFuturesContracts(now: Date): Promise<FuturesContract[]> {
         const res = await fetch(url, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
         status = res.status;
         if (!res.ok) throw new UpstoxError("UPSTOX_API_ERROR", `instrument master HTTP ${status}`, status);
-        const parsed = normalizeFuturesContracts(JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8")));
+        let rawJson: unknown = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8"));
+        const parsed = normalizeFuturesContracts(rawJson);
+        rawJson = null; // Release multi-MB raw array immediately for GC
         list.push(...parsed.filter((c) => TRACKED_INDEX_UNDERLYING_KEYS.has(c.underlyingKey)));
         await new Promise((r) => setImmediate(r));
       }

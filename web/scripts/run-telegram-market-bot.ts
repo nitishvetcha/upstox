@@ -121,6 +121,15 @@ async function main() {
     activeTrackedPicksCount: listTrackedPicks(true).length,
   });
 
+  // Independent lightweight heartbeat every 15s so heavy scheduled scans never stall liveness
+  const heartbeatInterval = setInterval(() => {
+    if (isStopping) return;
+    recordBotHeartbeat({
+      status: "RUNNING",
+      activeTrackedPicksCount: listTrackedPicks(true).length,
+    });
+  }, 15_000);
+
   // 3. Telegram polling loop (every 2 seconds)
   let pollRunning = false;
   const pollInterval = setInterval(async () => {
