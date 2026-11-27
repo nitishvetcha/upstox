@@ -10,7 +10,15 @@ import { assertUpstoxNetworkAllowed } from "./upstoxNetworkGate.ts";
 
 // Upstox's public, daily-refreshed NSE instrument master (no token needed).
 const INSTRUMENTS_URLS = ["NSE", "BSE"].map((x) => `https://assets.upstox.com/market-quote/instruments/exchange/${x}.json.gz`);
-const CONTRACTS_TTL_MS = 60 * 60_000;
+const CONTRACTS_TTL_MS = 12 * 60 * 60_000; // 12h: BOD masters update once per day
+const TRACKED_INDEX_UNDERLYING_KEYS = new Set([
+  "NSE_INDEX|Nifty 50",
+  "NSE_INDEX|Nifty Bank",
+  "NSE_INDEX|Nifty Fin Service",
+  "NSE_INDEX|NIFTY MID SELECT",
+  "BSE_INDEX|SENSEX",
+  "BSE_INDEX|BANKEX",
+]);
 export const AT_VWAP_PCT = 0.02; // |futures − VWAP| below 0.02% of VWAP = AT VWAP
 
 // Rollover rule: if the nearest contract has ≤ FUTURES_ROLLOVER_DAYS trading days left (counting today,
@@ -83,7 +91,9 @@ export function fetchFuturesContracts(now: Date): Promise<FuturesContract[]> {
         const res = await fetch(url, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
         status = res.status;
         if (!res.ok) throw new UpstoxError("UPSTOX_API_ERROR", `instrument master HTTP ${status}`, status);
-        list.push(...normalizeFuturesContracts(JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8"))));
+        const parsed = normalizeFuturesContracts(JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8")));
+        list.push(...parsed.filter((c) => TRACKED_INDEX_UNDERLYING_KEYS.has(c.underlyingKey)));
+        await new Promise((r) => setImmediate(r));
       }
       log(status, true, { futures: list.length });
       return list;
