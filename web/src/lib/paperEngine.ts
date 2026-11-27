@@ -10,7 +10,8 @@ import type {
 import { validateTransition } from "./paperStateMachine.ts";
 import { evaluateTradeRisk } from "./services/risk/riskService.ts";
 import { getRiskConfig, type RiskConfig } from "./services/risk/riskConfig.ts";
-import { costsFor, DEFAULT_TRANSACTION_COSTS, type TransactionCostConfig } from "./services/transactionCosts.ts";
+import { configForAsset, costsFor, DEFAULT_TRANSACTION_COSTS, type TransactionCostConfig } from "./services/transactionCosts.ts";
+import { isCommodityId } from "./services/instrumentRegistry.ts";
 import { calculateNetValue, calculateTradePnL, expiryInstant, istDay, r2, tradeCostsFor } from "./paperMath.ts";
 import { buildPaperLedgerReport, CLOSED_STATUSES } from "./paperReport.ts";
 import { tradeFreshnessOf } from "./time.ts";
@@ -444,7 +445,9 @@ export class PaperTradingEngine {
     const fillExitSide = plan.credit ? "BUY" : "SELL";
     const variableAtFill = costsFor(
       [{ side: fillEntrySide, price: entryPrice, quantity: lotSize }, { side: fillExitSide, price: stopExitPerUnit, quantity: lotSize }],
-      { ...riskConfig.costs, brokeragePerOrder: 0 },
+      isCommodityId(snapshot.index)
+        ? { ...configForAsset(snapshot.index), brokeragePerOrder: 0 }
+        : { ...riskConfig.costs, brokeragePerOrder: 0 },
     ).totalCosts;
     const netRiskPerLotAtFill = realWorstPerUnit * lotSize + variableAtFill;
     const capitalPerLotAtFill = actualCapitalPerUnit * lotSize;
@@ -536,10 +539,15 @@ export class PaperTradingEngine {
     return { created: true, trade, reason: "PAPER_TRADE_OPENED" };
   }
 
+  // Commodity trades carry MCX_FO statutory and exchange costs; index trades keep the ledger configuration.
+  private costsFor(index: string): TransactionCostConfig {
+    return isCommodityId(index) ? configForAsset(index) : this.costs;
+  }
+
   // Unrealized P&L in INR: gross mark-to-market minus the estimated round-trip costs if closed at current prices.
   private markToMarket(trade: PaperTrade): number {
     const gross = calculateTradePnL(trade.legs, trade.quantity, false).pnl;
-    const estCosts = tradeCostsFor(trade.legs, trade.quantity, (l) => l.currentPrice ?? l.entryFillPrice, this.costs).totalCosts;
+    const estCosts = tradeCostsFor(trade.legs, trade.quantity, (l) => l.currentPrice ?? l.entryFillPrice, this.costsFor(trade.index)).totalCosts;
     return r2(gross - estCosts);
   }
 
@@ -760,7 +768,7 @@ export class PaperTradingEngine {
 
     trade.exitPrice = Math.round(exitNet * 100) / 100;
     const gross = calculateTradePnL(trade.legs, trade.quantity, true).pnl;
-    const costs = tradeCostsFor(trade.legs, trade.quantity, (l) => l.exitPrice ?? l.entryFillPrice, this.costs);
+    const costs = tradeCostsFor(trade.legs, trade.quantity, (l) => l.exitPrice ?? l.entryFillPrice, this.costsFor(trade.index));
     trade.grossPnL = gross;
     trade.transactionCosts = costs;
     trade.realizedPnL = r2(gross - costs.totalCosts);

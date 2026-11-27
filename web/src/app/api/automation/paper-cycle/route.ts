@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     stage = "collect_response";
     const collect = await collectResponse.json();
     stage = "auto_open";
-    for (const id of (collect.createdIndexOpportunityIds ?? []) as string[]) await runOpenFlow(id).catch(() => null);
+    for (const id of (collect.createdOpenableOpportunityIds ?? []) as string[]) await runOpenFlow(id).catch(() => null);
     stage = "monitor_request";
     const monitorResponse = await monitorPaperOpportunities(new Request("http://internal/api/paper-opportunities/monitor", { method: "POST", headers }));
     stage = "monitor_response";

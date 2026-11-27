@@ -14,6 +14,9 @@ import { getPaperTradingEngine } from "./paperStore.ts";
 import { paperPortfolioRiskContext } from "./paperPortfolioRiskContext.ts";
 import { analyze } from "../engine/strategy.ts";
 import { logEvent } from "../ops/structuredLog.ts";
+import { evaluateOptionsOpportunity } from "../engine/opportunityEngine.ts";
+import { commodityFor, matchCandidate, toPaperAnalysis } from "./paperCommodityAdapter.ts";
+import type { CommodityId } from "./instrumentRegistry.ts";
 
 // Shared by the operator route and the automatic paper cycle. Every gate runs on the server, against a FRESH snapshot.
 export async function runOpenFlow(id: string): Promise<Response> {
@@ -36,6 +39,8 @@ export async function runOpenFlow(id: string): Promise<Response> {
 }
 
 async function attemptOpen(id: string, opp: PaperOpportunity, earlyFacts: OpenFacts) {
+  const commodity = commodityFor(opp.underlying ?? "");
+  if (commodity) return attemptCommodityOpen(id, opp, earlyFacts, commodity);
   const index = (opp.underlying ?? "").toLowerCase();
   if (!isIndexId(index)) return finish(id, decideOpen({ ...earlyFacts, opp: { ...opp, instrumentType: "UNSUPPORTED" } }));
 
@@ -64,6 +69,40 @@ async function attemptOpen(id: string, opp: PaperOpportunity, earlyFacts: OpenFa
 
   // The paper engine re-checks freshness, position limits, sizing, the 1% risk assessment and fills.
   // Last check, in the same synchronous step as the engine call: a link written while the snapshot loaded wins.
+  if (getPaperOpportunity(id)?.openedPaperTradeId) return finish(id, ALREADY_OPEN);
+  const result = ledger.processRecommendation(analysis, now);
+  const facts: OpenFacts = {
+    opp,
+    provenance,
+    hasPlan: true,
+    planRejected: null,
+    engine: { created: result.created, reason: publicEngineReason(result.reason), tradeId: result.trade?.id ?? null },
+  };
+  return finish(id, decideOpen(facts), result.trade?.id ?? null);
+}
+
+// MCX options are sized by the options engine, not the frozen Strategy 11.4 analysis. Same gates otherwise.
+async function attemptCommodityOpen(id: string, opp: PaperOpportunity, earlyFacts: OpenFacts, commodity: CommodityId) {
+  const now = openDeps.now();
+  const ledger = getPaperTradingEngine();
+  const portfolio = paperPortfolioRiskContext(ledger.getTrades());
+  const cb = circuitBreaker.canOpenTrade(
+    portfolio.openPositionsCount, now, portfolio.unrealizedMtmLoss, commodity, portfolio.openUnderlyingSymbols,
+  );
+  if (!cb.allowed) return finish(id, decideOpen({ ...earlyFacts, circuitBreakerRejected: cb.reason }));
+
+  const snapshot = await openDeps.getSnapshot(commodity);
+  const provenance = serverProvenance({ ...snapshot.sources, breadth: { status: snapshot.breadth?.status ?? null, source: snapshot.sources.breadth } } as never);
+  if (!provenance.ok) return finish(id, decideOpen({ ...earlyFacts, provenance }));
+
+  const candidate = matchCandidate(evaluateOptionsOpportunity(snapshot, opp.underlying, now).topOpportunities, opp);
+  if (!candidate) return finish(id, decideOpen({ ...earlyFacts, provenance, hasPlan: false, detail: ["candidate is no longer produced by the options engine"] }));
+  if (candidate.grade === "C" || candidate.grade === "REJECT") {
+    return finish(id, decideOpen({ ...earlyFacts, provenance, hasPlan: true, planRejected: `grade ${candidate.grade} is watch-only` }));
+  }
+  const analysis = toPaperAnalysis(snapshot, candidate, commodity);
+  if (!analysis) return finish(id, decideOpen({ ...earlyFacts, opp: { ...opp, instrumentType: "UNSUPPORTED" } }));
+
   if (getPaperOpportunity(id)?.openedPaperTradeId) return finish(id, ALREADY_OPEN);
   const result = ledger.processRecommendation(analysis, now);
   const facts: OpenFacts = {

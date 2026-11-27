@@ -320,7 +320,7 @@ export const EXCHANGE_PROFILES: Record<ExchangeId, ExchangeProfile> = {
 };
 
 export function getExchangeProfile(underlying: UnderlyingId): ExchangeProfile {
-  if (underlying === "crudeoil" || underlying === "naturalgas") {
+  if (underlying === "crudeoil" || underlying === "naturalgas" || underlying === "goldm" || underlying === "silverm") {
     return MCX_FO_PROFILE;
   }
   if (underlying === "sensex" || underlying === "bankex") {
@@ -329,15 +329,10 @@ export function getExchangeProfile(underlying: UnderlyingId): ExchangeProfile {
   return NSE_FO_PROFILE;
 }
 
-export function costsForAsset(
-  fills: Fill[],
-  underlying: UnderlyingId,
-  plan?: UpstoxAccountPlan,
-  orderCountOverride?: number,
-): TradeCosts & { exchange: ExchangeId; taxType: StatutoryTaxType } {
+export function configForAsset(underlying: UnderlyingId, plan?: UpstoxAccountPlan): TransactionCostConfig {
   const profile = getExchangeProfile(underlying);
   const resolved = resolveAccountPlan(plan);
-  const cfg: TransactionCostConfig = {
+  return {
     version: `${profile.exchangeId.toLowerCase()}-options-2026`,
     plan: resolved.plan,
     planStatus: resolved.status,
@@ -349,7 +344,16 @@ export function costsForAsset(
     stampDutyRate: profile.stampDutyRate,
     source: `${profile.name} Statutory Schedule`,
   };
-  const base = costsFor(fills, cfg, orderCountOverride);
+}
+
+export function costsForAsset(
+  fills: Fill[],
+  underlying: UnderlyingId,
+  plan?: UpstoxAccountPlan,
+  orderCountOverride?: number,
+): TradeCosts & { exchange: ExchangeId; taxType: StatutoryTaxType } {
+  const profile = getExchangeProfile(underlying);
+  const base = costsFor(fills, configForAsset(underlying, plan), orderCountOverride);
   return {
     ...base,
     exchange: profile.exchangeId,
