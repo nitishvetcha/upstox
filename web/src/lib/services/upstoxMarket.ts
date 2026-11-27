@@ -296,7 +296,7 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     const isComm = index && isCommodityId(index);
     const mktStatus = isComm ? commodityMarketStatus(current) : marketStatus(current);
     if (lastTradeTime) {
-      src = tradeFreshnessOf(lastTradeTime, current, 1, mktStatus).source;
+      src = tradeFreshnessOf(lastTradeTime, current, isComm ? 3 : 1, mktStatus).source;
     } else {
       // No trade timestamp in response — cannot verify freshness.
       // Conservative: CLOSED → END_OF_DAY; OPEN/PRE-OPEN → STALE (not LIVE — LTT absent means unverified).

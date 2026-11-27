@@ -151,58 +151,76 @@ export async function buildSnapshot(p: MarketDataProvider, index: UnderlyingId, 
 }
 
 const lastLiveSnapshotCache = new Map<UnderlyingId, { snap: Snapshot; cachedAt: number }>();
+const inFlightSnapshot = new Map<UnderlyingId, Promise<Snapshot>>();
+const SNAPSHOT_TTL_MS = 5_000;
 const LIVE_GRACE_MS = 90_000;
 
 export async function getSnapshot(index: UnderlyingId, deps?: FallbackDeps, now?: Date): Promise<Snapshot> {
-  const current = now ?? deps?.now?.();
-  const { data, fallbackReason } = await withFallback((p) => buildSnapshot(p, index, current), deps);
-
-  if (!deps && !fallbackReason && data.sources?.market?.source !== "MOCK") {
-    lastLiveSnapshotCache.set(index, { snap: data, cachedAt: Date.now() });
-    return { ...data, fallbackReason: null };
+  if (!deps) {
+    const cached = lastLiveSnapshotCache.get(index);
+    if (cached && Date.now() - cached.cachedAt <= SNAPSHOT_TTL_MS) {
+      return { ...cached.snap, fallbackReason: null };
+    }
+    const existing = inFlightSnapshot.get(index);
+    if (existing) return existing;
   }
 
-  // If Upstox is connected and a transient API/429 error occurred, serve the last good live snapshot
-  // (keeping LIVE within 90s grace window, then STALE) rather than poisoning the UI with MOCK prices.
-  if (
-    !deps &&
-    fallbackReason &&
-    fallbackReason !== "UPSTOX_NOT_CONNECTED" &&
-    fallbackReason !== "UPSTOX_AUTH_EXPIRED"
-  ) {
-    const entry = lastLiveSnapshotCache.get(index);
-    if (entry) {
-      const withinGrace = Date.now() - entry.cachedAt <= LIVE_GRACE_MS;
+  const run = async (): Promise<Snapshot> => {
+    const current = now ?? deps?.now?.();
+    const { data, fallbackReason } = await withFallback((p) => buildSnapshot(p, index, current), deps);
+
+    if (!deps && !fallbackReason && data.sources?.market?.source !== "MOCK") {
+      lastLiveSnapshotCache.set(index, { snap: data, cachedAt: Date.now() });
+      return { ...data, fallbackReason: null };
+    }
+
+    // If Upstox is connected and a transient API/429 error occurred, serve the last good live snapshot
+    // (keeping LIVE within 90s grace window, then STALE) rather than poisoning the UI with MOCK prices.
+    if (
+      !deps &&
+      fallbackReason &&
+      fallbackReason !== "UPSTOX_NOT_CONNECTED" &&
+      fallbackReason !== "UPSTOX_AUTH_EXPIRED"
+    ) {
+      const entry = lastLiveSnapshotCache.get(index);
+      if (entry) {
+        const withinGrace = Date.now() - entry.cachedAt <= LIVE_GRACE_MS;
+        return {
+          ...entry.snap,
+          fallbackReason: null,
+          sources: {
+            ...entry.snap.sources,
+            market: { ...entry.snap.sources.market, source: withinGrace ? entry.snap.sources.market.source : "STALE" },
+          },
+        };
+      }
+    }
+
+    // Do not downgrade the entire workspace header to MOCK FALLBACK if a newly added
+    // mini commodity (goldm/silverm) has temporary Upstox coverage gaps while Upstox is connected.
+    if (
+      (index === "goldm" || index === "silverm") &&
+      fallbackReason &&
+      fallbackReason !== "UPSTOX_NOT_CONNECTED" &&
+      fallbackReason !== "UPSTOX_AUTH_EXPIRED"
+    ) {
       return {
-        ...entry.snap,
+        ...data,
         fallbackReason: null,
         sources: {
-          ...entry.snap.sources,
-          market: { ...entry.snap.sources.market, source: withinGrace ? entry.snap.sources.market.source : "STALE" },
+          ...data.sources,
+          market: { source: "UNAVAILABLE", provider: "UPSTOX", fetchedAt: null },
+          optionChain: { source: "UNAVAILABLE", provider: "UPSTOX", fetchedAt: null },
         },
       };
     }
-  }
+    return { ...data, fallbackReason };
+  };
 
-  // Do not downgrade the entire workspace header to MOCK FALLBACK if a newly added
-  // mini commodity (goldm/silverm) has temporary Upstox coverage gaps while Upstox is connected.
-  if (
-    (index === "goldm" || index === "silverm") &&
-    fallbackReason &&
-    fallbackReason !== "UPSTOX_NOT_CONNECTED" &&
-    fallbackReason !== "UPSTOX_AUTH_EXPIRED"
-  ) {
-    return {
-      ...data,
-      fallbackReason: null,
-      sources: {
-        ...data.sources,
-        market: { source: "UNAVAILABLE", provider: "UPSTOX", fetchedAt: null },
-        optionChain: { source: "UNAVAILABLE", provider: "UPSTOX", fetchedAt: null },
-      },
-    };
-  }
-  return { ...data, fallbackReason };
+  if (deps) return run();
+  const promise = run().finally(() => inFlightSnapshot.delete(index));
+  inFlightSnapshot.set(index, promise);
+  return promise;
 }
 
 export const getAnalysis = cache(async (index: UnderlyingId) => analyze(await getSnapshot(index)));
