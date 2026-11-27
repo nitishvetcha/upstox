@@ -191,6 +191,9 @@ export class MarketScheduleRunner {
         errors.push((e as Error).message);
       }
 
+      // Yield to event loop so heartbeat timers and health checks are not starved on 0.1 vCPU
+      await new Promise((r) => setImmediate(r));
+
       // 2. Run live opportunity discovery for MCX Commodities (Crude Oil & Natural Gas)
       const isCommOpen = commodityMarketStatus(now) === "OPEN" || forceOpen;
       if (isCommOpen) {
@@ -208,6 +211,7 @@ export class MarketScheduleRunner {
           } catch (err) {
             errors.push(`${commId}: ${(err as Error).message}`);
           }
+          await new Promise((r) => setImmediate(r));
         }
       }
 

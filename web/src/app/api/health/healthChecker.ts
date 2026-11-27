@@ -221,11 +221,11 @@ export async function generateHealthReport(
     // Strategy code altered on disk! Critical security/audit failure.
     overallStatus = "UNHEALTHY";
   } else if (cfg.enabled && !telegramHealth.reachable) {
-    // Notifications required but Telegram API unreachable
-    overallStatus = "UNHEALTHY";
+    // Notifications required but Telegram API unreachable — keep 200 DEGRADED so Render does not kill the web container
+    overallStatus = "DEGRADED";
   } else if (isMarketHours && cfg.enabled && !botRunnerHealth.alive) {
-    // Market open but background runner is dead or stale
-    overallStatus = "UNHEALTHY";
+    // Market open but background runner heartbeat is lagging on constrained CPU — report DEGRADED (200) instead of triggering 503 restarts
+    overallStatus = "DEGRADED";
   } else if (!cfg.enabled || !isMarketHours || !botRunnerHealth.alive) {
     // Outside market hours or bot running locally in dev mode: degraded/off-hours
     overallStatus = "DEGRADED";
