@@ -11,6 +11,7 @@ import {
 import { POST as collectPaperOpportunities } from "@/app/api/paper-opportunities/collect/route";
 import { POST as monitorPaperOpportunities } from "@/app/api/paper-opportunities/monitor/route";
 import { runOpenFlow } from "@/lib/services/paperOpportunityOpenFlow";
+import { syncLinkedOpportunities } from "@/lib/services/paperOpportunitySync";
 
 function equal(a: string, b: string): boolean {
   return timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest());
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
     const monitorResponse = await monitorPaperOpportunities(new Request("http://internal/api/paper-opportunities/monitor", { method: "POST", headers }));
     stage = "monitor_response";
     const monitor = await monitorResponse.json();
+    syncLinkedOpportunities();
     const status = collectResponse.ok && monitorResponse.ok ? "SUCCESS" : "PARTIAL";
     stage = "checkpoint";
     const checkpointed = await checkpointPaperValidationState();

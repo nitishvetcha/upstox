@@ -1,6 +1,7 @@
 import { requireOperator } from "../../../../lib/operatorSession.ts";
 import { NextResponse } from "next/server";
 import { getPaperTradingEngine } from "@/lib/services/paperStore";
+import { syncLinkedOpportunities } from "@/lib/services/paperOpportunitySync";
 import { getSnapshot } from "@/lib/services/market";
 import type { IndexId } from "@/lib/types";
 
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
     const idx: IndexId = index ?? trade.index;
     const snapshot = await getSnapshot(idx);
     const closed = engine.closeTrade(trade, "CLOSED", snapshot);
+    syncLinkedOpportunities();
 
     return NextResponse.json({
       status: "success",

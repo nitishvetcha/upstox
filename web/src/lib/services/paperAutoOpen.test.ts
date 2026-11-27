@@ -91,9 +91,13 @@ describe("automatic paper open for collected index options", () => {
       assert.ok(closed.transactionCosts, "closed trade carries transaction costs");
       assert.ok(closed.realizedPnL !== null && closed.realizedPnL !== undefined, "realized P&L is recorded net of costs");
 
+      const { syncLinkedOpportunities } = await import("./paperOpportunitySync.ts");
+      assert.equal(syncLinkedOpportunities(), 1);
       const linked = store.getPaperOpportunity(opp.id)!;
-      const withExit = { ...linked, status: "TARGET1_HIT" as const, closedAt: closed.exitTimestamp, realizedR: closed.realizedPnL! / closed.riskAmount };
-      const report = buildStrategyReadiness([withExit], { costedTrades: [closed] }).find((r) => r.strategy === "NIFTY_OPTIONS")!;
+      assert.equal(linked.status, "TARGET1_HIT");
+      assert.equal(linked.realizedR, Math.round((closed.realizedPnL! / closed.riskAmount) * 100) / 100);
+      assert.equal(syncLinkedOpportunities(), 0, "a synced opportunity is not synced twice");
+      const report = buildStrategyReadiness([linked], { costedTrades: [closed] }).find((r) => r.strategy === "NIFTY_OPTIONS")!;
       assert.equal(report.costedLedgerRecords, 1, "linked, closed, costed trade is recognised");
       assert.equal(report.quarantinedTrades, 1, "a single setup stays quarantined until its observation sample is reached");
       assert.equal(report.completedTrades, 0);
