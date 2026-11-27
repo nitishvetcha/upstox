@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -H 127.0.0.1 -p 3123",
     "build": "next build --webpack",
-    "start": "NODE_OPTIONS='--max-old-space-size=420' next start",
+    "start": "NODE_OPTIONS='--max-old-space-size=400' next start",
     "lint": "eslint",
     "test": "env -u UPSTOX_ANALYTICS_TOKEN UPSTOX_TOKEN_FILE=.test-data/no-upstox-token.json SESSION_EVIDENCE_DIR=.test-data/paper-sessions PAPER_TRADES_DIR=.test-data/paper-trades PAPER_LEDGER_DB_PATH=.test-data/paper_ledger.db node --test --experimental-strip-types \"src/**/*.test.ts\"",
     "dev:upstox": "node scripts/dev-upstox.mjs",
@@ -16,7 +16,7 @@
     "paper:cycle": "node scripts/paper-cycle.mjs",
     "paper:live": "node scripts/paper-live.mjs",
     "bot:runner": "node --import tsx --env-file=.env.local scripts/run-telegram-market-bot.ts",
-    "start:render": "NODE_OPTIONS='--max-old-space-size=420' node scripts/start-render.mjs",
+    "start:render": "NODE_OPTIONS='--max-old-space-size=400' node scripts/start-render.mjs",
     "data:ingest": "node --import tsx scripts/ingest-underlying-history.ts",
     "backtest:replay": "node --import tsx scripts/run-contract-replay.ts",
     "validate:walk-forward": "node --import tsx scripts/run-walk-forward-validation.ts",

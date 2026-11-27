@@ -236,6 +236,8 @@ export const getDashboard = cache(async () => {
     const batch = targetUnderlyings.slice(i, i + 2);
     const res = await Promise.all(batch.map((id) => getAnalysis(id)));
     analyses.push(...res);
+    // Yield to the Node event loop so /api/health?probe=liveness never waits behind synchronous indicator work
+    await new Promise((r) => setImmediate(r));
     if (i + 2 < targetUnderlyings.length) {
       await new Promise((r) => setTimeout(r, 150));
     }
