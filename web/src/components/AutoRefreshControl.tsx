@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, useCallback, useSyncExternalStore }
 import { useRouter } from "next/navigation";
 import { RefreshCw, Pause, Play } from "lucide-react";
 
-const DEFAULT_INTERVAL_SEC = 900; // default 15 minutes (900 seconds)
+const DEFAULT_INTERVAL_SEC = 30; // default 30 seconds on active visible tabs
 
 function subscribeStorage(callback: () => void) {
   window.addEventListener("storage", callback);
@@ -55,6 +55,7 @@ export function AutoRefreshControl() {
     let remaining = intervalSec;
 
     const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       remaining -= 1;
       if (remaining <= 0) {
         remaining = intervalSec;
@@ -154,11 +155,11 @@ export function AutoRefreshControl() {
         aria-label="Auto-refresh interval"
       >
         <option value={15}>15s</option>
-        <option value={30}>30s</option>
+        <option value={30}>30s (default)</option>
         <option value={60}>1m</option>
         <option value={120}>2m</option>
         <option value={300}>5m</option>
-        <option value={900}>15m (default)</option>
+        <option value={900}>15m</option>
         <option value={1800}>30m</option>
       </select>
     </div>

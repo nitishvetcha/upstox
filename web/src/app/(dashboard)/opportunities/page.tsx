@@ -229,8 +229,8 @@ function BestAvailableNow({ candidates }: { candidates: RecommendationCandidate<
         <div className="flex gap-2"><GradeChip grade={candidate.grade} /><span className={tw.pill("teal")}>score {candidate.score}</span></div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-        <Cell label="Executable entry" value={item.executablePrice} />
-        <Cell label="Plan entry" value={fmt(item.entry)} />
+        <Cell label="Live LTP / Exec" value={item.executablePrice} />
+        <Cell label="Signal entry" value={fmt(item.entry)} />
         <Cell label="Stop" value={fmt(item.stop)} />
         <Cell label="Target 1" value={fmt(item.target1)} />
         <Cell label="Target 2" value={fmt(item.target2)} />
@@ -765,7 +765,8 @@ function OptionRecCard({ contract, snapshotSource, lotSize, rank, daysLeft, scor
 
       <div className="mt-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">A · Trade setup</div>
       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
-        <Cell label={isMultiLeg ? "Net Debit" : "Entry premium"} value={fmt(isMultiLeg ? displayNetDebit : contract.entry)} sub="Buy Price" />
+        <Cell label={isMultiLeg ? "Net Debit" : "Signal entry"} value={fmt(isMultiLeg ? displayNetDebit : contract.entry)} sub="Planned Limit" />
+        <Cell label="Live LTP / Mark" value={fmt(contract.independentQuoteLtp ?? contract.ltp)} sub={contract.ltpDiscrepancy != null ? `Δ${fmt(r2(contract.ltpDiscrepancy), "₹")}` : "Market LTP"} />
         <Cell label="Stop Loss" value={fmt(contract.stop)} tone="text-red-300" sub="Safety Cutoff" />
         <Cell label="Target 1" value={fmt(contract.target1)} tone="text-green-300" sub="1st Profit Goal" />
         <Cell label="Target 2" value={fmt(contract.target2)} tone="text-green-300" sub="Runner Goal" />

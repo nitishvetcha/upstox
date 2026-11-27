@@ -128,11 +128,11 @@ export function AuthoritativeRecommendationHero({
       {/* Execution & Pricing Grid */}
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-2.5">
-          <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Executable Entry</div>
+          <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Live LTP / Exec</div>
           <div className="mt-1 font-mono text-sm font-bold text-emerald-300">{item.executablePrice}</div>
         </div>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-2.5">
-          <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Plan Entry</div>
+          <div className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Signal Entry</div>
           <div className="mt-1 font-mono text-sm font-semibold text-zinc-200">{fmtPrice(item.entry)}</div>
         </div>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-2.5">
