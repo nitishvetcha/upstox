@@ -13,6 +13,10 @@ import { getPaperTradingEngine } from "@/lib/services/paperStore";
 export async function GET(request: Request) {
   const refused = requireOperator(request);
   if (refused) return refused;
+  const token = await getAccessToken().catch(() => null);
+  if (token) {
+    await warmMcxContractCache(token).catch(() => {});
+  }
   return Response.json({
     generatedAt: new Date().toISOString(),
     requirements: PAPER_READINESS_REQUIREMENTS,
