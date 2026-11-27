@@ -502,7 +502,7 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
     }
   };
 
-  const lastGoodBreadth = new Map<UnderlyingId, MarketBreadth>();
+  const lastGoodBreadth = new Map<UnderlyingId, { data: MarketBreadth; cachedAt: number }>();
 
   const getBreadth = async (index: UnderlyingId): Promise<MarketBreadth> => {
     const constituents = (INDEX_CONSTITUENTS as Record<string, typeof INDEX_CONSTITUENTS.nifty>)[index];
@@ -554,13 +554,14 @@ export function upstoxProvider(token: string, now = () => new Date()): MarketDat
 
         const breadthResult = calculateBreadth(index, constituentQuotes, spotChgPct, now());
         if (breadthResult.status === "LIVE" || breadthResult.status === "PARTIAL") {
-          lastGoodBreadth.set(index, breadthResult);
+          lastGoodBreadth.set(index, { data: breadthResult, cachedAt: Date.now() });
         }
         return breadthResult;
       } catch (e) {
         if (e instanceof UpstoxError && e.reason === "UPSTOX_AUTH_EXPIRED") throw e;
-        const fallbackBreadth = lastGoodBreadth.get(index);
-        if (fallbackBreadth) return fallbackBreadth;
+        const entry = lastGoodBreadth.get(index);
+        if (entry && Date.now() - entry.cachedAt <= 300_000) return entry.data;
+        if (entry) lastGoodBreadth.delete(index);
         const msg = e instanceof Error ? e.message : "Breadth fetch failed";
         return unavailableBreadth(index, msg);
       }

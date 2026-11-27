@@ -6,7 +6,7 @@ const g = globalThis as typeof globalThis & { __upstoxCache?: Map<string, Entry>
 const cache = (g.__upstoxCache ??= new Map<string, Entry>());
 
 // Insertion order of a Map is the recency order here: a hit moves its entry to the end.
-export const MAX_ENTRIES = 150;
+export const MAX_ENTRIES = 80;
 
 export function clearUpstoxCache() {
   cache.clear();

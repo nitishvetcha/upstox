@@ -170,7 +170,11 @@ export async function getSnapshot(index: UnderlyingId, deps?: FallbackDeps, now?
     const { data, fallbackReason } = await withFallback((p) => buildSnapshot(p, index, current), deps);
 
     if (!deps && !fallbackReason && data.sources?.market?.source !== "MOCK") {
-      lastLiveSnapshotCache.set(index, { snap: data, cachedAt: Date.now() });
+      const nowMs = Date.now();
+      for (const [k, v] of lastLiveSnapshotCache) {
+        if (nowMs - v.cachedAt > LIVE_GRACE_MS * 2) lastLiveSnapshotCache.delete(k);
+      }
+      lastLiveSnapshotCache.set(index, { snap: data, cachedAt: nowMs });
       return { ...data, fallbackReason: null };
     }
 
