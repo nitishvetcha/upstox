@@ -9,11 +9,16 @@
 import { assertUpstoxNetworkAllowed } from "./upstoxNetworkGate.ts";
 import { UPSTOX_API_BASE } from "./upstoxEndpoints.ts";
 import type { CommodityId } from "./instrumentRegistry.ts";
+import { isCommodityTradingDay } from "../time.ts";
 
 // --- Configuration ----------------------------------------------------------
 
 /** If fewer than ROLLOVER_THRESHOLD_DAYS calendar days remain to expiry, pick the next contract. */
 export const ROLLOVER_THRESHOLD_DAYS = 3;
+
+/** Physically delivered contracts leave the front month this many MCX trading days before expiry. */
+export const TENDER_ROLLOVER_TRADING_DAYS = 5;
+const TENDER_COMMODITIES: ReadonlySet<CommodityId> = new Set<CommodityId>(["goldm", "silverm"]);
 
 /** How long a successful resolution is kept in memory before a fresh API call is made. */
 export const RESOLVER_TTL_MS = 20 * 60 * 60_000; // 20 hours
@@ -122,6 +127,24 @@ export function daysUntilExpiry(expiryDateStr: string, now: Date): number {
   return Math.floor((expiryMs - nowDayMs) / 86_400_000);
 }
 
+export function tradingDaysUntil(expiryDateStr: string, now: Date): number {
+  const DAY = 86_400_000;
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const expiry = Date.parse(`${expiryDateStr}T00:00:00Z`);
+  let count = 0;
+  for (let t = today + DAY; t <= expiry; t += DAY) {
+    if (isCommodityTradingDay(new Date(t).toISOString().slice(0, 10))) count++;
+  }
+  return count;
+}
+
+function rolloverDue(expiry: string, now: Date, commodityId?: CommodityId): boolean {
+  if (commodityId && TENDER_COMMODITIES.has(commodityId)) {
+    return tradingDaysUntil(expiry, now) <= TENDER_ROLLOVER_TRADING_DAYS;
+  }
+  return daysUntilExpiry(expiry, now) < ROLLOVER_THRESHOLD_DAYS;
+}
+
 /**
  * Given a list of raw Upstox search results for a commodity, select the
  * appropriate contract per the rollover rule:
@@ -132,6 +155,7 @@ export function daysUntilExpiry(expiryDateStr: string, now: Date): number {
 export function selectActiveContract(
   instruments: RawSearchInstrument[],
   now: Date,
+  commodityId?: CommodityId,
 ): {
   instrumentKey: string;
   tradingSymbol: string;
@@ -179,7 +203,7 @@ export function selectActiveContract(
   const nearMonth = futures[0];
   const daysNear = daysUntilExpiry(nearMonth.expiry, now);
 
-  if (daysNear >= ROLLOVER_THRESHOLD_DAYS) {
+  if (!rolloverDue(nearMonth.expiry, now, commodityId)) {
     return { ...nearMonth, daysToExpiry: daysNear, rolledOver: false };
   }
 
@@ -326,7 +350,7 @@ export async function resolveMcxContract(
   try {
     const cfg = COMMODITY_CONFIG[commodityId];
     const raw = await fetchSearchResults(token, cfg.searchQuery);
-    const chosen = selectActiveContract(raw, now);
+    const chosen = selectActiveContract(raw, now, commodityId);
     if (!chosen) {
       console.warn(
         JSON.stringify({

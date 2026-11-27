@@ -414,3 +414,59 @@ test("resolveMcxContract: silverm resolves with 5 kg lot size", async () => {
     assert.equal(result.lotSize, 5);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tender-period rollover: physically delivered contracts (GOLDM, SILVERM) roll 5 MCX trading days before expiry.
+// ---------------------------------------------------------------------------
+const TENDER_NOW = new Date("2026-11-27T10:00:00Z");
+
+function near(expiry: string, next: string, symbol: string) {
+  return [
+    { instrument_key: "MCX_FO|111", trading_symbol: `${symbol}NEARFUT`, expiry, lot_size: 1, instrument_type: "FUT" },
+    { instrument_key: "MCX_FO|222", trading_symbol: `${symbol}NEXTFUT`, expiry: next, lot_size: 1, instrument_type: "FUT" },
+  ];
+}
+
+test("tender rollover: SILVERM 30 NOV 26 rolls to the next expiry", async () => {
+  const { selectActiveContract: pick } = await import("./mcxContractResolver.ts");
+  const result = pick(near("2026-11-30", "2026-12-31", "SILVERM"), TENDER_NOW, "silverm");
+  assert.ok(result);
+  assert.equal(result.instrumentKey, "MCX_FO|222");
+  assert.equal(result.rolledOver, true);
+});
+
+test("tender rollover: GOLDM 04 DEC 26 is exactly 5 trading days out and rolls", async () => {
+  const { selectActiveContract: pick } = await import("./mcxContractResolver.ts");
+  const result = pick(near("2026-12-04", "2027-02-05", "GOLDM"), TENDER_NOW, "goldm");
+  assert.ok(result);
+  assert.equal(result.instrumentKey, "MCX_FO|222");
+  assert.equal(result.rolledOver, true);
+});
+
+test("tender rollover: 6 trading days out does not roll", async () => {
+  const { selectActiveContract: pick } = await import("./mcxContractResolver.ts");
+  const result = pick(near("2026-12-07", "2027-02-05", "GOLDM"), TENDER_NOW, "goldm");
+  assert.ok(result);
+  assert.equal(result.instrumentKey, "MCX_FO|111");
+  assert.equal(result.rolledOver, false);
+});
+
+test("tender rollover: weekends do not count as trading days", async () => {
+  const { tradingDaysUntil } = await import("./mcxContractResolver.ts");
+  assert.equal(tradingDaysUntil("2026-11-30", TENDER_NOW), 1, "Fri to Mon is one trading day");
+  assert.equal(tradingDaysUntil("2026-11-29", TENDER_NOW), 0, "Sunday expiry has no trading days after Friday");
+});
+
+test("crude oil keeps the calendar rule: 3 days out does not roll", async () => {
+  const { selectActiveContract: pick } = await import("./mcxContractResolver.ts");
+  const result = pick(near("2026-11-30", "2026-12-31", "CRUDEOIL"), TENDER_NOW, "crudeoil");
+  assert.ok(result);
+  assert.equal(result.instrumentKey, "MCX_FO|111");
+});
+
+test("readiness: GOLDM and SILVERM have their own MCX buckets", async () => {
+  const { buildStrategyReadiness } = await import("./strategyReadiness.ts");
+  const buckets = buildStrategyReadiness([]).map((r) => r.strategy);
+  assert.ok(buckets.includes("MCX_GOLDM"));
+  assert.ok(buckets.includes("MCX_SILVERM"));
+});
