@@ -104,4 +104,47 @@ describe("Production Health & Reliability Route (/api/health)", () => {
     assert.equal(data.guardrails.strategyTampered, false);
     assert.equal(data.guardrails.strategySha256, FROZEN_STRATEGY_114_SHA256);
   });
+
+  it("7. transient Telegram timeout keeps /api/health DEGRADED (200) when botRunner is alive", async () => {
+    const prevToken = process.env.TELEGRAM_BOT_TOKEN;
+    const prevChatId = process.env.TELEGRAM_CHAT_ID;
+    const prevEnabled = process.env.NOTIFICATION_ENABLED;
+    const originalFetch = globalThis.fetch;
+
+    process.env.TELEGRAM_BOT_TOKEN = "timeout_test_token";
+    process.env.TELEGRAM_CHAT_ID = "123456";
+    process.env.NOTIFICATION_ENABLED = "true";
+
+    recordBotHeartbeat({
+      status: "RUNNING",
+      lastTickTimestamp: new Date().toISOString(),
+      activeTrackedPicksCount: 1,
+    });
+
+    globalThis.fetch = (async () => {
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    }) as typeof fetch;
+
+    try {
+      // Market hours in IST: 2026-11-27T07:00:00Z is 12:30:00 IST (Friday)
+      const marketNow = new Date("2026-11-27T07:00:00.000Z");
+      const { report, statusCode } = await generateHealthReport(marketNow, true);
+
+      assert.equal(statusCode, 200);
+      assert.equal(report.status, "DEGRADED");
+      assert.equal(report.botRunner.alive, true);
+      assert.equal(report.telegram.configured, true);
+      assert.equal(report.telegram.reachable, false);
+      assert.equal(report.telegram.error, "The operation was aborted due to timeout");
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearBotHeartbeat();
+      if (prevToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+      else process.env.TELEGRAM_BOT_TOKEN = prevToken;
+      if (prevChatId === undefined) delete process.env.TELEGRAM_CHAT_ID;
+      else process.env.TELEGRAM_CHAT_ID = prevChatId;
+      if (prevEnabled === undefined) delete process.env.NOTIFICATION_ENABLED;
+      else process.env.NOTIFICATION_ENABLED = prevEnabled;
+    }
+  });
 });
