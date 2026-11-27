@@ -150,33 +150,35 @@ export async function buildSnapshot(p: MarketDataProvider, index: UnderlyingId, 
   };
 }
 
-const lastLiveSnapshotCache = new Map<UnderlyingId, Snapshot>();
+const lastLiveSnapshotCache = new Map<UnderlyingId, { snap: Snapshot; cachedAt: number }>();
+const LIVE_GRACE_MS = 90_000;
 
 export async function getSnapshot(index: UnderlyingId, deps?: FallbackDeps, now?: Date): Promise<Snapshot> {
   const current = now ?? deps?.now?.();
   const { data, fallbackReason } = await withFallback((p) => buildSnapshot(p, index, current), deps);
 
   if (!deps && !fallbackReason && data.sources?.market?.source !== "MOCK") {
-    lastLiveSnapshotCache.set(index, data);
+    lastLiveSnapshotCache.set(index, { snap: data, cachedAt: Date.now() });
     return { ...data, fallbackReason: null };
   }
 
   // If Upstox is connected and a transient API/429 error occurred, serve the last good live snapshot
-  // marked STALE rather than poisoning the UI with hardcoded MOCK prices.
+  // (keeping LIVE within 90s grace window, then STALE) rather than poisoning the UI with MOCK prices.
   if (
     !deps &&
     fallbackReason &&
     fallbackReason !== "UPSTOX_NOT_CONNECTED" &&
     fallbackReason !== "UPSTOX_AUTH_EXPIRED"
   ) {
-    const cachedLive = lastLiveSnapshotCache.get(index);
-    if (cachedLive) {
+    const entry = lastLiveSnapshotCache.get(index);
+    if (entry) {
+      const withinGrace = Date.now() - entry.cachedAt <= LIVE_GRACE_MS;
       return {
-        ...cachedLive,
+        ...entry.snap,
         fallbackReason: null,
         sources: {
-          ...cachedLive.sources,
-          market: { ...cachedLive.sources.market, source: "STALE" },
+          ...entry.snap.sources,
+          market: { ...entry.snap.sources.market, source: withinGrace ? entry.snap.sources.market.source : "STALE" },
         },
       };
     }

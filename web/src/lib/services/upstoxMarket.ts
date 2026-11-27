@@ -24,6 +24,28 @@ const HOST = UPSTOX_API_BASE;
 const TIMEOUT_MS = 8_000;
 export const TTL_MS = { quote: 5_000, chain: 15_000, expiries: 60 * 60_000 };
 
+// Global Upstox request concurrency & rate limiter (max 4 concurrent, >= 60ms spacing)
+let activeUpstoxCalls = 0;
+let lastUpstoxCallAt = 0;
+const upstoxWaitQueue: Array<() => void> = [];
+
+async function acquireUpstoxSlot(): Promise<void> {
+  if (activeUpstoxCalls >= 4) {
+    await new Promise<void>((resolve) => upstoxWaitQueue.push(resolve));
+  }
+  activeUpstoxCalls++;
+  const now = Date.now();
+  const waitMs = Math.max(0, 60 - (now - lastUpstoxCallAt));
+  lastUpstoxCallAt = now + waitMs;
+  if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+}
+
+function releaseUpstoxSlot(): void {
+  activeUpstoxCalls = Math.max(0, activeUpstoxCalls - 1);
+  const next = upstoxWaitQueue.shift();
+  if (next) next();
+}
+
 // --- cache: see cache.ts (keys are per index/expiry/timeframe, so NIFTY and BANK NIFTY never collide) ---
 export { clearUpstoxCache };
 
@@ -54,7 +76,8 @@ export async function get(token: string, endpoint: string, params: Record<string
   assertUpstoxNetworkAllowed(endpoint); // gate: refuses unless MARKET_DATA_PROVIDER=upstox
   const qs = new URLSearchParams(params).toString();
   const reqUrl = `${HOST}${endpoint}${qs ? `?${qs}` : ""}`;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await acquireUpstoxSlot();
     try {
       const res = await fetch(reqUrl, {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
@@ -62,8 +85,9 @@ export async function get(token: string, endpoint: string, params: Record<string
         cache: "no-store",
       });
       status = res.status;
-      if (status === 429 && attempt === 0) {
-        await new Promise((r) => setTimeout(r, 450 + Math.floor(Math.random() * 350)));
+      if (status === 429 && attempt < 2) {
+        releaseUpstoxSlot();
+        await new Promise((r) => setTimeout(r, (attempt + 1) * 500 + Math.floor(Math.random() * 400)));
         continue;
       }
       const body = await res.json().catch(() => null);
@@ -85,6 +109,8 @@ export async function get(token: string, endpoint: string, params: Record<string
             : new UpstoxError("UPSTOX_NETWORK", (e as Error).message);
       log(status, false, { reason: err.reason, message: err.message, errorCode, instrumentKey: params.instrument_key ?? null });
       throw err;
+    } finally {
+      releaseUpstoxSlot();
     }
   }
   throw new UpstoxError("UPSTOX_RATE_LIMITED", "Rate limited after retry", 429);
