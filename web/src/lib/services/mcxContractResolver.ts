@@ -207,7 +207,15 @@ async function fetchMcxMaster(now: Date): Promise<RawSearchInstrument[]> {
   const res = await fetch(MCX_MASTER_URL, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
   if (!res.ok || !res.body) throw new Error(`MCX master HTTP ${res.status}`);
   const json = (await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).json()) as RawSearchInstrument[];
-  const rows = Array.isArray(json) ? json : [];
+  // Retain only active FUT/FUTCOM rows for our 4 tracked commodities so the full MCX master is GC'd immediately
+  const prefixes = ["CRUDEOIL", "NATURALGAS", "GOLDM", "SILVERM"];
+  const rows = Array.isArray(json)
+    ? json.filter((r) => {
+        const itype = typeof r.instrument_type === "string" ? r.instrument_type.toUpperCase() : "";
+        const sym = typeof r.trading_symbol === "string" ? r.trading_symbol.toUpperCase() : "";
+        return (itype === "FUT" || itype === "FUTCOM") && prefixes.some((p) => sym.startsWith(p));
+      })
+    : [];
   mcxMasterCache = { expiresAt: now.getTime() + RESOLVER_TTL_MS, rows };
   return rows;
 }
