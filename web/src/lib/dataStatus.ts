@@ -18,12 +18,10 @@ export function dataLabel(snaps: Snapshot[]): DataLabel {
   const allSatisfied = snaps.every((s) => {
     const isComm = COMMODITIES.has(s.index);
     const isBankex = s.index === "bankex";
-    // Commodities and BANKEX naturally lack equity constituent breadth; goldm/silverm lack standard option chains.
+    // Commodities and BANKEX naturally lack equity constituent breadth or continuous option-chain LTT;
+    // primary LIVE market quote keeps them LIVE.
     if (isComm || isBankex) {
-      const marketLive = s.sources.market.source === "LIVE";
-      const chainRequired = s.index !== "goldm" && s.index !== "silverm";
-      const chainOk = !chainRequired || s.sources.optionChain.source === "LIVE";
-      return marketLive && chainOk;
+      return s.sources.market.source === "LIVE";
     }
     const subSources = Object.values(s.sources).map((x) => x.source);
     const breadthOk = s.breadth !== null && s.breadth.status === "LIVE";

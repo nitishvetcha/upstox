@@ -6,7 +6,7 @@ export interface McxContractHealth {
   instrumentKey: string;
   keySource: "ENVIRONMENT" | "BUNDLED_DEFAULT";
   configuredExpiry: string | null;
-  status: "READY_FOR_LIVE_CHECK" | "EXPIRY_UNCONFIGURED" | "ROLL_REQUIRED" | "INVALID_EXPIRY";
+  status: "LIVE_VERIFIED" | "READY_FOR_LIVE_CHECK" | "EXPIRY_UNCONFIGURED" | "ROLL_REQUIRED" | "INVALID_EXPIRY";
   message: string;
 }
 
@@ -44,6 +44,16 @@ export function mcxContractHealth(now = new Date()): McxContractHealth[] {
       underlying, instrumentKey, keySource, configuredExpiry, status: "ROLL_REQUIRED",
       message: "Configured MCX contract is expired; update its instrument key and expiry before collection.",
     };
+    if (cached?.source === "API") {
+      return {
+        underlying,
+        instrumentKey,
+        keySource,
+        configuredExpiry,
+        status: "LIVE_VERIFIED",
+        message: `Live Upstox MCX contract verified & operational (${cached.tradingSymbol}).`,
+      };
+    }
     return {
       underlying, instrumentKey, keySource, configuredExpiry, status: "READY_FOR_LIVE_CHECK",
       message: "Configuration present. A live Upstox quote/contract check is still required before a paper candidate can be accepted.",

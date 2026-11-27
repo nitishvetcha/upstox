@@ -12,7 +12,7 @@ type Payload = {
   disclaimer: string;
 };
 
-const tone = (value: string) => value === "PAPER_EVIDENCE_SUFFICIENT" || value === "READY_FOR_LIVE_CHECK"
+const tone = (value: string) => value === "PAPER_EVIDENCE_SUFFICIENT" || value === "READY_FOR_LIVE_CHECK" || value === "LIVE_VERIFIED"
   ? "border-emerald-700/60 bg-emerald-950/30 text-emerald-300"
   : value === "HOLD" || value === "EXPIRY_UNCONFIGURED"
   ? "border-amber-700/60 bg-amber-950/30 text-amber-300"
